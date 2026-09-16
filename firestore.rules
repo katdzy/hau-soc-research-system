@@ -1,0 +1,90 @@
+rules_version = '2';
+
+// Security rules for the Firebase build.
+//
+// The architecture in Chapter 5 puts every write behind a Cloud Function, so
+// these rules deny client writes outright and only decide who may READ what.
+// Cloud Functions use the Admin SDK and bypass rules, which is what keeps the
+// CAC evaluation in one place (server side) instead of duplicating it here.
+//
+// The prototype's local adapter does not enforce these — it enforces the same
+// intent in src/domain/cac.js. Keep the two in step when the real backend lands.
+
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    function signedIn() {
+      return request.auth != null;
+    }
+
+    function institutional() {
+      return signedIn() && (
+        request.auth.token.email.matches('.*@hau[.]edu[.]ph') ||
+        request.auth.token.email.matches('.*@student[.]hau[.]edu[.]ph')
+      ) && request.auth.token.email_verified == true;
+    }
+
+    // Set as a custom claim by the account-provisioning Cloud Function.
+    function globalRole() {
+      return request.auth.token.globalRole;
+    }
+
+    function isStaff() {
+      return globalRole() in [
+        'Program Chair/Coordinator', 'Associate Dean', 'Dean',
+        'University Research Office', 'System Administrator'
+      ];
+    }
+
+    // Project membership and project-role assignment are mirrored into custom
+    // claims (projectIds, projectRoles) when a Cloud Function writes them, so a
+    // read rule does not need a lookup per document.
+    function onProject(projectId) {
+      return signedIn() && projectId in request.auth.token.projectIds;
+    }
+
+    match /users/{userId} {
+      allow read: if institutional();
+      allow write: if false;
+    }
+
+    match /projects/{projectId} {
+      allow read: if institutional() && (onProject(projectId) || isStaff()
+        || resource.data.publicGallery == true);
+      allow write: if false;
+    }
+
+    match /{col}/{docId} {
+      allow read: if institutional()
+        && col in [
+          'projectMembers', 'projectAssignments', 'documents', 'reviews',
+          'aiSummaries', 'weeklyLogs', 'defenses', 'forms', 'workflowHistory'
+        ]
+        && (onProject(resource.data.projectId) || isStaff());
+      allow write: if false;
+    }
+
+    // Panel annotations stay private to their author until the defense
+    // concludes; the Cloud Function stamps `releasedAt` when the verdict is
+    // recorded, and only then do other project members gain read access.
+    match /annotations/{annotationId} {
+      allow read: if institutional() && (
+        resource.data.authorId == request.auth.uid ||
+        (resource.data.visibility == 'shared' && onProject(resource.data.projectId)) ||
+        (resource.data.releasedAt != null && onProject(resource.data.projectId))
+      );
+      allow write: if false;
+    }
+
+    match /notifications/{notificationId} {
+      allow read: if signedIn() && resource.data.userId == request.auth.uid;
+      allow write: if false;
+    }
+
+    // Append-only, and never readable by ordinary users.
+    match /auditLogs/{logId} {
+      allow read: if signedIn() && globalRole() == 'System Administrator';
+      allow write: if false;
+    }
+  }
+}
