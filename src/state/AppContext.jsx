@@ -8,6 +8,8 @@ const AppCtx = createContext(null)
 
 const blankSnapshot = () => Object.fromEntries(COLLECTIONS.map(c => [c, []]))
 
+const ensureArray = (v) => (Array.isArray(v) ? v : Object.values(v ?? {}))
+
 export function AppProvider({ children }) {
   const [snap, setSnap] = useState(blankSnapshot)
   const [ready, setReady] = useState(false)
@@ -18,18 +20,20 @@ export function AppProvider({ children }) {
 
   useEffect(() => db.subscribe((next) => { setSnap(next); setReady(true) }), [])
 
+  const usersList = useMemo(() => ensureArray(snap?.users), [snap?.users])
+
   // First run on a blank store: load the demo dataset.
   useEffect(() => {
     if (!ready || seeding.current) return
-    if ((snap.users ?? []).length === 0) {
+    if (usersList.length === 0) {
       seeding.current = true
       db.replaceAll(buildSeed()).finally(() => { seeding.current = false })
     }
-  }, [ready, snap.users])
+  }, [ready, usersList])
 
   const me = useMemo(
-    () => (snap.users ?? []).find(u => u.id === userId) ?? null,
-    [snap.users, userId],
+    () => usersList.find(u => u.id === userId) ?? null,
+    [usersList, userId],
   )
 
   const value = useMemo(() => ({
