@@ -2,45 +2,72 @@ rules_version = '2';
 
 // Security rules for the Firebase build.
 //
-// The architecture in Chapter 5 puts every write behind a Cloud Function, so
-// these rules deny client writes outright and only decide who may READ what.
-// Cloud Functions use the Admin SDK and bypass rules, which is what keeps the
-// CAC evaluation in one place (server side) instead of duplicating it here.
+// CAAC enforcement, split the way the Review of Related Literature describes
+// it (p. 6) and as resolved for Open Questions #1:
+//   • WRITES never come from the client. Every write goes through a Cloud
+//     Function, which checks the caller's Global Role and Project-Based Role
+//     against their CAAC permissions before committing (Admin SDK, bypasses
+//     these rules).
+//   • READS are decided here, so the React app can use real-time listeners.
 //
-// The prototype's local adapter does not enforce these — it enforces the same
-// intent in src/domain/cac.js. Keep the two in step when the real backend lands.
+// The rules read the caller's context from custom claims that the Cloud
+// Functions keep in sync whenever a role, membership or assignment changes:
+//   token.globalRoles    ['Dean'], ['Student'], [] …
+//   token.programScope   programs a Program Chair/Coordinator covers
+//   token.projects       { <projectId>: ['Adviser', 'Panel Member', 'Member'] }
+//
+// The stage conditions below mirror src/domain/caac.js (project.view). Keep
+// the two in step.
 
 service cloud.firestore {
   match /databases/{database}/documents {
 
-    function signedIn() {
-      return request.auth != null;
-    }
+    function signedIn() { return request.auth != null; }
 
     function institutional() {
-      return signedIn() && (
+      return signedIn() && request.auth.token.email_verified == true && (
         request.auth.token.email.matches('.*@hau[.]edu[.]ph') ||
         request.auth.token.email.matches('.*@student[.]hau[.]edu[.]ph')
-      ) && request.auth.token.email_verified == true;
+      );
     }
 
-    // Set as a custom claim by the account-provisioning Cloud Function.
-    function globalRole() {
-      return request.auth.token.globalRole;
+    function holds(role) { return role in request.auth.token.globalRoles; }
+
+    function projectRoles(projectId) {
+      return request.auth.token.projects.get(projectId, []);
     }
 
-    function isStaff() {
-      return globalRole() in [
-        'Program Chair/Coordinator', 'Associate Dean', 'Dean',
-        'University Research Office', 'System Administrator'
-      ];
+    function stageIn(project, stages) { return project.currentStage in stages; }
+
+    function capstone1(project) {
+      return stageIn(project, ['GROUP_FORMATION', 'ADVISER_ASSIGNMENT', 'ADVISER_APPROVAL',
+        'TOPIC_PROPOSAL', 'PROPOSAL_DEVELOPMENT', 'PANEL_ASSIGNMENT',
+        'PROPOSAL_DEFENSE_SCHEDULING', 'PROPOSAL_DEFENSE', 'PROPOSAL_REVISION']);
     }
 
-    // Project membership and project-role assignment are mirrored into custom
-    // claims (projectIds, projectRoles) when a Cloud Function writes them, so a
-    // read rule does not need a lookup per document.
-    function onProject(projectId) {
-      return signedIn() && projectId in request.auth.token.projectIds;
+    // State-based progressive visibility: the same person can read a project
+    // at one stage and not at another.
+    function canViewProject(projectId, project) {
+      let roles = projectRoles(projectId);
+      return institutional() && (
+        'Member' in roles || 'Adviser' in roles
+        || ('Instructor 1' in roles && capstone1(project))
+        || ('Instructor 2' in roles && !capstone1(project))
+        || (('Panel Chair' in roles || 'Panel Member' in roles)
+            && !stageIn(project, ['GROUP_FORMATION', 'ADVISER_ASSIGNMENT', 'ADVISER_APPROVAL',
+                                  'TOPIC_PROPOSAL', 'PROPOSAL_DEVELOPMENT']))
+        || (holds('Program Chair/Coordinator')
+            && project.program in request.auth.token.programScope
+            && project.currentStage != 'GROUP_FORMATION')
+        || ((holds('Dean') || holds('Associate Dean'))
+            && stageIn(project, ['ADVISER_APPROVAL', 'FINAL_APPROVAL', 'ARCHIVED']))
+        || (holds('University Research Office') && stageIn(project, ['URO_VERIFICATION']))
+        || (holds('System Administrator') && stageIn(project, ['ARCHIVED']))
+      );
+    }
+
+    function viaProject(projectId) {
+      return canViewProject(projectId, get(/databases/$(database)/documents/projects/$(projectId)).data);
     }
 
     match /users/{userId} {
@@ -48,30 +75,31 @@ service cloud.firestore {
       allow write: if false;
     }
 
+    match /sections/{sectionId} {
+      allow read: if institutional();
+      allow write: if false;
+    }
+
     match /projects/{projectId} {
-      allow read: if institutional() && (onProject(projectId) || isStaff()
-        || resource.data.publicGallery == true);
+      allow read: if canViewProject(projectId, resource.data);
       allow write: if false;
     }
 
     match /{col}/{docId} {
-      allow read: if institutional()
-        && col in [
+      allow read: if col in [
           'projectMembers', 'projectAssignments', 'documents', 'reviews',
           'aiSummaries', 'weeklyLogs', 'defenses', 'forms', 'workflowHistory'
-        ]
-        && (onProject(resource.data.projectId) || isStaff());
+        ] && viaProject(resource.data.projectId);
       allow write: if false;
     }
 
-    // Panel annotations stay private to their author until the defense
-    // concludes; the Cloud Function stamps `releasedAt` when the verdict is
-    // recorded, and only then do other project members gain read access.
+    // Panel notes stay private to their author until the Panel Chair records
+    // the verdict; the Cloud Function stamps `releasedAt` at that moment.
     match /annotations/{annotationId} {
       allow read: if institutional() && (
         resource.data.authorId == request.auth.uid ||
-        (resource.data.visibility == 'shared' && onProject(resource.data.projectId)) ||
-        (resource.data.releasedAt != null && onProject(resource.data.projectId))
+        (viaProject(resource.data.projectId) &&
+          (resource.data.visibility == 'shared' || resource.data.releasedAt != null))
       );
       allow write: if false;
     }
@@ -81,9 +109,9 @@ service cloud.firestore {
       allow write: if false;
     }
 
-    // Append-only, and never readable by ordinary users.
+    // Write-once activity log, readable by the System Administrator.
     match /auditLogs/{logId} {
-      allow read: if signedIn() && globalRole() == 'System Administrator';
+      allow read: if institutional() && holds('System Administrator');
       allow write: if false;
     }
   }

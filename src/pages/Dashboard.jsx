@@ -1,19 +1,24 @@
 import { Link } from 'react-router-dom'
 import { useApp } from '../state/AppContext.jsx'
-import { worklist } from '../services/worklist.js'
+import { worklist, isActionable } from '../services/worklist.js'
 import { Badge, Section, Empty, Countdown, fmtDate, firstName } from '../components/ui.jsx'
-import { stageByKey } from '../domain/stages.js'
-import { can, resolveContext } from '../domain/cac.js'
-import { GLOBAL_ROLES } from '../domain/constants.js'
+import { can, resolveInstitution } from '../domain/caac.js'
+import { GLOBAL_ROLES as G } from '../domain/constants.js'
+
+const OFFICES = [G.COORDINATOR, G.ASSOCIATE_DEAN, G.DEAN, G.URO]
+
+/** The roles actually granting something on this project right now. */
+const activeRoles = (ctx) =>
+  [...new Set([...ctx.grants.values()].map(g => g.role))].filter(r => r !== G.STUDENT)
 
 export default function Dashboard() {
   const { snap, me } = useApp()
   const rows = worklist(snap, me)
-  const institutional = resolveContext(me, null)
+  const inst = resolveInstitution(me, snap)
 
-  const actionable = rows.filter(r => r.gates.some(g => !g.blocker) || r.tasks.length)
-  const watching = rows.filter(r => !actionable.includes(r) && r.access.level === 'work')
-  const observing = rows.filter(r => r.access.level === 'observe')
+  const actionable = rows.filter(isActionable)
+  const watching = rows.filter(r => !isActionable(r))
+  const holdsOffice = (me.globalRoles ?? []).some(r => OFFICES.includes(r))
 
   return (
     <div className="page">
@@ -27,9 +32,10 @@ export default function Dashboard() {
         </p>
       </header>
 
-      {me.globalRole === GLOBAL_ROLES.INSTRUCTOR_1 && (
-        <div className="actions" style={{ marginBottom: 26 }}>
-          <Link className="btn" to="/projects?new=1">Create a new project group</Link>
+      {can(inst, 'group.create') && (
+        <div className="actions" style={{ marginBottom: 32 }}>
+          <Link className="btn" to="/projects?new=1">Create a project group</Link>
+          <span className="faint small">for {inst.sections.map(s => s.block).join(', ')}</span>
         </div>
       )}
 
@@ -37,7 +43,7 @@ export default function Dashboard() {
         {actionable.length === 0 && <Empty>Your queue is clear.</Empty>}
         <div className="stack">
           {actionable.map(r => (
-            <div className="gate" key={r.project.id}>
+            <article className="gate" key={r.project.id}>
               <div className="entry-head">
                 <div>
                   <Link className="row-link" to={`/projects/${r.project.id}`}>{r.project.title}</Link>
@@ -46,50 +52,46 @@ export default function Dashboard() {
                   </div>
                 </div>
                 <div className="inline">
-                  {r.ctx.projectRoles.map(role => <Badge key={role} tone="accent">{role}</Badge>)}
+                  {activeRoles(r.ctx).map(role => <Badge key={role} tone="accent">{role}</Badge>)}
                   <Countdown deadline={r.project.revisionDeadline} />
                 </div>
               </div>
 
-              <ul style={{ margin: '12px 0 0', paddingLeft: 18 }}>
-                {r.gates.filter(g => !g.blocker).map(g => (
-                  <li key={g.gate.action} className="small">
-                    <strong>{g.gate.label}</strong> — ready
-                  </li>
-                ))}
-                {r.gates.filter(g => g.blocker).map(g => (
-                  <li key={g.gate.action} className="small muted">
-                    {g.gate.label} — <span style={{ color: 'var(--stop)' }}>{g.blocker}</span>
+              <ul className="todo">
+                {r.gates.map(g => (
+                  <li key={g.gate.action} className={g.blocker ? 'muted' : undefined}>
+                    <strong>{g.gate.label}</strong>
+                    {g.blocker
+                      ? <span className="blocker-inline"> — {g.blocker}</span>
+                      : <span className="ok-inline"> — ready</span>}
                   </li>
                 ))}
                 {r.tasks.map((t, i) => (
-                  <li key={i} className="small" style={t.urgent ? { color: 'var(--stop)' } : undefined}>{t.label}</li>
+                  <li key={i} className={t.urgent ? 'urgent' : undefined}>{t.label}</li>
                 ))}
               </ul>
 
-              <div className="actions" style={{ marginTop: 12 }}>
+              <div className="actions" style={{ marginTop: 16 }}>
                 <Link className="btn" to={`/projects/${r.project.id}`}>Open workspace</Link>
               </div>
-            </div>
+            </article>
           ))}
         </div>
       </Section>
 
       <Section title="Your other projects">
-        {watching.length === 0 && <Empty>No other projects assigned to you.</Empty>}
+        {watching.length === 0 && <Empty>No other projects are visible to you at their current stage.</Empty>}
         {watching.length > 0 && (
           <table>
             <thead>
-              <tr>
-                <th>Project</th><th>Your role</th><th>Stage</th><th className="tight">Updated</th>
-              </tr>
+              <tr><th>Project</th><th>Access through</th><th>Stage</th><th className="tight">Updated</th></tr>
             </thead>
             <tbody>
               {watching.map(r => (
                 <tr key={r.project.id}>
                   <td><Link className="row-link" to={`/projects/${r.project.id}`}>{r.project.title}</Link></td>
-                  <td className="small muted">{r.ctx.projectRoles.join(', ') || '—'}</td>
-                  <td><Badge>{stageByKey(r.project.currentStage)?.label}</Badge></td>
+                  <td className="small muted" title={r.access.reason}>{r.access.via}</td>
+                  <td><Badge>{r.stage?.label}</Badge></td>
                   <td className="tight small faint">{fmtDate(r.bundle.history.at(-1)?.at ?? r.project.createdAt)}</td>
                 </tr>
               ))}
@@ -98,24 +100,11 @@ export default function Dashboard() {
         )}
       </Section>
 
-      {can(institutional, 'report.generate') && observing.length > 0 && (
-        <Section
-          title="Not yet endorsed to you"
-          aside={<span className="faint small">Progressive visibility — read only until the project reaches your gate</span>}
-        >
-          <table>
-            <thead><tr><th>Project</th><th>Stage</th><th>Reason</th></tr></thead>
-            <tbody>
-              {observing.map(r => (
-                <tr key={r.project.id}>
-                  <td className="muted">{r.project.title}</td>
-                  <td><Badge>{stageByKey(r.project.currentStage)?.label}</Badge></td>
-                  <td className="small faint">{r.access.reason}</td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </Section>
+      {holdsOffice && (
+        <p className="faint small" style={{ maxWidth: '72ch' }}>
+          Progressive visibility: a project appears here only while its stage involves your office.
+          {can(inst, 'report.generate') && <> School-wide figures are under <Link to="/reports">Reports</Link>.</>}
+        </p>
       )}
     </div>
   )

@@ -1,6 +1,7 @@
 import { db } from '../backend/index.js'
+import { resolveContext, authorize } from '../domain/caac.js'
 
-/** Everything the CAC resolver and the stage guards need about one project. */
+/** Everything the CAAC resolver and the stage guards need about one project. */
 export function bundle(snap, projectId) {
   const project = (snap.projects ?? []).find(p => p.id === projectId) ?? null
   if (!project) return null
@@ -16,10 +17,22 @@ export function bundle(snap, projectId) {
     reviews: of('reviews').sort(byDate),
     aiSummaries: of('aiSummaries'),
     weeklyLogs: of('weeklyLogs').sort((a, b) => a.weekNo - b.weekNo),
-    defenses: of('defenses'),
+    defenses: of('defenses').sort(byDate),
     forms: of('forms'),
     history: of('workflowHistory').sort((a, b) => new Date(a.at) - new Date(b.at)),
   }
+}
+
+/**
+ * The write-side CAAC check. Every action calls this before touching data —
+ * in the Firebase build it is the first thing each Cloud Function does.
+ */
+export function authorizeOn(actor, snap, projectId, capability) {
+  const b = bundle(snap, projectId)
+  if (!b) throw new Error('Project not found')
+  const ctx = resolveContext(actor, b)
+  authorize(ctx, capability)
+  return { b, ctx }
 }
 
 export const userById = (snap, id) => (snap.users ?? []).find(u => u.id === id) ?? null
@@ -34,7 +47,10 @@ export const assigneeIds = (b, roleType) =>
 
 export const memberIds = (b) => b.members.map(m => m.userId)
 
-/** Append-only audit trail (FR-71/72). Never updated, never deleted. */
+export const holdersOf = (snap, globalRole) =>
+  (snap.users ?? []).filter(u => (u.globalRoles ?? []).includes(globalRole))
+
+/** Append-only audit trail. Never updated, never deleted. */
 export async function logAudit(actorId, action, entityType, entityId, projectId, meta = {}) {
   return db.add('auditLogs', {
     actorId, action, entityType, entityId, projectId,
@@ -43,10 +59,10 @@ export async function logAudit(actorId, action, entityType, entityId, projectId,
 }
 
 /**
- * Stands in for the SMTP notification service. In the Firebase build this is a
- * Cloud Function trigger writing to `notifications` and dispatching email;
- * here the in-app inbox is the observable half so the trigger matrix can be
- * tested without a mail server.
+ * Stands in for notificationService.js. In the Firebase build a Cloud Function
+ * writes the notification and sends the email through Resend in the same
+ * event that updates the workflow record; here the in-app list is the
+ * observable half, so the trigger matrix can be checked without a mail server.
  */
 export async function notify(userIds, { projectId, type, title, body }) {
   const unique = [...new Set(userIds.filter(Boolean))]

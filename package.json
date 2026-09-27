@@ -3,7 +3,7 @@
   "private": true,
   "version": "0.1.0",
   "type": "module",
-  "description": "Workflow prototype — Web-Based Management and Workflow Automation System for Thesis and Capstone Projects (HAU-SOC)",
+  "description": "Workflow prototype — Development of a Web-Based Thesis and Capstone Project Management and Workflow Automation System for HAU-SOC",
   "scripts": {
     "dev": "vite",
     "build": "vite build",

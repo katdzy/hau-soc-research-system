@@ -19,9 +19,21 @@ export const docTone = (status) => DOC_TONE[status] ?? 'neutral'
 // catch — normalise before testing.
 export const verdictTone = (verdict) => {
   const v = verdict ?? ''
-  if (v.includes('Failed')) return 'stop'
+  if (v.includes('Re-defense')) return 'stop'
   if (v.includes('Major')) return 'warn'
   return v ? 'ok' : 'neutral'
+}
+
+/** Shown when no role the user holds grants the page's capability. */
+export function Restricted({ children = 'None of your roles gives you access to this page.' }) {
+  return (
+    <div className="page">
+      <header className="page-head">
+        <h1>Not available to you</h1>
+        <p className="lede">{children}</p>
+      </header>
+    </div>
+  )
 }
 
 export function Section({ title, aside, children }) {

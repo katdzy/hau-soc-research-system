@@ -1,13 +1,15 @@
 import { useState } from 'react'
 import { useApp } from '../../state/AppContext.jsx'
-import { can } from '../../domain/cac.js'
-import { addMember, removeMember, assignRole, unassignRole } from '../../services/actions.js'
+import { can } from '../../domain/caac.js'
+import {
+  addMember, removeMember, assignRole, unassignRole, ASSIGNING_CAPABILITY, assignmentConflict,
+} from '../../services/actions.js'
 import { useAction, ActionError } from '../useAction.jsx'
 import { Section, Empty, Badge, Field, fmtDate } from '../ui.jsx'
-import { GLOBAL_ROLES, PROJECT_ROLES } from '../../domain/constants.js'
+import { GLOBAL_ROLES as G, ACCOUNT_STATUS, accountType } from '../../domain/constants.js'
 import GatePanel from './GatePanel.jsx'
 
-export default function OverviewPanel({ b, ctx }) {
+export default function OverviewPanel({ b, ctx, goTo }) {
   const { snap, me } = useApp()
   const { run, error, busy } = useAction()
   const [pickMember, setPickMember] = useState('')
@@ -17,42 +19,40 @@ export default function OverviewPanel({ b, ctx }) {
   const users = snap.users ?? []
   const nameOf = (id) => users.find(u => u.id === id)?.name ?? id
 
-  const assignable = []
-  if (can(ctx, 'adviser.assign')) assignable.push(PROJECT_ROLES.ADVISER, PROJECT_ROLES.INSTRUCTOR_2)
-  if (can(ctx, 'panel.assign')) assignable.push(PROJECT_ROLES.PANEL_CHAIR, PROJECT_ROLES.PANEL_MEMBER)
+  // Roles this user may hand out here — decided by capability in context.
+  const assignable = Object.entries(ASSIGNING_CAPABILITY)
+    .filter(([, cap]) => can(ctx, cap))
+    .map(([role]) => role)
 
-  const takenMembers = new Set(b.members.map(m => m.userId))
-  const candidates = users.filter(u => u.globalRole === GLOBAL_ROLES.STUDENT && !takenMembers.has(u.id))
-  const faculty = users.filter(u => u.globalRole !== GLOBAL_ROLES.STUDENT)
-
-  // BR-07 style conflict check: the Adviser may not sit on their advisee's panel.
-  const adviserIds = new Set(b.assignments.filter(a => a.roleType === PROJECT_ROLES.ADVISER).map(a => a.userId))
-  const conflicted = (userId, roleType) =>
-    (roleType === PROJECT_ROLES.PANEL_CHAIR || roleType === PROJECT_ROLES.PANEL_MEMBER) && adviserIds.has(userId)
+  const grouped = new Set((snap.projectMembers ?? []).map(m => m.userId))
+  const candidates = users.filter(u =>
+    (u.globalRoles ?? []).includes(G.STUDENT) && u.block === b.project.block && !grouped.has(u.id))
+  const faculty = users.filter(u => accountType(u.email) === 'Faculty' && u.status === ACCOUNT_STATUS.ACTIVE)
 
   return (
     <>
       <Section title="Next step">
-        <GatePanel b={b} ctx={ctx} />
+        <GatePanel b={b} ctx={ctx} goTo={goTo} />
       </Section>
 
       <Section title="Project record">
         <dl className="kv">
-          <dt>Working title</dt><dd>{b.project.title}</dd>
+          <dt>Title</dt><dd>{b.project.title}</dd>
           {b.project.previousTitles?.length > 0 && (
             <>
               <dt>Previous titles</dt>
               <dd className="muted small">{b.project.previousTitles.join(' · ')}</dd>
             </>
           )}
-          <dt>Programme</dt><dd>{b.project.program}</dd>
+          <dt>Program</dt><dd>{b.project.program}</dd>
+          <dt>Block</dt><dd>{b.project.block}</dd>
           <dt>Research area</dt><dd>{b.project.researchArea}</dd>
           <dt>Academic term</dt><dd>{b.project.term}</dd>
           <dt>Registered</dt><dd>{fmtDate(b.project.createdAt)}</dd>
           {b.project.archiveResult && (
             <>
-              <dt>Archive result</dt>
-              <dd><Badge tone={b.project.archiveResult === 'Pass' ? 'ok' : 'stop'}>{b.project.archiveResult}</Badge></dd>
+              <dt>Result</dt>
+              <dd><Badge tone="ok">{b.project.archiveResult}</Badge> <span className="faint small">archived {fmtDate(b.project.archivedAt)}</span></dd>
             </>
           )}
         </dl>
@@ -65,7 +65,7 @@ export default function OverviewPanel({ b, ctx }) {
         {b.members.length === 0 && <Empty>No students added yet.</Empty>}
         {b.members.length > 0 && (
           <table>
-            <thead><tr><th>Student</th><th>ID number</th><th>Programme</th><th className="tight" /></tr></thead>
+            <thead><tr><th>Student</th><th>Student number</th><th>Year and block</th><th className="tight" /></tr></thead>
             <tbody>
               {b.members.map(m => {
                 const u = users.find(x => x.id === m.userId)
@@ -73,11 +73,11 @@ export default function OverviewPanel({ b, ctx }) {
                   <tr key={m.id}>
                     <td>{u?.name ?? m.userId}</td>
                     <td className="mono muted">{u?.idNumber || '—'}</td>
-                    <td className="small muted">{u?.program} · {u?.yearLevel}</td>
+                    <td className="small muted">{u?.yearLevel} · {u?.block}</td>
                     <td className="tight">
                       {can(ctx, 'roster.manage') && (
                         <button className="quiet small danger" disabled={busy}
-                          onClick={() => run(() => removeMember(me, b.project.id, m.id, m.userId))}>
+                          onClick={() => run(() => removeMember(me, snap, b.project.id, m.id, m.userId))}>
                           Remove
                         </button>
                       )}
@@ -90,18 +90,16 @@ export default function OverviewPanel({ b, ctx }) {
         )}
 
         {can(ctx, 'roster.manage') && (
-          <div className="row" style={{ marginTop: 16, alignItems: 'flex-end' }}>
-            <Field label="Add student to group">
+          <div className="row inline-form">
+            <Field label={`Add a student from ${b.project.block}`}>
               <select value={pickMember} onChange={e => setPickMember(e.target.value)}>
-                <option value="">Select a student…</option>
-                {candidates.map(u => (
-                  <option key={u.id} value={u.id}>{u.name} — {u.idNumber}</option>
-                ))}
+                <option value="">{candidates.length ? 'Select a student…' : 'Everyone in the block is already grouped'}</option>
+                {candidates.map(u => <option key={u.id} value={u.id}>{u.name} — {u.idNumber}</option>)}
               </select>
             </Field>
-            <div style={{ flex: '0 0 auto', marginBottom: 14 }}>
+            <div className="inline-form-action">
               <button disabled={!pickMember || busy}
-                onClick={() => run(async () => { await addMember(me, b.project.id, pickMember); setPickMember('') })}>
+                onClick={() => run(async () => { await addMember(me, snap, b.project.id, pickMember); setPickMember('') })}>
                 Add to group
               </button>
             </div>
@@ -113,7 +111,7 @@ export default function OverviewPanel({ b, ctx }) {
         {b.assignments.length === 0 && <Empty>Nobody has been assigned yet.</Empty>}
         {b.assignments.length > 0 && (
           <table>
-            <thead><tr><th>Role</th><th>Faculty</th><th className="tight">Assigned</th><th className="tight" /></tr></thead>
+            <thead><tr><th>Project role</th><th>Faculty</th><th className="tight">Assigned</th><th className="tight" /></tr></thead>
             <tbody>
               {b.assignments.map(a => (
                 <tr key={a.id}>
@@ -123,7 +121,7 @@ export default function OverviewPanel({ b, ctx }) {
                   <td className="tight">
                     {assignable.includes(a.roleType) && (
                       <button className="quiet small danger" disabled={busy}
-                        onClick={() => run(() => unassignRole(me, b.project.id, a.id, { userId: a.userId, roleType: a.roleType }))}>
+                        onClick={() => run(() => unassignRole(me, snap, b.project.id, a))}>
                         Unassign
                       </button>
                     )}
@@ -135,28 +133,30 @@ export default function OverviewPanel({ b, ctx }) {
         )}
 
         {assignable.length > 0 && (
-          <div className="row" style={{ marginTop: 16, alignItems: 'flex-end' }}>
-            <Field label="Role">
-              <select value={pickRole} onChange={e => setPickRole(e.target.value)}>
+          <div className="row inline-form">
+            <Field label="Project role">
+              <select value={pickRole} onChange={e => { setPickRole(e.target.value); setPickUser('') }}>
                 <option value="">Select a role…</option>
                 {assignable.map(r => <option key={r} value={r}>{r}</option>)}
               </select>
             </Field>
             <Field label="Faculty member">
-              <select value={pickUser} onChange={e => setPickUser(e.target.value)}>
+              <select value={pickUser} onChange={e => setPickUser(e.target.value)} disabled={!pickRole}>
                 <option value="">Select faculty…</option>
-                {faculty.map(u => (
-                  <option key={u.id} value={u.id} disabled={conflicted(u.id, pickRole)}>
-                    {u.name}{conflicted(u.id, pickRole) ? ' — conflict: adviser on this project' : ''}
-                  </option>
-                ))}
+                {faculty.map(u => {
+                  const conflict = pickRole ? assignmentConflict(b, u.id, pickRole) : null
+                  return (
+                    <option key={u.id} value={u.id} disabled={Boolean(conflict)}>
+                      {u.name}{conflict ? ` — ${conflict}` : ''}
+                    </option>
+                  )
+                })}
               </select>
             </Field>
-            <div style={{ flex: '0 0 auto', marginBottom: 14 }}>
+            <div className="inline-form-action">
               <button disabled={!pickRole || !pickUser || busy}
                 onClick={() => run(async () => {
-                  if (conflicted(pickUser, pickRole)) throw new Error('The Adviser cannot be assigned to their own advisee’s panel.')
-                  await assignRole(me, b.project.id, pickUser, pickRole)
+                  await assignRole(me, snap, b.project.id, pickUser, pickRole)
                   setPickUser(''); setPickRole('')
                 })}>
                 Assign

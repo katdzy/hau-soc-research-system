@@ -1,37 +1,57 @@
 import { useApp } from '../state/AppContext.jsx'
-import { Section, Badge, Empty } from '../components/ui.jsx'
-import { STAGES, stageByKey, stageIndex } from '../domain/stages.js'
-import { PROGRAMS } from '../domain/constants.js'
+import { Section, Badge, Empty, Restricted } from '../components/ui.jsx'
+import { PHASES, stageByKey, stageIndex } from '../domain/stages.js'
+import { GLOBAL_ROLES as G, PROJECT_ROLES as P } from '../domain/constants.js'
+import { can, resolveInstitution } from '../domain/caac.js'
+
+// Aggregate reporting. Figures cover projects the viewer may not be able to
+// open — reports show counts and stages, never documents. A Program
+// Chair/Coordinator's reports are scoped to the programs they coordinate.
 
 export default function Reports() {
-  const { snap } = useApp()
-  const projects = snap.projects ?? []
-  const users = snap.users ?? []
-
-  const byPhase = {}
-  for (const p of projects) {
-    const phase = stageByKey(p.currentStage)?.phase ?? 'Unknown'
-    byPhase[phase] = (byPhase[phase] ?? 0) + 1
+  const { snap, me } = useApp()
+  const inst = resolveInstitution(me, snap)
+  if (!can(inst, 'report.generate')) {
+    return <Restricted>Reports are for the Dean, Associate Dean, Program Chair/Coordinator and System Administrator.</Restricted>
   }
 
-  const overdue = projects.filter(p =>
-    p.revisionDeadline && new Date(p.revisionDeadline) < Date.now() && p.currentStage !== 'ARCHIVED')
+  const schoolWide = (me.globalRoles ?? []).some(r => [G.DEAN, G.ASSOCIATE_DEAN, G.ADMIN].includes(r))
+  const scope = schoolWide ? null : (me.programScope ?? [])
+  const projects = (snap.projects ?? []).filter(p => !scope || scope.includes(p.program))
+  const ids = new Set(projects.map(p => p.id))
+  const assignments = (snap.projectAssignments ?? []).filter(a => ids.has(a.projectId))
+  const users = snap.users ?? []
 
-  const advisoryLoad = users
-    .map(u => ({
-      user: u,
-      count: (snap.projectAssignments ?? []).filter(a => a.userId === u.id && a.roleType === 'Adviser').length,
-      panels: (snap.projectAssignments ?? []).filter(a => a.userId === u.id && a.roleType.startsWith('Panel')).length,
-    }))
-    .filter(r => r.count || r.panels)
-    .sort((a, b) => (b.count + b.panels) - (a.count + a.panels))
+  const archived = projects.filter(p => p.currentStage === 'ARCHIVED')
+  const inCapstone2 = projects.filter(p =>
+    stageIndex(p.currentStage) >= stageIndex('IMPLEMENTATION') && p.currentStage !== 'ARCHIVED')
+  const overdue = projects.filter(p => p.revisionDeadline && new Date(p.revisionDeadline) < Date.now())
+  const completion = projects.length ? Math.round((archived.length / projects.length) * 100) : 0
+
+  const byPhase = Object.values(PHASES).map(phase => ({
+    phase, n: projects.filter(p => stageByKey(p.currentStage)?.phase === phase).length,
+  }))
+
+  const load = users
+    .map(u => {
+      const mine = assignments.filter(a => a.userId === u.id)
+      const count = (...roles) => mine.filter(a => roles.includes(a.roleType)).length
+      return {
+        user: u,
+        advisees: count(P.ADVISER),
+        panels: count(P.PANEL_CHAIR, P.PANEL_MEMBER),
+        instructing: count(P.INSTRUCTOR_1, P.INSTRUCTOR_2),
+      }
+    })
+    .filter(r => r.advisees || r.panels || r.instructing)
+    .sort((a, b) => (b.advisees + b.panels) - (a.advisees + a.panels))
 
   const csv = () => {
-    const header = 'Project,Programme,Stage,Status,Archive result'
+    const header = 'Project,Program,Block,Stage,Status,Result'
     const lines = projects.map(p =>
-      [p.title, p.program, stageByKey(p.currentStage)?.label, p.status, p.archiveResult ?? ''].map(v => `"${v ?? ''}"`).join(','))
-    const blob = new Blob([[header, ...lines].join('\n')], { type: 'text/csv' })
-    const url = URL.createObjectURL(blob)
+      [p.title, p.program, p.block, stageByKey(p.currentStage)?.label, p.status, p.archiveResult ?? '']
+        .map(v => `"${String(v ?? '').replace(/"/g, '""')}"`).join(','))
+    const url = URL.createObjectURL(new Blob([[header, ...lines].join('\n')], { type: 'text/csv' }))
     const a = document.createElement('a')
     a.href = url; a.download = 'capstone-projects.csv'; a.click()
     URL.revokeObjectURL(url)
@@ -40,29 +60,34 @@ export default function Reports() {
   return (
     <div className="page">
       <header className="page-head">
-        <div className="label">Reporting</div>
-        <h1>Programme reports</h1>
-        <p className="lede">Project statuses, completion and faculty load across the School of Computing.</p>
+        <div className="label">Reports</div>
+        <h1>{scope ? 'Program reports' : 'School of Computing reports'}</h1>
+        <p className="lede">
+          {scope
+            ? `Scoped to the programs you coordinate: ${scope.join(', ')}.`
+            : 'Project statuses, completion and faculty workload across the School of Computing.'}
+        </p>
       </header>
 
       <div className="stat-row">
         <div className="stat"><div className="n">{projects.length}</div><div className="label">Projects</div></div>
-        <div className="stat"><div className="n">{projects.filter(p => p.currentStage === 'ARCHIVED').length}</div><div className="label">Archived</div></div>
-        <div className="stat"><div className="n">{projects.filter(p => stageIndex(p.currentStage) >= stageIndex('IMPLEMENTATION') && p.currentStage !== 'ARCHIVED').length}</div><div className="label">In implementation</div></div>
-        <div className="stat"><div className="n" style={{ color: overdue.length ? 'var(--stop)' : undefined }}>{overdue.length}</div><div className="label">Overdue revisions</div></div>
+        <div className="stat"><div className="n">{completion}%</div><div className="label">Completed</div></div>
+        <div className="stat"><div className="n">{inCapstone2.length}</div><div className="label">In Capstone 2 or clearance</div></div>
+        <div className="stat">
+          <div className={`n${overdue.length ? ' is-stop' : ''}`}>{overdue.length}</div>
+          <div className="label">Overdue revisions</div>
+        </div>
       </div>
 
-      <Section title="Distribution by phase" aside={<button className="small" onClick={csv}>Export CSV</button>}>
+      <Section title="Projects by phase" aside={<button className="small" onClick={csv}>Export CSV</button>}>
         <table>
           <thead><tr><th>Phase</th><th className="tight">Projects</th><th>Share</th></tr></thead>
           <tbody>
-            {Object.entries(byPhase).map(([phase, n]) => (
+            {byPhase.map(({ phase, n }) => (
               <tr key={phase}>
                 <td>{phase}</td>
                 <td className="tight mono">{n}</td>
-                <td>
-                  <div style={{ background: 'var(--accent)', height: 7, borderRadius: 2, width: `${(n / projects.length) * 100}%`, minWidth: 6 }} />
-                </td>
+                <td><div className="bar" style={{ width: `${projects.length ? (n / projects.length) * 100 : 0}%` }} /></td>
               </tr>
             ))}
           </tbody>
@@ -70,10 +95,11 @@ export default function Reports() {
       </Section>
 
       <Section title="Current stage by project">
-        <table>
-          <thead><tr><th>Project</th><th>Programme</th><th>Stage</th><th className="tight">Result</th></tr></thead>
+        {projects.length === 0 && <Empty>No projects in scope.</Empty>}
+        <div className="table-scroll"><table>
+          <thead><tr><th>Project</th><th>Program</th><th>Stage</th><th className="tight">Result</th></tr></thead>
           <tbody>
-            {projects.map(p => (
+            {[...projects].sort((a, b) => stageIndex(a.currentStage) - stageIndex(b.currentStage)).map(p => (
               <tr key={p.id}>
                 <td>{p.title}</td>
                 <td className="small muted">{p.program}</td>
@@ -82,25 +108,31 @@ export default function Reports() {
               </tr>
             ))}
           </tbody>
-        </table>
+        </table></div>
       </Section>
 
-      <Section title="Faculty load">
-        {advisoryLoad.length === 0 && <Empty>No assignments recorded.</Empty>}
-        {advisoryLoad.length > 0 && (
-          <table>
-            <thead><tr><th>Faculty</th><th>Global role</th><th className="tight">Advisees</th><th className="tight">Panel seats</th></tr></thead>
+      <Section title="Faculty workload">
+        {load.length === 0 && <Empty>No assignments recorded.</Empty>}
+        {load.length > 0 && (
+          <div className="table-scroll"><table>
+            <thead>
+              <tr>
+                <th>Faculty</th><th>Global Roles</th>
+                <th className="tight">Advisees</th><th className="tight">Panel seats</th><th className="tight">Instructing</th>
+              </tr>
+            </thead>
             <tbody>
-              {advisoryLoad.map(r => (
+              {load.map(r => (
                 <tr key={r.user.id}>
                   <td>{r.user.name}</td>
-                  <td className="small muted">{r.user.globalRole}</td>
-                  <td className="tight mono">{r.count}</td>
+                  <td className="small muted">{(r.user.globalRoles ?? []).join(', ') || '—'}</td>
+                  <td className="tight mono">{r.advisees}</td>
                   <td className="tight mono">{r.panels}</td>
+                  <td className="tight mono">{r.instructing}</td>
                 </tr>
               ))}
             </tbody>
-          </table>
+          </table></div>
         )}
       </Section>
     </div>

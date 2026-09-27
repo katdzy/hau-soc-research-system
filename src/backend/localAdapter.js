@@ -5,7 +5,8 @@
 
 import { COLLECTIONS, emptyStore } from './schema.js'
 
-const KEY = 'hausoc.db.v1'
+// v2: users carry a globalRoles array; blocks live in `sections`.
+const KEY = 'hausoc.db.v2'
 const subscribers = new Set()
 
 const uid = (prefix) =>

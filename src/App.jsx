@@ -5,8 +5,8 @@ import SignIn from './pages/SignIn.jsx'
 import Dashboard from './pages/Dashboard.jsx'
 import Projects from './pages/Projects.jsx'
 import ProjectWorkspace from './pages/ProjectWorkspace.jsx'
-import Inbox from './pages/Inbox.jsx'
-import Archive from './pages/Archive.jsx'
+import Notifications from './pages/Notifications.jsx'
+import Records from './pages/Records.jsx'
 import Reports from './pages/Reports.jsx'
 import Admin from './pages/Admin.jsx'
 import Audit from './pages/Audit.jsx'
@@ -25,8 +25,8 @@ export default function App() {
         <Route index element={<Dashboard />} />
         <Route path="projects" element={<Projects />} />
         <Route path="projects/:id" element={<ProjectWorkspace />} />
-        <Route path="inbox" element={<Inbox />} />
-        <Route path="archive" element={<Archive />} />
+        <Route path="notifications" element={<Notifications />} />
+        <Route path="records" element={<Records />} />
         <Route path="reports" element={<Reports />} />
         <Route path="admin" element={<Admin />} />
         <Route path="audit" element={<Audit />} />

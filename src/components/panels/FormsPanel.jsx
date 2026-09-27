@@ -1,93 +1,76 @@
 import { useApp } from '../../state/AppContext.jsx'
-import { can } from '../../domain/cac.js'
-import { signForm, generateApprovalSheet, submitRecommendationForm } from '../../services/actions.js'
+import { signForm } from '../../services/actions.js'
+import { canSign } from '../../domain/forms.js'
 import { useAction, ActionError } from '../useAction.jsx'
 import { Section, Empty, Badge, fmtDateTime } from '../ui.jsx'
-import { FORMS } from '../../domain/constants.js'
 
-export default function FormsPanel({ b, ctx }) {
+// Forms are issued by workflow events, never by hand: FM-AAC-SOC-2004 when the
+// Panel Chair records a verdict, FM-AAC-SOC-2005 when the Adviser recommends
+// the group, and the Approval Sheet when final revisions close.
+
+export default function FormsPanel({ b }) {
   const { snap, me } = useApp()
   const { run, error, busy } = useAction()
-  const nameOf = (id) => (snap.users ?? []).find(u => u.id === id)?.name ?? id
-
-  const hasRecommendation = b.forms.some(f => f.formType === FORMS.F2005.code)
-  const hasApprovalSheet = b.forms.some(f => f.formType === FORMS.APPROVAL.code)
+  const nameOf = (id) => (snap.users ?? []).find(u => u.id === id)?.name ?? '—'
+  const forms = [...b.forms].sort((x, y) => new Date(y.createdAt) - new Date(x.createdAt))
 
   return (
-    <>
-      <Section title="Institutional forms">
-        {b.forms.length === 0 && <Empty>No forms have been generated for this project.</Empty>}
-        {b.forms.map(f => {
-          const mine = f.signatories?.find(s => s.userId === me.id && !s.signedAt)
-          return (
-            <div className="entry" key={f.id}>
-              <div className="entry-head">
-                <div>
-                  <strong style={{ fontSize: 13 }}>{f.formType}</strong>
-                  <div className="faint small">{f.name}</div>
-                </div>
-                <Badge tone={f.status === 'Completed' ? 'ok' : 'warn'}>{f.status}</Badge>
+    <Section title="Institutional forms">
+      {forms.length === 0 && <Empty>No forms yet. They are issued automatically as the workflow reaches them.</Empty>}
+      {forms.map(f => {
+        const check = canSign(f, me, b)
+        const myLine = f.signatories.find(s => s.userId === me.id && !s.signedAt)
+        return (
+          <div className="entry form-entry" key={f.id}>
+            <div className="entry-head">
+              <div>
+                <strong style={{ fontSize: 13 }}>{f.formType}</strong>
+                {f.name !== f.formType && <div className="faint small">{f.name}</div>}
               </div>
-
-              {f.payload?.verdict && (
-                <div className="small muted" style={{ marginTop: 6 }}>
-                  Verdict: {f.payload.verdict} · {f.payload.revisionClass ?? 'no'} revisions
-                  {f.payload.remarks && <> — {f.payload.remarks}</>}
-                </div>
-              )}
-
-              <table style={{ marginTop: 10 }}>
-                <thead><tr><th>Signatory</th><th>Role</th><th className="tight">Signed</th></tr></thead>
-                <tbody>
-                  {(f.signatories ?? []).map((s, i) => (
-                    <tr key={i}>
-                      <td>{s.name ?? nameOf(s.userId)}</td>
-                      <td className="small muted">{s.role}</td>
-                      <td className="tight small">
-                        {s.signedAt
-                          ? <span className="mono" style={{ color: 'var(--ok)' }}>{fmtDateTime(s.signedAt)}</span>
-                          : <span className="faint">pending</span>}
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-
-              {mine && can(ctx, 'form.sign') && (
-                <div className="actions" style={{ marginTop: 12 }}>
-                  <button className="primary" disabled={busy}
-                    onClick={() => run(() => signForm(me, snap, b.project.id, f.id))}>
-                    Sign as {mine.role}
-                  </button>
-                  <span className="faint small">
-                    Records your name, role and timestamp against this form.
-                  </span>
-                </div>
-              )}
+              <Badge tone={f.status === 'Signed' ? 'ok' : 'warn'}>{f.status}</Badge>
             </div>
-          )
-        })}
-        <ActionError error={error} />
-      </Section>
 
-      <Section title="Generate a form">
-        <div className="actions">
-          {can(ctx, 'finaldefense.recommend') && !hasRecommendation && (
-            <button disabled={busy}
-              onClick={() => run(() => submitRecommendationForm(me, snap, b.project.id))}>
-              Submit {FORMS.F2005.code}
-            </button>
-          )}
-          {can(ctx, 'form.sign') && !hasApprovalSheet && (
-            <button disabled={busy}
-              onClick={() => run(() => generateApprovalSheet(me, snap, b.project.id))}>
-              Generate Approval Sheet
-            </button>
-          )}
-          {hasRecommendation && hasApprovalSheet && <span className="faint small">All applicable forms exist.</span>}
-        </div>
-        <ActionError error={error} />
-      </Section>
-    </>
+            {f.payload?.verdict && (
+              <p className="small muted" style={{ margin: '8px 0 0' }}>
+                {f.payload.defenseType} defense · {f.payload.verdict}
+                {f.payload.remarks && <> — {f.payload.remarks}</>}
+              </p>
+            )}
+
+            <table style={{ marginTop: 12 }}>
+              <thead><tr><th className="tight">Step</th><th>Role</th><th>Signatory</th><th className="tight">Signed</th></tr></thead>
+              <tbody>
+                {[...f.signatories].sort((x, y) => x.order - y.order).map((s, i) => (
+                  <tr key={i}>
+                    <td className="tight mono faint">{s.order}</td>
+                    <td className="small">{s.role}</td>
+                    <td className="small muted">{s.name ?? nameOf(s.userId)}</td>
+                    <td className="tight small">
+                      {s.signedAt
+                        ? <span className="mono signed">{fmtDateTime(s.signedAt)}</span>
+                        : <span className="faint">pending</span>}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+
+            {check.ok && (
+              <div className="actions" style={{ marginTop: 12 }}>
+                <button className="primary" disabled={busy}
+                  onClick={() => run(() => signForm(me, snap, b.project.id, f.id))}>
+                  Sign as {check.line.role}
+                </button>
+                <span className="faint small">Records your name, role and the time against this form.</span>
+              </div>
+            )}
+            {!check.ok && myLine && check.reason && (
+              <p className="small faint" style={{ marginTop: 12 }}>{check.reason}</p>
+            )}
+          </div>
+        )
+      })}
+      <ActionError error={error} />
+    </Section>
   )
 }

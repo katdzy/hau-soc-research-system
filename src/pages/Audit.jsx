@@ -1,10 +1,14 @@
 import { useState } from 'react'
 import { useApp } from '../state/AppContext.jsx'
-import { Section, Badge, Empty, fmtDateTime } from '../components/ui.jsx'
+import { Section, Badge, Empty, Restricted, fmtDateTime } from '../components/ui.jsx'
+import { can, resolveInstitution } from '../domain/caac.js'
 
 export default function Audit() {
-  const { snap } = useApp()
+  const { snap, me } = useApp()
   const [query, setQuery] = useState('')
+  if (!can(resolveInstitution(me, snap), 'audit.view')) {
+    return <Restricted>The system activity log is read by the System Administrator.</Restricted>
+  }
   const nameOf = (id) => (snap.users ?? []).find(u => u.id === id)?.name ?? id
   const titleOf = (id) => {
     const t = (snap.projects ?? []).find(p => p.id === id)?.title
@@ -28,14 +32,14 @@ export default function Audit() {
         <div className="label">Audit</div>
         <h1>Audit trail</h1>
         <p className="lede">
-          Append-only. Entries are written by the service layer on every state change and are
-          never updated or deleted — every decision traces back to the account that made it.
+          Write-once. An entry is added for every state change and is never updated or deleted,
+          so every approval, signature and stage change traces back to the account that made it.
         </p>
       </header>
 
       <Section
         title={`${rows.length} entries`}
-        aside={<input value={query} onChange={e => setQuery(e.target.value)} placeholder="Filter by action or actor" style={{ width: 280 }} />}
+        aside={<input type="search" value={query} onChange={e => setQuery(e.target.value)} placeholder="Filter by action or actor" aria-label="Filter audit entries" style={{ width: 240 }} />}
       >
         {rows.length === 0 && <Empty>No audit entries yet.</Empty>}
         {rows.length > 0 && (
