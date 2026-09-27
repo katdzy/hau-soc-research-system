@@ -1,0 +1,45 @@
+services:
+  # --- React / Vite Dev Server ------------------------------------------------
+  app:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    ports:
+      - "5180:5180"
+    volumes:
+      # Mount source so hot-reload works without rebuilding the image
+      - .:/app
+      # Keep node_modules inside the container (avoids host/container conflicts)
+      - /app/node_modules
+    env_file:
+      - path: .env
+        required: false   # won't error if .env is missing; copy .env.example to create one
+    environment:
+      - NODE_ENV=development
+    depends_on:
+      - emulators
+
+  # --- Firebase Emulator Suite -------------------------------------------------
+  emulators:
+    image: node:22-alpine
+    working_dir: /app
+    command: >
+      sh -c "npm install -g firebase-tools &&
+             firebase emulators:start --project demo-local"
+    ports:
+      - "4000:4000"   # Emulator UI
+      - "5001:5001"   # Functions
+      - "8080:8080"   # Firestore
+      - "9099:9099"   # Auth
+      - "9199:9199"   # Storage
+    volumes:
+      - .:/app
+      - /app/node_modules
+    environment:
+      - FIREBASE_TOKEN=${FIREBASE_TOKEN:-}
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://localhost:4000"]
+      interval: 15s
+      timeout: 10s
+      retries: 5
+      start_period: 30s
