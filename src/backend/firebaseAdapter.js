@@ -12,7 +12,8 @@
 
 import { COLLECTIONS, emptyStore } from './schema.js'
 
-let mirror = emptyStore()
+const emptySnapshot = () => Object.fromEntries(COLLECTIONS.map(c => [c, []]))
+let mirror = emptySnapshot()
 const subscribers = new Set()
 let fb = null
 
@@ -29,6 +30,7 @@ async function init() {
     storageBucket: import.meta.env.VITE_FIREBASE_STORAGE_BUCKET,
     messagingSenderId: import.meta.env.VITE_FIREBASE_MESSAGING_SENDER_ID,
     appId: import.meta.env.VITE_FIREBASE_APP_ID,
+    measurementId: import.meta.env.VITE_FIREBASE_MEASUREMENT_ID,
   })
   const db = firestore.getFirestore(app)
   if (import.meta.env.VITE_USE_EMULATORS === 'true') {
