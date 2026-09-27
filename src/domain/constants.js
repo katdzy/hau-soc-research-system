@@ -124,3 +124,17 @@ export const PROGRAMS = [
   'BS Entertainment and Multimedia Computing',
   'BS Cybersecurity',
 ]
+
+// WEEKLY_ACCOMPLISHMENT (FM-AAC-SOC-2003) — wireframe S-06.
+export const CONSULTATION_MODES = ['Face-to-face', 'Online']
+
+// What a manuscript version is, stated by the student before submitting.
+// Only a complete manuscript is summarised by the AI at a defense milestone.
+export const MANUSCRIPT_SCOPES = ['Chapter draft', 'Complete manuscript']
+
+// Annotation life cycle. Reviewer annotations stay Draft until the reviewer
+// sends feedback, so the group is emailed once per review, not per comment.
+export const ANNOTATION_STATUS = { DRAFT: 'Draft', OPEN: 'Open', RESOLVED: 'Resolved' }
+
+// EVALUATION_FORM — a panelist's recommendation to the Chair. Not a grade.
+export const PANEL_RECOMMENDATIONS = ['Minor revisions', 'Major revisions', 'Re-defense']

@@ -9,7 +9,8 @@
 //   REVIEW (decisions)        → reviews          AI_SUMMARY        → aiSummaries
 //   WEEKLY_ACCOMPLISHMENT     → weeklyLogs       DEFENSE           → defenses
 //   DIGITAL_FORM + DIGITAL_SIGNATURE → forms (signatories embedded)
-//   WORKFLOW_HISTORY          → workflowHistory  NOTIFICATION      → notifications
+//   WORKFLOW_HISTORY          → workflowHistory  NOTIFICATION      → emails (sent, never shown in-app)
+//   EVALUATION_FORM           → evaluations
 //   AUDIT_LOG                 → auditLogs
 //
 // `sections` is not one of the 17 entities. Requirement Analysis lists
@@ -28,9 +29,10 @@ export const COLLECTIONS = [
   'aiSummaries',
   'weeklyLogs',
   'defenses',
+  'evaluations',
   'forms',
   'workflowHistory',
-  'notifications',
+  'emails',
   'auditLogs',
 ]
 

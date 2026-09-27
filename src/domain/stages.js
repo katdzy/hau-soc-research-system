@@ -29,6 +29,20 @@ const lastDefense = (b, type) =>
   b.defenses.filter(d => d.type === type)
     .sort((x, y) => new Date(y.createdAt) - new Date(x.createdAt))[0] ?? null
 
+/** Wireframe S-11: the verdict waits for every panelist's evaluation form. */
+export const pendingEvaluators = (b, type) => {
+  const d = openDefense(b, type)
+  if (!d) return []
+  const panel = b.assignments.filter(a => a.roleType === P.PANEL_CHAIR || a.roleType === P.PANEL_MEMBER)
+  return panel.filter(a => !(b.evaluations ?? []).some(e => e.defenseId === d.id && e.panelistId === a.userId))
+}
+
+const verdictBlocker = (b, type) => {
+  if (!openDefense(b, type)) return `No ${type.toLowerCase()} defense is open.`
+  const pending = pendingEvaluators(b, type)
+  return pending.length ? `Waiting for ${pending.length} panel evaluation form${pending.length > 1 ? 's' : ''}.` : null
+}
+
 const revisionFormDone = (b, defenseType) => {
   const f = b.forms
     .filter(x => x.formType === FORMS.F2004.code && x.payload?.defenseType === defenseType)
@@ -174,7 +188,7 @@ export const STAGES = [
       handledIn: 'defense',
       next: (b) => lastDefense(b, 'Proposal')?.verdict === VERDICTS.REDEFENSE
         ? 'PROPOSAL_DEFENSE_SCHEDULING' : 'PROPOSAL_REVISION',
-      requires: (b) => openDefense(b, 'Proposal') ? null : 'No proposal defense is open.',
+      requires: (b) => verdictBlocker(b, 'Proposal'),
     }],
   },
   {
@@ -197,7 +211,7 @@ export const STAGES = [
     key: 'IMPLEMENTATION',
     label: 'Implementation & Monitoring',
     phase: PHASES.IMPLEMENTATION,
-    blurb: 'Weekly logs (FM-AAC-SOC-2003) are approved and signed by the Adviser; Instructor 2 confirms milestones. When the project is ready, the Adviser submits the Capstone Recommendation Form.',
+    blurb: 'Weekly logs (FM-AAC-SOC-2003) unlock here and are approved and signed by the Adviser. When the project is ready, the Adviser submits the Capstone Recommendation Form.',
     gates: [{
       action: 'RECOMMEND_FINAL_DEFENSE',
       label: `Submit ${FORMS.F2005.code} (Capstone Recommendation)`,
@@ -208,7 +222,6 @@ export const STAGES = [
         const approved = b.weeklyLogs.filter(l => l.status === 'Approved').length
         if (approved < 2) return `At least 2 approved weekly logs are required (currently ${approved}).`
         if (!latest(b, DOC_TYPES.FINAL_MANUSCRIPT)) return 'The group must upload a Final Manuscript first.'
-        if (!b.project.milestonesConfirmedAt) return 'Instructor 2 has not confirmed the Capstone 2 milestones.'
         return null
       },
     }],
@@ -259,7 +272,7 @@ export const STAGES = [
       handledIn: 'defense',
       next: (b) => lastDefense(b, 'Final')?.verdict === VERDICTS.REDEFENSE
         ? 'FINAL_DEFENSE_SCHEDULING' : 'FINAL_REVISION',
-      requires: (b) => openDefense(b, 'Final') ? null : 'No final defense is open.',
+      requires: (b) => verdictBlocker(b, 'Final'),
     }],
   },
   {

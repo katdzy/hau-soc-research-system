@@ -5,8 +5,8 @@
 
 import { COLLECTIONS, emptyStore } from './schema.js'
 
-// v2: users carry a globalRoles array; blocks live in `sections`.
-const KEY = 'hausoc.db.v2'
+// v3: emails replace in-app notifications; evaluations; annotation status.
+const KEY = 'hausoc.db.v3'
 const subscribers = new Set()
 
 const uid = (prefix) =>

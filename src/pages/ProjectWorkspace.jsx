@@ -4,6 +4,7 @@ import { useApp } from '../state/AppContext.jsx'
 import { bundle } from '../services/core.js'
 import { resolveContext, projectAccess } from '../domain/caac.js'
 import { stageByKey } from '../domain/stages.js'
+import { inCapstone1 } from '../domain/contexts.js'
 import { Badge, Countdown, Empty } from '../components/ui.jsx'
 import StageTimeline from '../components/StageTimeline.jsx'
 import CaacInspector from '../components/CaacInspector.jsx'
@@ -17,7 +18,7 @@ import HistoryPanel from '../components/panels/HistoryPanel.jsx'
 const TABS = [
   { key: 'overview', label: 'Overview' },
   { key: 'documents', label: 'Documents' },
-  { key: 'logs', label: 'Weekly logs' },
+  { key: 'logs', label: 'Weekly logs', capstone2: true },
   { key: 'defense', label: 'Defense' },
   { key: 'forms', label: 'Forms & signatures' },
   { key: 'history', label: 'History' },
@@ -58,6 +59,7 @@ export default function ProjectWorkspace() {
         <h1>{b.project.title}</h1>
         <div className="inline" style={{ marginTop: 8 }}>
           <Badge tone="accent">{stage?.label}</Badge>
+          <Badge>{b.project.groupName}</Badge>
           <Badge>{b.project.program}</Badge>
           <span className="faint small">{b.project.block} · {b.project.term}</span>
           <Countdown deadline={b.project.revisionDeadline} />
@@ -66,7 +68,7 @@ export default function ProjectWorkspace() {
       </header>
 
       <div className="tabs" role="tablist" aria-label="Project workspace">
-        {TABS.map(t => (
+        {TABS.filter(t => !t.capstone2 || !inCapstone1(b.project)).map(t => (
           <button key={t.key} role="tab" aria-selected={tab === t.key} onClick={() => setTab(t.key)}>
             {t.label}
           </button>

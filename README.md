@@ -5,8 +5,9 @@ and Workflow Automation System for HAU-SOC** (Holy Angel University, School of C
 
 The point of this build is to make the *workflow and its access control* testable end to end:
 sign in as anyone, move a project through the whole life cycle, and watch Context-Aware Access
-Control (CAAC), notifications and the audit trail respond. It follows the finalized proposal
-manuscript and the Capstone 2 knowledge base.
+Control (CAAC), email and the audit trail respond. The screens follow the Figma wireframes
+(*HAU-SOC Thesis & Capstone Management System — Wireframes*, S-00 to S-14); the rules follow the
+finalized proposal manuscript and the Capstone 2 knowledge base.
 
 ---
 
@@ -20,13 +21,54 @@ Open http://localhost:5180. No Firebase project, credentials or network are need
 default backend stores everything in the browser. Demo data loads on first run and can be
 restored from **Administration → Reset demo data**.
 
-## Signing in
+## Signing in (S-00, S-01)
 
-- **Register / sign in** — domain-restricted to `@hau.edu.ph` and `@student.hau.edu.ph`.
-  Registering sends a verification email with an approval button (shown on screen in the
-  prototype); the account stays Inactive until it is approved. Student addresses receive the
-  Student role; faculty addresses start with no Global Role. There is no OTP step.
+- **Register / sign in** — domain-restricted to `@hau.edu.ph` and `@student.hau.edu.ph`. With
+  `VITE_BACKEND=firebase` this is Firebase Authentication: password, verification email and
+  password reset. Locally the verification email is shown on screen (approve it to activate the
+  account) and passwords are not checked. There is no OTP step.
 - **Demo accounts** — one click, no password. Each is labelled with the roles it actually holds.
+
+## Acting as — one context at a time
+
+The top bar's **Acting as** switcher lists every role you hold. Each context has its own menu and
+pages, and **only that role's policies apply while you act in it** — Mr. Almocera cannot sign his
+advisee's weekly log from the Coordinator context; the system tells him to switch to Adviser.
+
+| Context | Menu | Wireframes |
+|---|---|---|
+| Student | Dashboard · My Project · Submissions · Version History · Feedback & Annotations · Weekly Logs · Defense · Final Requirements | S-02 – S-06 |
+| Adviser | Dashboard · My Advisees · Review Queue · Annotations · Weekly Logs · Defense Clearance · Revision Verification | S-07 – S-09 |
+| Panel Member / Chair | Dashboard · Assigned Panels · Manuscripts · AI Summaries · My Annotations · Evaluation Form · Verdict Recording (Chair) · Revision Confirmation | S-10, S-11 |
+| Program Coordinator | Dashboard · All Projects · Adviser Assignment · Panel Assignment · Defense Endorsement · Clearance Routing · Reports | S-12 – S-14 |
+| Instructor 1 and 2, Dean, Associate Dean, URO, System Administrator | Worklist and the shared project workspace | not wireframed yet |
+
+### Changes on top of the wireframes
+
+- **Weekly logs belong to Capstone 2.** The Student's Weekly Logs item is locked through
+  Capstone 1 and the dashboard shows the "weekly logs signed" tile only from Implementation.
+- **Pending tasks are a checklist.** The dashboard lists what the group must do at this stage,
+  ticked off as it happens, and what it is waiting on and from whom.
+- **Days before deadline.** The tile names the deadline (revisions due, or the defense) and counts
+  the days before it.
+- **Progress trail.** The life-cycle stepper carries the date each checkpoint was reached.
+- **No annotation counts.** Reviewer chips and annotation lists carry no totals.
+- **No milestone or task module.** The required-documents panel on Submissions and Instructor 2's
+  milestone confirmation are gone; the Adviser's FM-AAC-SOC-2005 no longer waits on it.
+- **No in-system notifications.** Every workflow event is an email (Resend). The System
+  Administrator has a read-only **Email Log** as the delivery record.
+- **Students state the version before submitting.** Submissions shows the version number the
+  upload will become, asks whether it is a chapter draft or the complete manuscript and what it
+  contains, and needs a confirmation. The number is re-checked on submit, so two group members
+  cannot both submit "v3".
+- **How a student learns a manuscript came back.** A reviewer's annotations stay drafts until
+  **Send feedback**, which publishes them with the review decision and emails the group once:
+  subject ("Proposal Manuscript v2 returned — return for major revisions"), the reviewer's
+  summary, every annotated location, and a button to that version's Feedback & Annotations. The
+  reviewer sees the exact email; the group's checklist gains "Address the feedback on v2" and
+  "Submit v3"; each annotation takes a resolution note.
+- **Panel evaluations gate the verdict** (S-11): the Chair can record it only after every
+  panelist has submitted an evaluation form.
 
 ---
 
@@ -43,6 +85,7 @@ is granted only when both hold:
 | Program scope | A Program Chair/Coordinator acts only on projects in the programs they coordinate |
 | Conflict | The Dean cannot approve an adviser assignment that names himself |
 | Phase | Instructor 1 authority ends when the group moves to Capstone 2 |
+| Acting context | Only the role you are acting as applies |
 
 Roles follow the manuscript's two dimensions:
 
@@ -59,45 +102,44 @@ The service layer calls `authorize()` before every write, as each Cloud Function
 
 | Person | Standing | What to notice |
 |---|---|---|
-| **Dr. Marlon I. Tayag** | Dean · Adviser on Group 2 | Sees Group 2 at Adviser Approval but cannot approve it — he is the Adviser being approved |
-| **Engr. Marites C. Bondoc** | No Global Role · Adviser on one project, Panel Member on another | Full version history on one; latest version only and private notes on the other |
-| **Mr. Chris Almocera** | Program Chair/Coordinator (IT programs) · Adviser on the IoT project | Both dimensions grant on the same project; reports are scoped to his programs |
-| **Asst. Prof. Espinosa** | No Global Role · teaches block WD-4A | Can create groups; loses access to a project once it moves to Capstone 2 |
-| **Ms. Evelyn R. Castro** | University Research Office | Sees a project only while it is at URO Verification |
+| **Karl Dungca** | Student, Group 5 | Proposal Manuscript v2 came back with annotations: checklist, Feedback & Annotations, Weekly Logs locked |
+| **Dr. Marlon I. Tayag** | Dean · Adviser on Groups 5 and 2 | Two contexts. As Adviser he reviews Group 5; as Dean he cannot approve his own assignment on Group 2 |
+| **Engr. Marites C. Bondoc** | Adviser on Group 4, Panel Member on Group 3 | Group 3's verdict waits for her evaluation form |
+| **Dr. Helen V. Santos** | Panel Chair on four groups | Verdict Recording for Group 3 |
+| **Mr. Chris Almocera** | Program Coordinator (IT) · Adviser on Group 1 | Program dashboard in one context, weekly-log sign-off in the other |
+| **Ma. Cristina V. Reyes** | System Administrator | Accounts & CAAC, Audit Trail, Email Log |
 
 ---
 
 ## A walkthrough
 
-Group 5 starts at Group Formation. Each row is one sign-in and the step on its worklist.
+Group 7 starts at Group Formation; Group 5 is mid-way through Proposal Development.
 
-| # | Sign in as | Do this | What it shows |
+| # | Acting as | Do this | What it shows |
 |---|---|---|---|
-| 1 | Espinosa (Instructor 1) | Group 5 → **Forward roster** | Instructors form groups; students don't |
-| 2 | Almocera (Coordinator) | Assign an Adviser → **Route for approval** | Blocked until an Adviser exists |
-| 3 | Tayag or Rivera | **Approve adviser assignment** | Advisers are in place before ideation; no self-approval |
-| 4 | Karl Dungca (Student) | Documents → submit a Topic Proposal and a Concept Paper | Every upload is a new immutable version |
-| 5 | Espinosa | Approve both → **Register the approved topic** | The topic becomes the title; the old one is kept |
-| 6 | Karl → the Adviser → Espinosa | Proposal Manuscript → Adviser approves → **Approve for proposal defense** | Adviser reviews; Instructor 1 gates the defense |
-| 7 | Almocera | Assign Panel Chair and Members → confirm → Defense tab → **Publish schedule** | The Adviser is disabled in the panel picker; the AI summary is generated |
-| 8 | Bondoc, on *Smart Queue* | Documents | Latest version only; the Chair's private note is withheld |
-| 9 | Dr. Santos (Panel Chair) | Defense → **Record verdict** | Only the Chair can; FM-AAC-SOC-2004 issued, countdown starts, notes released |
-| 10 | Lazaro (Instructor 2), on the IoT project | Weekly logs → **Confirm milestones** | The Adviser's recommendation waits for this |
-| 11 | Almocera (Adviser there) | Approve the week 3 log → **Submit FM-AAC-SOC-2005** | Same person, acting through his project role |
-| 12 | Castro (URO), on *Sentiment Analysis* | **Verify certificates and sign** | URO comes before the Dean |
-| 13 | Tayag and Rivera | **Sign the Approval Sheet** | The second signature archives the project with a Pass result |
-| 14 | Reyes (System Administrator) | Audit trail, Administration, Records archive | Every step, attributed; tag assignments and policies |
+| 1 | Karl — Student | Dashboard → Feedback & Annotations → add a resolution note | How a returned version reaches the group |
+| 2 | Karl — Student | Submissions → Proposal Manuscript, **Complete manuscript**, describe it, confirm **v3** | The student states the version before it goes in |
+| 3 | Tayag — Adviser | Review Queue → **Review** → add a comment → decision → **Send feedback** | One email to the group with every annotation |
+| 4 | Espinosa — Instructor 1 | Group 7 → **Forward roster** | Instructors form groups |
+| 5 | Almocera — Program Coordinator | Adviser Assignment → pick an adviser → **Endorse to Dean / Assoc. Dean** | Routing slip; conflict checks |
+| 6 | Tayag — Dean, then Rivera — Associate Dean | Group 2 → **Approve adviser assignment** | No self-approval |
+| 7 | Bondoc — Panel Member | Evaluation Form → Group 3 → **Submit evaluation** | Unlocks the verdict |
+| 8 | Santos — Panel Chair | Verdict Recording → confirm → **Record verdict** | Countdown, FM-AAC-SOC-2004, private notes released, emails |
+| 9 | Almocera — Adviser | Weekly Logs → sign week 3 → Defense Clearance → **Submit FM-AAC-SOC-2005** | Capstone 2 only; same person, other context |
+| 10 | Castro — URO, then Tayag and Rivera | Group 4 → **Verify and sign**, then **Sign the Approval Sheet** | URO before the Dean; archived with Pass |
+| 11 | Reyes — System Administrator | Email Log, Audit Trail | Every email and every step, attributed |
 
-Six projects are seeded at different stages:
+Seven groups are seeded:
 
-| Project | Parked at |
+| Group | Parked at |
 |---|---|
-| Untitled — Group 5 (WD-4A) | Group Formation — walk the whole life cycle |
-| Untitled — Group 2 (WD-4A) | Adviser Approval — the Dean-as-Adviser conflict |
-| Smart Queue Management System | Proposal Defense — private notes, verdict, revision |
-| IoT-Based Laboratory Equipment Tracking | Implementation — weekly logs, milestones, FM-AAC-SOC-2005 |
-| Automated Student Feedback Sentiment Analysis | URO Verification — clearance, signatures, archiving |
-| Barangay Health Records Digitisation Platform | Archived — records archive |
+| Group 7 (WD-4A) | Group Formation — walk the whole life cycle |
+| Group 2 (WD-4A) | Adviser Approval — the Dean-as-Adviser conflict |
+| Group 5 (WD-4A) | Proposal Development — v2 returned with annotations |
+| Group 3 — Smart Queue Management System | Proposal Defense — evaluations, verdict |
+| Group 1 — IoT-Based Laboratory Equipment Tracking | Implementation — weekly logs, FM-AAC-SOC-2005 |
+| Group 4 — Automated Student Feedback Sentiment Analysis | URO Verification — clearance, signatures |
+| Group 6 — Barangay Health Records Digitisation Platform | Archived — records archive |
 
 ---
 
@@ -113,11 +155,11 @@ Post-Defense Clearance       Final Requirements → URO Verification → Final A
 ```
 
 - Verdicts: **minor revisions (7 days)**, **major revisions (14 days)**, or **re-defense**, which
-  returns the project to scheduling.
+  returns the project to scheduling. The Chair can change the revision period.
 - FM-AAC-SOC-2004 is signed Panel Chair → Adviser → Panel Members. The Approval Sheet is signed
   Adviser → Panel → Program Chair/Coordinator → URO → Dean and Associate Dean.
-- AI summaries (Gemini Flash) are generated automatically when a defense is scheduled, for the
-  complete manuscript only, and always carry the AI disclosure label.
+- AI summaries (Gemini Flash) are generated automatically when a defense is scheduled, from the
+  latest *complete* manuscript only, and always carry the AI disclosure label.
 - Cleared projects go to a **records-table archive** searchable by the Dean and Associate Dean.
   There is no public gallery and no grade.
 
@@ -125,29 +167,27 @@ Post-Defense Clearance       Final Requirements → URO Verification → Final A
 
 ```
 src/domain/caac.js        CAAC policies and resolution: role × context → capability
+src/domain/contexts.js    "Acting as" contexts and each context's menu
 src/domain/stages.js      the workflow — each stage's gate, its capability and its guard
 src/domain/forms.js       form signing order
 src/domain/constants.js   roles, verdicts, document types, official forms
-src/services/actions.js   every state change: authorize → write → audit → notify
-src/services/worklist.js  what each user owes the system right now
-src/backend/              swappable data layer (local ↔ Firestore) + demo seed
-src/components/panels/    the six workspace tabs
+src/services/actions.js   every state change: authorize → write → audit → email
+src/services/views.js     checklist, progress trail, deadline, review queue
+src/pages/student|faculty|coordinator/   the wireframed context pages
+src/components/panels/    the shared project workspace tabs
 ```
-
-The workflow is data: the worklist, timeline, "Next step" panel and blocked-step messages all
-render from `stages.js`, and every permission check reads `caac.js`. Changing the process or a
-policy after adviser feedback means editing one file.
 
 ## What is stubbed, and what replaces it
 
 | Stubbed | In production |
 |---|---|
-| Email | Written to the in-app Notifications list. `notificationService.js` sends the same event through Resend. |
+| Email | Written to the `emails` send record (Email Log). `notificationService.js` sends it through Resend. |
 | Verification email | Shown on screen. Firebase Authentication sends it; passwords are not stored locally. |
 | File upload | File name and size are recorded, no binary. Firebase Cloud Storage holds the PDF. |
 | AI summary | A labelled placeholder (one seeded summary shows the real structure). The Gemini call is audit-logged. |
 | Digital signature | Name, role and timestamp against the form, in signing order. |
-| PDF annotation | Location is typed (`p. 14, Sampling`) rather than drawn on the page. |
+| PDF annotation | Location is typed (`p. 14 · Sampling`); the wireframe's in-PDF highlight tool replaces it. |
+| Version comparison | Compares what each version declared and what came back on it; no PDF text diff. |
 
 ## Switching to Firebase
 
@@ -197,6 +237,11 @@ reverse, and each is worth settling in the manuscript.
 9. **Block and year level (#11).** Students carry `block` and `yearLevel`; blocks live in a
    `sections` collection that is not in the 17-entity ERD.
 10. **Entity → collection mapping (#8).** Documented at the top of `src/backend/schema.js`.
+11. **Wireframe vs. manuscript.** S-14 has the Associate Dean review the panel assignment and
+    schedule before anyone is notified; the manuscript gives the Associate Dean no such step, so
+    the prototype publishes the panel and schedule directly. S-12 also lists "Endorse for final
+    approval · cleared by URO" for the Coordinator; the manuscript puts the Coordinator's
+    endorsement *before* the URO, which the prototype follows. Worth settling in both places.
 
 Seed data uses the real names recorded for Instructor 1, the Program Coordinator and the Dean.
 Every other name is invented filler — edit `src/backend/seed.js` before any demo outside the team.

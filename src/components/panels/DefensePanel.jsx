@@ -2,10 +2,11 @@ import { useState } from 'react'
 import { useApp } from '../../state/AppContext.jsx'
 import { can } from '../../domain/caac.js'
 import { stageByKey } from '../../domain/stages.js'
-import { scheduleDefense, recordVerdict, defenseTypeAt } from '../../services/actions.js'
+import { Link } from 'react-router-dom'
+import { scheduleDefense, defenseTypeAt } from '../../services/actions.js'
 import { useAction, ActionError } from '../useAction.jsx'
 import { Section, Empty, Badge, Field, Countdown, verdictTone, fmtDateTime } from '../ui.jsx'
-import { VERDICTS, REVISION_WINDOW_DAYS, FORMS } from '../../domain/constants.js'
+
 
 export default function DefensePanel({ b, ctx }) {
   const { snap, me } = useApp()
@@ -21,8 +22,6 @@ export default function DefensePanel({ b, ctx }) {
   const [when, setWhen] = useState('')
   const [venue, setVenue] = useState('SOC Conference Room, 3rd Floor')
   const [instructions, setInstructions] = useState('')
-  const [verdict, setVerdict] = useState(VERDICTS.MINOR)
-  const [remarks, setRemarks] = useState('')
 
   return (
     <>
@@ -84,33 +83,7 @@ export default function DefensePanel({ b, ctx }) {
       )}
 
       {open && can(ctx, 'verdict.record') && (
-        <Section title="Record the official verdict">
-          <p className="small muted">
-            Recorded on {FORMS.F2004.code}. Minor revisions are due in {REVISION_WINDOW_DAYS.Minor} days
-            and major revisions in {REVISION_WINDOW_DAYS.Major}. A re-defense returns the project to
-            scheduling. Private panel notes are released to the group once you record the verdict.
-          </p>
-          <fieldset className="choice">
-            <legend className="label">Verdict</legend>
-            {Object.values(VERDICTS).map(v => (
-              <label key={v} className="inline small">
-                <input type="radio" name="verdict" value={v} checked={verdict === v} onChange={() => setVerdict(v)} />
-                {v}
-              </label>
-            ))}
-          </fieldset>
-          <Field label="Required revisions">
-            <textarea value={remarks} onChange={e => setRemarks(e.target.value)} />
-          </Field>
-          <button className="primary" disabled={busy}
-            onClick={() => run(async () => {
-              await recordVerdict(me, snap, b.project.id, { verdict, remarks })
-              setRemarks('')
-            })}>
-            Record verdict
-          </button>
-          <ActionError error={error} />
-        </Section>
+        <p className="small"><Link to={`/verdict?p=${b.project.id}`}>Record the verdict</Link> from Verdict Recording once every panelist has submitted an evaluation.</p>
       )}
 
       {open && !can(ctx, 'verdict.record') && (

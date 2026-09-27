@@ -88,24 +88,27 @@ service cloud.firestore {
     match /{col}/{docId} {
       allow read: if col in [
           'projectMembers', 'projectAssignments', 'documents', 'reviews',
-          'aiSummaries', 'weeklyLogs', 'defenses', 'forms', 'workflowHistory'
+          'aiSummaries', 'weeklyLogs', 'defenses', 'evaluations', 'forms', 'workflowHistory'
         ] && viaProject(resource.data.projectId);
       allow write: if false;
     }
 
-    // Panel notes stay private to their author until the Panel Chair records
-    // the verdict; the Cloud Function stamps `releasedAt` at that moment.
+    // A reviewer's annotations are drafts, readable only by their author, until
+    // "Send feedback" publishes them. Panel notes stay private until the Panel
+    // Chair records the verdict; the Cloud Function stamps `releasedAt` then.
     match /annotations/{annotationId} {
       allow read: if institutional() && (
         resource.data.authorId == request.auth.uid ||
-        (viaProject(resource.data.projectId) &&
+        (viaProject(resource.data.projectId) && resource.data.status != 'Draft' &&
           (resource.data.visibility == 'shared' || resource.data.releasedAt != null))
       );
       allow write: if false;
     }
 
-    match /notifications/{notificationId} {
-      allow read: if signedIn() && resource.data.userId == request.auth.uid;
+    // There are no in-system notifications. `emails` is the Resend send
+    // record, readable by the System Administrator only.
+    match /emails/{emailId} {
+      allow read: if institutional() && holds('System Administrator');
       allow write: if false;
     }
 

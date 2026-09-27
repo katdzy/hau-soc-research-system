@@ -1,90 +1,79 @@
 import { NavLink, Outlet, useNavigate } from 'react-router-dom'
 import { useApp } from '../state/AppContext.jsx'
-import { worklist, actionableCount } from '../services/worklist.js'
-import { can, caacTag, resolveInstitution } from '../domain/caac.js'
-import { accountType } from '../domain/constants.js'
+import { navFor } from '../domain/contexts.js'
+import { myGroup } from '../services/views.js'
+import { GLOBAL_ROLES as G } from '../domain/constants.js'
+
+// Wireframe frame: a top bar with the "Acting as" switcher, and a left menu
+// for the current context. There is no notification bell — every workflow
+// event reaches people by email.
 
 const link = ({ isActive }) => (isActive ? 'active' : undefined)
 
 export default function Shell() {
-  const { me, snap, signOut, backendName } = useApp()
+  const { me, snap, signOut, contexts, actingAs, setActingAs } = useApp()
   const navigate = useNavigate()
+  const project = actingAs === G.STUDENT ? myGroup(snap, me)?.project : null
+  const nav = navFor(actingAs, { project })
 
-  const todo = actionableCount(worklist(snap, me))
-  const unread = (snap.notifications ?? []).filter(n => n.userId === me.id && !n.read).length
-  const inst = resolveInstitution(me, snap)
-
-  // Project-Based Roles, counted across projects — the second CAAC dimension.
   const projectRoles = {}
   for (const a of snap.projectAssignments ?? []) {
     if (a.userId === me.id) projectRoles[a.roleType] = (projectRoles[a.roleType] ?? 0) + 1
   }
+  const roleSummary = Object.entries(projectRoles).map(([r, n]) => (n > 1 ? `${r} (${n})` : r)).join(', ')
+  const subtitle = me.block ? `${me.program?.split(' — ')[0]}-${me.block}` : (me.globalRoles?.[0] ?? 'Faculty, SOC')
 
-  const institutional = ['report.generate', 'records.search', 'records.manage', 'audit.view', 'admin.accounts']
-    .some(c => can(inst, c))
+  function switchTo(role) {
+    setActingAs(role)
+    navigate('/')
+  }
 
   return (
-    <div className="app">
-      <nav className="rail" aria-label="Main">
-        <div className="rail-head">
-          <div className="wordmark">
-            <span className="crest">HAU</span>
-            <strong>School of Computing</strong>
-          </div>
-          <div className="label" style={{ marginTop: 8 }}>Thesis &amp; Capstone Workflow</div>
+    <div className="frame">
+      <header className="topbar">
+        <div className="wordmark">
+          <span className="crest">HAU</span>
+          <strong>HAU-SOC Capstone Management System</strong>
         </div>
 
-        <div className="identity">
-          <div className="name">{me.name}</div>
-          <div className="faint small">
-            {accountType(me.email)} account{me.block ? ` · ${me.block}` : ''}
+        {contexts.length > 0 && (
+          <label className="acting">
+            <span className="acting-label">Acting as</span>
+            <select value={actingAs ?? ''} onChange={e => switchTo(e.target.value)} disabled={contexts.length < 2}>
+              {contexts.map(c => (
+                <option key={c.role} value={c.role}>{c.label}{c.detail ? ` — ${c.detail}` : ''}</option>
+              ))}
+            </select>
+          </label>
+        )}
+
+        <div className="whoami">
+          <div className="whoami-name">{me.name}</div>
+          <div className="faint small">{subtitle}</div>
+        </div>
+        <button className="quiet small" onClick={() => { signOut(); navigate('/') }}>Sign out</button>
+      </header>
+
+      <div className="app">
+        <nav className="rail" aria-label={nav.heading}>
+          <div className="label rail-heading">{nav.heading}</div>
+          <div className="nav">
+            {nav.items.map(item => item.locked ? (
+              <span key={item.to} className="nav-locked" aria-disabled="true" title={`Unlocks in ${item.locked}`}>
+                <span>{item.label}</span><span className="lock">{item.locked}</span>
+              </span>
+            ) : (
+              <NavLink key={item.to} to={item.to} end={item.end} className={link}>{item.label}</NavLink>
+            ))}
           </div>
-          <dl className="standing">
-            <dt className="label">Global</dt>
-            <dd>
-              {me.globalRoles?.length
-                ? me.globalRoles.map(r => <span key={r} className="tag">{caacTag(r)}</span>)
-                : <span className="faint small">none</span>}
-            </dd>
-            <dt className="label">Projects</dt>
-            <dd>
-              {Object.keys(projectRoles).length
-                ? Object.entries(projectRoles).map(([r, n]) => (
-                    <span key={r} className="tag">{caacTag(r)}<span className="tag-n">×{n}</span></span>
-                  ))
-                : <span className="faint small">none</span>}
-            </dd>
+          <dl className="rail-foot small faint">
+            <div><dt>Global Role</dt><dd>{me.globalRoles?.length ? me.globalRoles.join(', ') : 'none'}</dd></div>
+            <div><dt>Project Roles</dt><dd>{roleSummary || '—'}</dd></div>
           </dl>
-        </div>
+        </nav>
 
-        <div className="nav">
-          <NavLink to="/" end className={link}>
-            <span>Worklist</span>{todo > 0 && <span className="count">{todo}</span>}
-          </NavLink>
-          <NavLink to="/projects" className={link}>Projects</NavLink>
-          <NavLink to="/notifications" className={link}>
-            <span>Notifications</span>{unread > 0 && <span className="count">{unread}</span>}
-          </NavLink>
-
-          {institutional && <div className="nav-group label">Institutional</div>}
-          {can(inst, 'report.generate') && <NavLink to="/reports" className={link}>Reports</NavLink>}
-          {(can(inst, 'records.search') || can(inst, 'records.manage')) &&
-            <NavLink to="/records" className={link}>Records archive</NavLink>}
-          {can(inst, 'audit.view') && <NavLink to="/audit" className={link}>Audit trail</NavLink>}
-          {can(inst, 'admin.accounts') && <NavLink to="/admin" className={link}>Administration</NavLink>}
-        </div>
-
-        <div className="rail-foot">
-          <div className="faint small" style={{ marginBottom: 10 }}>
-            Backend <span className="mono">{backendName}</span>
-          </div>
-          <button className="quiet small" onClick={() => { signOut(); navigate('/') }}>
-            Sign out
-          </button>
-        </div>
-      </nav>
-
-      <main className="main"><Outlet /></main>
+        <main className="main"><Outlet /></main>
+      </div>
     </div>
   )
 }

@@ -17,9 +17,6 @@ function pendingTasks(b, ctx, me) {
     const waiting = b.weeklyLogs.filter(l => l.status === 'Submitted')
     if (waiting.length) tasks.push({ label: `${waiting.length} weekly log(s) awaiting your review`, tab: 'logs' })
   }
-  if (can(ctx, 'milestone.confirm') && !b.project.milestonesConfirmedAt) {
-    tasks.push({ label: 'Capstone 2 milestones not yet confirmed', tab: 'logs' })
-  }
   if (can(ctx, 'review.decide')) {
     const relevant = new Set(allowedDocTypes(b.project.currentStage).filter(t => REVIEWABLE_TYPES.includes(t)))
     const waiting = b.documents.filter(d => d.status === DOC_STATUS.SUBMITTED && relevant.has(d.docType))

@@ -1,12 +1,9 @@
 import { useMemo, useState } from 'react'
+import { Link } from 'react-router-dom'
 import { useApp } from '../../state/AppContext.jsx'
-import { can, why, allowedDocTypes } from '../../domain/caac.js'
-import { submitDocument, addAnnotation, submitReview } from '../../services/actions.js'
-import { useAction, ActionError } from '../useAction.jsx'
-import { Section, Empty, Badge, Field, docTone, fmtDateTime, fmtSize } from '../ui.jsx'
-import {
-  DECISIONS, DOC_STATUS, DOC_TYPES, ANNOTATION_CATEGORIES, REVIEWABLE_TYPES, LINK_TYPES,
-} from '../../domain/constants.js'
+import { can } from '../../domain/caac.js'
+import { Section, Empty, Badge, docTone, fmtDateTime, fmtSize } from '../ui.jsx'
+import { DECISIONS, DOC_STATUS, DOC_TYPES, REVIEWABLE_TYPES } from '../../domain/constants.js'
 
 const SUMMARISED = [DOC_TYPES.PROPOSAL_MANUSCRIPT, DOC_TYPES.FINAL_MANUSCRIPT]
 
@@ -23,13 +20,12 @@ export default function DocumentsPanel({ b, ctx }) {
 
   const [selected, setSelected] = useState(versions[0]?.id ?? null)
   const doc = versions.find(d => d.id === selected) ?? null
-  const uploadable = allowedDocTypes(b.project.currentStage)
 
   // Private panel notes are withheld from everyone but their author until the
   // Panel Chair records the verdict (`releasedAt`).
   const docAnnotations = doc ? b.annotations.filter(a => a.documentId === doc.id) : []
-  const visibleAnnotations = docAnnotations.filter(a =>
-    a.visibility !== 'private' || a.authorId === me.id || a.releasedAt)
+  const visibleAnnotations = docAnnotations.filter(a => a.authorId === me.id ||
+    (a.status !== 'Draft' && (a.visibility !== 'private' || a.releasedAt)))
   const hiddenCount = docAnnotations.length - visibleAnnotations.length
 
   const summary = doc ? b.aiSummaries.find(s => s.documentId === doc.id) : null
@@ -66,9 +62,7 @@ export default function DocumentsPanel({ b, ctx }) {
         </Section>
 
         {can(ctx, 'document.submit') && (
-          <Section title="New submission">
-            <UploadForm key={b.project.currentStage} types={uploadable} b={b} onDone={setSelected} />
-          </Section>
+          <p className="small"><Link to="/submit">Submit a new version</Link> from Submissions — you confirm the version before it goes in.</p>
         )}
       </div>
 
@@ -146,7 +140,9 @@ export default function DocumentsPanel({ b, ctx }) {
                 </div>
               ))}
 
-              {can(ctx, 'document.annotate') && reviewable && <AnnotationForm b={b} ctx={ctx} doc={doc} />}
+              {(can(ctx, 'document.annotate') || can(ctx, 'review.decide')) && reviewable && (
+                <Link className="btn" to={`/review/${doc.id}`}>Open in the review workspace</Link>
+              )}
             </Section>
 
             {REVIEWABLE_TYPES.includes(doc.docType) && (
@@ -164,130 +160,11 @@ export default function DocumentsPanel({ b, ctx }) {
                     <div className="faint small" style={{ marginTop: 4 }}>{r.reviewerRole} · {fmtDateTime(r.createdAt)}</div>
                   </div>
                 ))}
-                {can(ctx, 'review.decide') && reviewable && <ReviewForm b={b} ctx={ctx} doc={doc} />}
               </Section>
             )}
           </>
         )}
       </div>
-    </div>
-  )
-}
-
-function UploadForm({ types, b, onDone }) {
-  const { snap, me } = useApp()
-  const { run, error, busy } = useAction()
-  const [docType, setDocType] = useState(types[0])
-  const [title, setTitle] = useState('')
-  const [abstract, setAbstract] = useState('')
-  const [file, setFile] = useState(null)
-  const [link, setLink] = useState('')
-  const isLink = LINK_TYPES.includes(docType)
-  const next = (b.documents.filter(d => d.docType === docType).length) + 1
-
-  return (
-    <div>
-      <Field label="Document type">
-        <select value={docType} onChange={e => setDocType(e.target.value)}>
-          {types.map(t => <option key={t} value={t}>{t}</option>)}
-        </select>
-      </Field>
-      <Field label="Title" hint={docType === DOC_TYPES.TOPIC_PROPOSAL ? 'If approved and registered, this becomes the project title.' : undefined}>
-        <input value={title} onChange={e => setTitle(e.target.value)} />
-      </Field>
-      {(docType.includes('Manuscript') || docType === DOC_TYPES.TOPIC_PROPOSAL || docType === DOC_TYPES.CONCEPT_PAPER) && (
-        <Field label="Abstract"><textarea value={abstract} onChange={e => setAbstract(e.target.value)} /></Field>
-      )}
-      {isLink ? (
-        <Field label="Video link" hint="Videos are not stored — link to where it is hosted.">
-          <input type="url" value={link} onChange={e => setLink(e.target.value)} placeholder="https://" />
-        </Field>
-      ) : (
-        <Field label="PDF file" hint="The prototype records the file name and size; Cloud Storage holds the file in production.">
-          <input type="file" accept="application/pdf,.pdf" onChange={e => setFile(e.target.files?.[0] ?? null)} />
-        </Field>
-      )}
-      <button className="primary" disabled={busy || !title}
-        onClick={() => run(async () => {
-          const created = await submitDocument(me, snap, b.project.id, {
-            docType, title, abstract, link, fileName: file?.name, fileSize: file?.size,
-          })
-          setTitle(''); setAbstract(''); setFile(null); setLink('')
-          onDone(created.id)
-        })}>
-        Submit version {next}
-      </button>
-      <ActionError error={error} />
-      {next > 1 && (
-        <p className="faint small" style={{ marginTop: 12 }}>
-          Version {next - 1} is kept and marked superseded. Submitted files cannot be changed.
-        </p>
-      )}
-    </div>
-  )
-}
-
-function AnnotationForm({ b, ctx, doc }) {
-  const { snap, me } = useApp()
-  const { run, error, busy } = useAction()
-  const [anchor, setAnchor] = useState('')
-  const [category, setCategory] = useState(ANNOTATION_CATEGORIES[0])
-  const [text, setText] = useState('')
-  const role = why(ctx, 'document.annotate')?.role
-
-  return (
-    <div className="subform">
-      <div className="label" style={{ marginBottom: 8 }}>Annotate as {role}</div>
-      <div className="row">
-        <Field label="Location"><input value={anchor} onChange={e => setAnchor(e.target.value)} placeholder="p. 12, Scope" /></Field>
-        <Field label="Category">
-          <select value={category} onChange={e => setCategory(e.target.value)}>
-            {ANNOTATION_CATEGORIES.map(c => <option key={c}>{c}</option>)}
-          </select>
-        </Field>
-      </div>
-      <Field label="Comment"><textarea value={text} onChange={e => setText(e.target.value)} /></Field>
-      {can(ctx, 'annotation.private') && (
-        <p className="small muted">
-          Private: other panel members and the group will not see this until the Panel Chair records the verdict.
-        </p>
-      )}
-      <button disabled={busy || !text}
-        onClick={() => run(async () => {
-          await addAnnotation(me, snap, b.project.id, doc.id, { anchor, category, text })
-          setAnchor(''); setText('')
-        })}>
-        Add annotation
-      </button>
-      <ActionError error={error} />
-    </div>
-  )
-}
-
-function ReviewForm({ b, ctx, doc }) {
-  const { snap, me } = useApp()
-  const { run, error, busy } = useAction()
-  const [decision, setDecision] = useState(DECISIONS.APPROVE)
-  const [comment, setComment] = useState('')
-  const role = why(ctx, 'review.decide')?.role
-
-  return (
-    <div className="subform">
-      <div className="label" style={{ marginBottom: 8 }}>Decide as {role}</div>
-      <Field label="Decision">
-        <select value={decision} onChange={e => setDecision(e.target.value)}>
-          {Object.values(DECISIONS).map(d => <option key={d} value={d}>{d}</option>)}
-        </select>
-      </Field>
-      <Field label="Comment to the group"><textarea value={comment} onChange={e => setComment(e.target.value)} /></Field>
-      <button className="primary" disabled={busy}
-        onClick={() => run(async () => {
-          await submitReview(me, snap, b.project.id, doc.id, { decision, comment })
-          setComment('')
-        })}>
-        Submit decision
-      </button>
-      <ActionError error={error} />
     </div>
   )
 }

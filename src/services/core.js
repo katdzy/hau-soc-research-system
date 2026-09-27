@@ -18,6 +18,7 @@ export function bundle(snap, projectId) {
     aiSummaries: of('aiSummaries'),
     weeklyLogs: of('weeklyLogs').sort((a, b) => a.weekNo - b.weekNo),
     defenses: of('defenses').sort(byDate),
+    evaluations: of('evaluations'),
     forms: of('forms'),
     history: of('workflowHistory').sort((a, b) => new Date(a.at) - new Date(b.at)),
   }
@@ -31,6 +32,11 @@ export function authorizeOn(actor, snap, projectId, capability) {
   const b = bundle(snap, projectId)
   if (!b) throw new Error('Project not found')
   const ctx = resolveContext(actor, b)
+  if (!ctx.grants.has(capability) && actor.actingAs) {
+    // Would another of the actor's roles allow it? Then say which context to use.
+    const other = resolveContext({ ...actor, actingAs: null }, b).grants.get(capability)
+    if (other) throw new Error(`You are acting as ${actor.actingAs}. Switch to your ${other.role} context to do this.`)
+  }
   authorize(ctx, capability)
   return { b, ctx }
 }
@@ -59,14 +65,17 @@ export async function logAudit(actorId, action, entityType, entityId, projectId,
 }
 
 /**
- * Stands in for notificationService.js. In the Firebase build a Cloud Function
- * writes the notification and sends the email through Resend in the same
- * event that updates the workflow record; here the in-app list is the
- * observable half, so the trigger matrix can be checked without a mail server.
+ * Stands in for notificationService.js. There are no in-system notifications:
+ * every workflow event is an email, sent through Resend by the same Cloud
+ * Function that updates the workflow record. Locally the message is written to
+ * the `emails` collection, which only the System Administrator's Email Log
+ * reads — it is the send record, not an inbox.
  */
-export async function notify(userIds, { projectId, type, title, body }) {
+export async function sendEmail(userIds, { projectId, type, title, body, lines = [], link = null }) {
   const unique = [...new Set(userIds.filter(Boolean))]
-  await Promise.all(unique.map(userId => db.add('notifications', {
-    userId, projectId, type, title, body, read: false, at: new Date().toISOString(),
+  const sentAt = new Date().toISOString()
+  await Promise.all(unique.map(userId => db.add('emails', {
+    userId, projectId, template: type, subject: title, body, lines, link, sentAt,
   })))
+  return { to: unique, subject: title, body, lines, link, sentAt }
 }

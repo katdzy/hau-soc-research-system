@@ -27,6 +27,7 @@ export default function CaacInspector({ ctx, project }) {
       <h2 id="caac-h" className="inspector-title">CAAC Inspector</h2>
       <p className="faint small" style={{ margin: '4px 0 16px' }}>
         Why you can — or cannot — act on this project right now.
+        {ctx.actingAs && <> Acting as <strong>{ctx.actingAs}</strong>: your other roles do not apply until you switch context.</>}
       </p>
 
       <dl className="kv kv-tight">

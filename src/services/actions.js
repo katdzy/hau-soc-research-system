@@ -8,11 +8,12 @@
 
 import { db } from '../backend/index.js'
 import {
-  bundle, authorizeOn, logAudit, notify, assigneeIds, memberIds, latestOf, holdersOf,
+  bundle, authorizeOn, logAudit, assigneeIds, memberIds, latestOf, holdersOf, sendEmail,
 } from './core.js'
 import {
   DOC_STATUS, DECISIONS, REVISION_WINDOW_DAYS, FORMS, AI_MILESTONES, AI_DISCLOSURE, VERDICTS,
   GLOBAL_ROLES as G, PROJECT_ROLES as P, PANEL_ROLES, ACCOUNT_STATUS, LINK_TYPES, accountType,
+  DOC_TYPES, MANUSCRIPT_SCOPES, ANNOTATION_STATUS,
 } from '../domain/constants.js'
 import { stageByKey, stageLabel, resolveNext } from '../domain/stages.js'
 import {
@@ -21,6 +22,7 @@ import {
 import { formOf, canSign } from '../domain/forms.js'
 
 const now = () => new Date().toISOString()
+const MANUSCRIPT_TYPES = [DOC_TYPES.PROPOSAL_MANUSCRIPT, DOC_TYPES.FINAL_MANUSCRIPT, DOC_TYPES.REVISED_MANUSCRIPT]
 const addDays = (n) => new Date(Date.now() + n * 864e5).toISOString()
 
 /** Active users who hold `cap` on this project in the given state. */
@@ -43,7 +45,7 @@ async function transition(actor, snap, b, to, action, note) {
   // against the project as it will be, not from a fixed role list.
   const next = { ...b, project: { ...b.project, currentStage: to } }
   const involved = (stageByKey(to)?.gates ?? []).flatMap(gate => usersWith(snap, next, gate.capability))
-  await notify([...memberIds(b), ...assigneeIds(b, P.ADVISER), ...involved].filter(id => id !== actor.id), {
+  await sendEmail([...memberIds(b), ...assigneeIds(b, P.ADVISER), ...involved].filter(id => id !== actor.id), {
     projectId: b.project.id, type: 'Workflow',
     title: `${b.project.title} moved to ${stageLabel(to)}`,
     body: `${actor.name} completed: ${note}.`,
@@ -53,18 +55,22 @@ async function transition(actor, snap, b, to, action, note) {
 
 // --- Group and roster --------------------------------------------------------
 
-export async function createProject(actor, snap, { title, sectionId, researchArea }) {
+export async function createProject(actor, snap, { groupName, title, sectionId, researchArea }) {
   const inst = resolveInstitution(actor, snap)
   authorize(inst, 'group.create')
   const section = inst.sections.find(s => s.id === sectionId && s.course === 'Capstone 1')
   if (!section) throw new Error('You can only create groups for a Capstone 1 block you teach.')
 
+  const inBlock = (snap.projects ?? []).filter(p => p.sectionId === section.id)
+  const name = groupName?.trim() || `Group ${inBlock.length + 1}`
+  if (inBlock.some(p => p.groupName === name)) throw new Error(`${section.block} already has a ${name}.`)
   const project = await db.add('projects', {
-    title: title || `Untitled — ${section.block}`,
+    groupName: name,
+    title: title?.trim() || `Untitled — ${name} (${section.block})`,
     previousTitles: [], category: 'Capstone', researchArea: researchArea || 'Not yet set',
     program: section.program, term: section.term, block: section.block, sectionId: section.id,
     currentStage: 'GROUP_FORMATION', status: 'Active', archiveResult: null,
-    revisionClass: null, revisionDeadline: null, milestonesConfirmedAt: null, milestonesConfirmedBy: null,
+    revisionClass: null, revisionDeadline: null,
   })
   // The section instructor becomes Instructor 1 on the new project.
   await db.add('projectAssignments', {
@@ -88,7 +94,7 @@ export async function addMember(actor, snap, projectId, userId) {
 
   const row = await db.add('projectMembers', { projectId, userId, joinedAt: now() })
   await logAudit(actor.id, 'MEMBER_ADDED', 'projectMembers', row.id, projectId, { userId })
-  await notify([userId], {
+  await sendEmail([userId], {
     projectId, type: 'Group membership',
     title: 'You were added to a project group',
     body: `${actor.name} added you to ${b.project.title}.`,
@@ -138,7 +144,7 @@ export async function assignRole(actor, snap, projectId, userId, roleType) {
     projectId, userId, roleType, status: 'Accepted', assignedAt: now(), assignedBy: actor.id,
   })
   await logAudit(actor.id, 'ROLE_ASSIGNED', 'projectAssignments', row.id, projectId, { userId, roleType })
-  await notify([userId], {
+  await sendEmail([userId], {
     projectId, type: 'New assignment',
     title: `You were assigned as ${roleType}`,
     body: `${b.project.title}. What you can do on it now depends on this role and on the stage the project is in.`,
@@ -158,9 +164,17 @@ export async function unassignRole(actor, snap, projectId, assignment) {
 
 // --- Documents ---------------------------------------------------------------
 
+export const nextVersionOf = (b, docType) => (latestOf(b, docType)?.versionNumber ?? 0) + 1
+
 /**
  * Submissions are immutable. A new upload never overwrites the previous file;
  * it creates a new version and marks its predecessor Superseded.
+ *
+ * The student states which version they are submitting before it goes in:
+ * `expectedVersion` is the number they confirmed on screen, `scope` says
+ * whether it is a chapter draft or the complete manuscript, and `versionNote`
+ * says what the version contains. If someone else in the group submitted in
+ * the meantime the numbers no longer match and nothing is written.
  */
 export async function submitDocument(actor, snap, projectId, input) {
   const { b } = authorizeOn(actor, snap, projectId, 'document.submit')
@@ -169,16 +183,27 @@ export async function submitDocument(actor, snap, projectId, input) {
   }
   const isLink = LINK_TYPES.includes(input.docType)
   if (isLink && !/^https?:\/\/\S+$/i.test(input.link ?? '')) throw new Error('Enter the full link to the hosted video.')
-  if (!isLink && input.fileName && !/\.pdf$/i.test(input.fileName)) throw new Error('Only PDF files can be submitted.')
+  if (!isLink && !input.fileName) throw new Error('Choose the PDF to upload.')
+  if (!isLink && !/\.pdf$/i.test(input.fileName)) throw new Error('Only PDF files can be submitted.')
 
   const previous = latestOf(b, input.docType)
-  const version = previous ? previous.versionNumber + 1 : 1
+  const version = (previous?.versionNumber ?? 0) + 1
+  if (input.expectedVersion && input.expectedVersion !== version) {
+    throw new Error(`Someone in your group has just submitted v${version - 1}. Review it, then confirm v${version} instead.`)
+  }
+  const isManuscript = MANUSCRIPT_TYPES.includes(input.docType)
+  if (isManuscript && !MANUSCRIPT_SCOPES.includes(input.scope)) throw new Error('Say whether this is a chapter draft or the complete manuscript.')
+  if (isManuscript && !input.versionNote?.trim()) throw new Error('Describe what this version contains.')
+
   const doc = await db.add('documents', {
     projectId, docType: input.docType, versionNumber: version,
     title: input.title || `${input.docType} v${version}`,
-    fileName: isLink ? null : (input.fileName || `${input.docType.toLowerCase().replace(/\W+/g, '-')}-v${version}.pdf`),
+    fileName: isLink ? null : input.fileName,
     fileSize: isLink ? null : (input.fileSize ?? 0),
     link: isLink ? input.link : null,
+    scope: isManuscript ? input.scope : null,
+    versionNote: input.versionNote?.trim() ?? '',
+    notesToReviewer: input.notesToReviewer?.trim() ?? '',
     abstract: input.abstract ?? '',
     submittedBy: actor.id, submittedAt: now(),
     status: DOC_STATUS.SUBMITTED,
@@ -189,73 +214,146 @@ export async function submitDocument(actor, snap, projectId, input) {
   if (previous && previous.status !== DOC_STATUS.ARCHIVED) {
     await db.update('documents', previous.id, { status: DOC_STATUS.SUPERSEDED })
   }
-  await logAudit(actor.id, 'DOCUMENT_SUBMITTED', 'documents', doc.id, projectId, { docType: input.docType, version })
+  await logAudit(actor.id, 'DOCUMENT_SUBMITTED', 'documents', doc.id, projectId, {
+    docType: input.docType, version, scope: doc.scope,
+  })
 
   const reviewers = [
     ...usersWith(snap, b, 'review.decide'),
     ...usersWith(snap, b, 'document.annotate'),
   ].filter(id => id !== actor.id)
-  await notify(reviewers, {
+  await sendEmail(reviewers, {
     projectId, type: 'Submission',
-    title: `${input.docType} v${version} submitted`,
-    body: `${actor.name} submitted a new version for ${b.project.title}.`,
+    title: `${b.project.groupName}: ${input.docType} v${version} submitted for review`,
+    body: `${actor.name} submitted v${version}${doc.scope ? ` (${doc.scope.toLowerCase()})` : ''}. ${doc.versionNote}`.trim(),
+    link: `/review/${doc.id}`,
   })
   return doc
 }
 
+/**
+ * Reviewer annotations are drafts until the reviewer sends feedback; panel
+ * annotations are private notes released when the verdict is recorded.
+ */
 export async function addAnnotation(actor, snap, projectId, documentId, input) {
-  const { ctx } = authorizeOn(actor, snap, projectId, 'document.annotate')
+  const { b, ctx } = authorizeOn(actor, snap, projectId, 'document.annotate')
+  const doc = b.documents.find(d => d.id === documentId)
+  if (!doc || [DOC_STATUS.SUPERSEDED, DOC_STATUS.ARCHIVED].includes(doc.status)) {
+    throw new Error('Only the current version can be annotated.')
+  }
+  if (!input.text?.trim()) throw new Error('Write the comment first.')
   const isPrivate = can(ctx, 'annotation.private')
+  // A reviewer's draft only goes out with a decision, so it belongs on a
+  // version that is still awaiting one.
+  if (!isPrivate && doc.status !== DOC_STATUS.SUBMITTED) {
+    throw new Error('This version has already been decided. Annotate the next version instead.')
+  }
   const row = await db.add('annotations', {
     projectId, documentId, authorId: actor.id, authorRole: why(ctx, 'document.annotate').role,
-    anchor: input.anchor || 'General', category: input.category, text: input.text,
+    anchor: input.anchor?.trim() || 'General', category: input.category, text: input.text.trim(),
     visibility: isPrivate ? 'private' : 'shared',
-    // Private panel notes are released when the Panel Chair records the verdict.
-    releasedAt: null,
+    status: isPrivate ? ANNOTATION_STATUS.OPEN : ANNOTATION_STATUS.DRAFT,
+    releasedAt: null, sentAt: null, studentResponse: '', respondedBy: null, respondedAt: null,
     createdAt: now(),
   })
   await logAudit(actor.id, 'ANNOTATION_ADDED', 'annotations', row.id, projectId, {
-    documentId, visibility: row.visibility,
+    documentId, visibility: row.visibility, status: row.status,
   })
   return row
 }
 
-/** A review decision changes the version's status only — never the file. */
-export async function submitReview(actor, snap, projectId, documentId, input) {
+export async function discardDraftAnnotation(actor, snap, projectId, annotationId) {
+  const { b } = authorizeOn(actor, snap, projectId, 'document.annotate')
+  const a = b.annotations.find(x => x.id === annotationId)
+  if (!a || a.authorId !== actor.id || a.status !== ANNOTATION_STATUS.DRAFT) {
+    throw new Error('Only your own unsent drafts can be discarded.')
+  }
+  await db.remove('annotations', annotationId)
+  await logAudit(actor.id, 'ANNOTATION_DISCARDED', 'annotations', annotationId, projectId, {})
+}
+
+const STATUS_FOR_DECISION = {
+  [DECISIONS.APPROVE]: DOC_STATUS.APPROVED,
+  [DECISIONS.MINOR]: DOC_STATUS.APPROVED,
+  [DECISIONS.ENDORSE]: DOC_STATUS.APPROVED,
+  [DECISIONS.MAJOR]: DOC_STATUS.FOR_REVISION,
+  [DECISIONS.REJECT]: DOC_STATUS.REJECTED,
+}
+
+/**
+ * "Send feedback" (wireframe S-08). One act releases the reviewer's draft
+ * annotations, records the review decision, and emails the group once —
+ * the decision, the reviewer's summary and every annotated location, with a
+ * link to Feedback & Annotations for that version. Returns the email so the
+ * reviewer sees exactly what the students received.
+ */
+export async function sendFeedback(actor, snap, projectId, documentId, { decision, summary }) {
   const { b, ctx } = authorizeOn(actor, snap, projectId, 'review.decide')
   const doc = b.documents.find(d => d.id === documentId)
   if (!doc || [DOC_STATUS.SUPERSEDED, DOC_STATUS.ARCHIVED].includes(doc.status)) {
     throw new Error('Only the current version can be reviewed.')
   }
+  if (!STATUS_FOR_DECISION[decision]) throw new Error('Choose a review decision.')
+  const drafts = b.annotations.filter(a =>
+    a.documentId === documentId && a.authorId === actor.id && a.status === ANNOTATION_STATUS.DRAFT)
+  // Major revisions and rejection send the version back; minor revisions
+  // approve it with changes to carry into the next version.
+  const returned = [DECISIONS.MAJOR, DECISIONS.REJECT].includes(decision)
+  const withChanges = returned || decision === DECISIONS.MINOR
+  if (withChanges && !summary?.trim() && drafts.length === 0) {
+    throw new Error('Add annotations or a summary of the required changes first.')
+  }
+
+  const sentAt = now()
+  for (const a of drafts) await db.update('annotations', a.id, { status: ANNOTATION_STATUS.OPEN, sentAt })
   const row = await db.add('reviews', {
     projectId, documentId, reviewerId: actor.id, reviewerRole: why(ctx, 'review.decide').role,
-    decision: input.decision, comment: input.comment ?? '', createdAt: now(),
+    decision, comment: summary?.trim() ?? '', createdAt: sentAt,
   })
-  const statusFor = {
-    [DECISIONS.APPROVE]: DOC_STATUS.APPROVED,
-    [DECISIONS.MINOR]: DOC_STATUS.APPROVED,
-    [DECISIONS.ENDORSE]: DOC_STATUS.APPROVED,
-    [DECISIONS.MAJOR]: DOC_STATUS.FOR_REVISION,
-    [DECISIONS.REJECT]: DOC_STATUS.REJECTED,
-  }
-  await db.update('documents', documentId, { status: statusFor[input.decision] })
-  await logAudit(actor.id, 'REVIEW_DECISION', 'reviews', row.id, projectId, { documentId, decision: input.decision })
-  await notify(memberIds(b), {
-    projectId, type: 'Review completed',
-    title: `${doc.docType} v${doc.versionNumber}: ${input.decision}`,
-    body: `${actor.name} reviewed your submission. ${input.comment ?? ''}`.trim(),
+  await db.update('documents', documentId, { status: STATUS_FOR_DECISION[decision] })
+  await logAudit(actor.id, 'FEEDBACK_SENT', 'reviews', row.id, projectId, {
+    documentId, decision, annotationsReleased: drafts.length,
   })
-  return row
+
+  const label = `${doc.docType} v${doc.versionNumber}`
+  const email = await sendEmail(memberIds(b), {
+    projectId, type: returned ? 'Returned with annotations' : withChanges ? 'Approved with annotations' : 'Review completed',
+    title: returned ? `${label} returned — ${decision.toLowerCase()}` : `${label}: ${decision.toLowerCase()}`,
+    body: [
+      `${actor.name} (${row.reviewerRole}) reviewed ${label} of ${b.project.title}.`,
+      summary?.trim() ? `Required changes: ${summary.trim()}` : null,
+      returned
+        ? `Add a resolution note to each annotation, then submit v${doc.versionNumber + 1}.`
+        : withChanges ? 'This version is approved. Address the annotations below in your next version.' : null,
+    ].filter(Boolean).join('\n\n'),
+    lines: drafts.map(a => `${a.anchor} — ${a.category}: ${a.text}`),
+    link: `/feedback?v=${doc.id}`,
+  })
+  return { review: row, email }
+}
+
+/** A student's resolution note on an annotation (REVIEW.student_response). */
+export async function respondToAnnotation(actor, snap, projectId, annotationId, note) {
+  authorizeOn(actor, snap, projectId, 'annotation.respond')
+  const a = (snap.annotations ?? []).find(x => x.id === annotationId)
+  if (!a || a.status === ANNOTATION_STATUS.DRAFT) throw new Error('Annotation not found.')
+  if (!note?.trim()) throw new Error('Write how you resolved it.')
+  await db.update('annotations', annotationId, {
+    studentResponse: note.trim(), respondedBy: actor.id, respondedAt: now(), status: ANNOTATION_STATUS.RESOLVED,
+  })
+  await logAudit(actor.id, 'ANNOTATION_RESPONDED', 'annotations', annotationId, projectId, {})
 }
 
 /**
  * Gemini Flash summary of the complete manuscript, generated by the system at
- * the proposal and final defense milestones only — never on request, never per
- * draft. The external call is stubbed; the audit entry records the transmission.
+ * the proposal and final defense milestones only — never on request, never for
+ * a chapter draft. The external call is stubbed; the audit entry records it.
  */
 async function summarizeForMilestone(actor, b, defenseType) {
   const { milestone, docType } = AI_MILESTONES[defenseType]
-  const doc = latestOf(b, docType)
+  const doc = b.documents
+    .filter(d => d.docType === docType && d.scope !== 'Chapter draft')
+    .sort((x, y) => y.versionNumber - x.versionNumber)[0]
   if (!doc || b.aiSummaries.some(s => s.documentId === doc.id)) return null
   await db.update('documents', doc.id, { milestone })
   const row = await db.add('aiSummaries', {
@@ -276,56 +374,70 @@ async function summarizeForMilestone(actor, b, defenseType) {
   return row
 }
 
-// --- Weekly logs (FM-AAC-SOC-2003) ---------------------------------------------
+// --- Weekly logs (FM-AAC-SOC-2003) — Capstone 2 only ---------------------------
 
 export async function submitWeeklyLog(actor, snap, projectId, input) {
   const { b } = authorizeOn(actor, snap, projectId, 'weeklylog.submit')
+  if (!input.consultationDate) throw new Error('Enter the consultation date.')
+  if (!input.accomplishments?.trim()) throw new Error('Describe this week’s accomplishments.')
   const last = b.weeklyLogs.at(-1)
   // A returned log is resubmitted under the same week number.
   const weekNo = last?.status === 'Returned' ? last.weekNo : (last?.weekNo ?? 0) + 1
   const row = await db.add('weeklyLogs', {
-    projectId, weekNo, periodStart: addDays(-7), periodEnd: now(),
-    submittedBy: actor.id, submittedAt: now(), activities: input.activities,
+    projectId, weekNo, consultationDate: input.consultationDate, consultationMode: input.consultationMode,
+    accomplishments: input.accomplishments.trim(), nextTasks: input.nextTasks?.trim() ?? '',
+    submittedBy: actor.id, submittedAt: now(),
     status: 'Submitted', signedBy: null, signedAt: null, adviserRemarks: '',
   })
   await logAudit(actor.id, 'WEEKLY_LOG_SUBMITTED', 'weeklyLogs', row.id, projectId, { weekNo })
-  await notify(assigneeIds(b, P.ADVISER), {
+  await sendEmail(assigneeIds(b, P.ADVISER), {
     projectId, type: 'Weekly log',
-    title: `Week ${weekNo} log awaiting your review`,
-    body: `${actor.name} submitted the week ${weekNo} log for ${b.project.title}.`,
+    title: `${b.project.groupName}: week ${weekNo} log awaiting your signature`,
+    body: `${actor.name} submitted the week ${weekNo} accomplishment report.`,
+    link: '/logs',
   })
   return row
 }
 
-export async function decideWeeklyLog(actor, snap, projectId, logId, { approve, remarks }) {
+export async function decideWeeklyLog(actor, snap, projectId, logId, { approve, remarks, confirmed }) {
   const { b } = authorizeOn(actor, snap, projectId, 'weeklylog.sign')
+  if (approve && !confirmed) throw new Error('Confirm that the consultation took place before signing.')
+  if (!approve && !remarks?.trim()) throw new Error('Say what the group needs to fix.')
   const row = await db.update('weeklyLogs', logId, approve
     ? { status: 'Approved', signedBy: actor.id, signedAt: now(), adviserRemarks: remarks ?? '' }
-    : { status: 'Returned', adviserRemarks: remarks ?? '' })
+    : { status: 'Returned', adviserRemarks: remarks })
   await logAudit(actor.id, approve ? 'WEEKLY_LOG_SIGNED' : 'WEEKLY_LOG_RETURNED', 'weeklyLogs', logId, projectId, {
     form: FORMS.F2003.code,
   })
-  await notify(memberIds(b), {
+  await sendEmail(memberIds(b), {
     projectId, type: 'Weekly log',
-    title: approve ? 'Your weekly log was approved and signed' : 'Your weekly log was returned',
+    title: approve ? `Week ${row.weekNo} log approved and signed` : `Week ${row.weekNo} log returned`,
     body: approve
       ? `${actor.name} signed your ${FORMS.F2003.code} entry.`
-      : `${actor.name} returned your log. ${remarks ?? ''}`.trim(),
+      : `${actor.name} returned your log: ${remarks}`,
+    link: '/logs',
   })
   return row
 }
 
-export async function confirmMilestones(actor, snap, projectId, note) {
-  const { b } = authorizeOn(actor, snap, projectId, 'milestone.confirm')
-  await db.update('projects', projectId, {
-    milestonesConfirmedAt: now(), milestonesConfirmedBy: actor.id, milestonesNote: note ?? '',
+// --- Panel evaluation (EVALUATION_FORM) -----------------------------------------
+
+export async function submitEvaluation(actor, snap, projectId, { recommendation, strengths, revisions }) {
+  const { b } = authorizeOn(actor, snap, projectId, 'evaluation.submit')
+  const type = defenseTypeAt(b.project.currentStage)
+  const defense = b.defenses.find(d => d.type === type && !d.verdict)
+  if (!defense) throw new Error('There is no open defense to evaluate.')
+  if (b.evaluations.some(e => e.defenseId === defense.id && e.panelistId === actor.id)) {
+    throw new Error('You have already submitted your evaluation for this defense.')
+  }
+  if (!recommendation) throw new Error('Choose your recommendation to the Chair.')
+  const row = await db.add('evaluations', {
+    projectId, defenseId: defense.id, panelistId: actor.id,
+    content: { recommendation, strengths: strengths?.trim() ?? '', revisions: revisions?.trim() ?? '' },
+    submittedAt: now(),
   })
-  await logAudit(actor.id, 'MILESTONES_CONFIRMED', 'projects', projectId, projectId, {})
-  await notify([...assigneeIds(b, P.ADVISER), ...memberIds(b)], {
-    projectId, type: 'Milestones',
-    title: 'Capstone 2 milestones confirmed',
-    body: `${actor.name} confirmed the implementation milestones for ${b.project.title}.`,
-  })
+  await logAudit(actor.id, 'EVALUATION_SUBMITTED', 'evaluations', row.id, projectId, { defenseId: defense.id })
+  return row
 }
 
 // --- Defense, verdict, revision ----------------------------------------------
@@ -352,7 +464,7 @@ export async function scheduleDefense(actor, snap, projectId, input) {
   })
   await logAudit(actor.id, 'DEFENSE_SCHEDULED', 'defenses', row.id, projectId, { type })
   await summarizeForMilestone(actor, b, type)
-  await notify([...memberIds(b), ...assigneeIds(b, P.ADVISER), ...PANEL_ROLES.flatMap(r => assigneeIds(b, r))], {
+  await sendEmail([...memberIds(b), ...assigneeIds(b, P.ADVISER), ...PANEL_ROLES.flatMap(r => assigneeIds(b, r))], {
     projectId, type: 'Defense scheduled',
     title: `${type} defense scheduled — ${b.project.title}`,
     body: `${new Date(input.scheduledAt).toLocaleString()} · ${input.venue}. ${input.instructions ?? ''}`.trim(),
@@ -367,12 +479,21 @@ export async function recordVerdict(actor, snap, projectId, input) {
   const type = defenseTypeAt(b.project.currentStage)
   const defense = b.defenses.find(d => d.type === type && !d.verdict)
   if (!defense) throw new Error('There is no open defense to record a verdict for.')
+  const blocked = stageByKey(b.project.currentStage).gates[0].requires(b, actor)
+  if (blocked) throw new Error(blocked)
+  if (!input.confirmed) throw new Error('Confirm that the panel has deliberated and this is the official verdict.')
+  if (!Object.values(VERDICTS).includes(input.verdict)) throw new Error('Choose the verdict.')
 
   const revisionClass = input.verdict === VERDICTS.MAJOR ? 'Major' : input.verdict === VERDICTS.MINOR ? 'Minor' : null
-  const deadline = revisionClass ? addDays(REVISION_WINDOW_DAYS[revisionClass]) : null
+  // The countdown is configurable (FR "Automated revision countdowns"); the
+  // defaults are the current 1 and 2 weeks.
+  const days = revisionClass ? Number(input.revisionDays) || REVISION_WINDOW_DAYS[revisionClass] : null
+  const deadline = revisionClass ? addDays(days) : null
+  const evaluated = latestOf(b, AI_MILESTONES[type].docType)
 
   await db.update('defenses', defense.id, {
-    verdict: input.verdict, revisionClass, revisionDeadline: deadline,
+    verdict: input.verdict, revisionClass, revisionDeadline: deadline, revisionDays: days,
+    evaluatedDocumentId: evaluated?.id ?? null,
     revisionStatus: revisionClass ? 'Pending' : null,
     recordedBy: actor.id, recordedAt: now(), remarks: input.remarks ?? '',
   })
@@ -405,12 +526,17 @@ export async function recordVerdict(actor, snap, projectId, input) {
   await logAudit(actor.id, 'VERDICT_RECORDED', 'defenses', defense.id, projectId, {
     verdict: input.verdict, revisionClass, form: form?.id ?? null,
   })
-  await notify([...memberIds(b), ...assigneeIds(b, P.ADVISER)], {
+  const coordinator = holdersOf(snap, G.COORDINATOR).find(u => (u.programScope ?? []).includes(b.project.program))
+  await sendEmail([...memberIds(b), ...assigneeIds(b, P.ADVISER), coordinator?.id], {
     projectId, type: revisionClass ? 'Revision request' : 'Re-defense',
-    title: `${type} defense verdict: ${input.verdict}`,
-    body: deadline
-      ? `Revisions are due ${new Date(deadline).toLocaleDateString()}. ${input.remarks ?? ''}`.trim()
-      : `A re-defense will be scheduled. ${input.remarks ?? ''}`.trim(),
+    title: `${b.project.groupName}: ${type.toLowerCase()} defense verdict — ${input.verdict}`,
+    body: [
+      deadline
+        ? `Revisions are due ${new Date(deadline).toLocaleDateString()} (${days} days). They are verified by the Adviser, then the Panel Members, on ${FORMS.F2004.code}.`
+        : 'A re-defense will be scheduled once the prescribed revisions are done.',
+      input.remarks ? `Required revisions: ${input.remarks}` : null,
+    ].filter(Boolean).join('\n\n'),
+    link: '/defense',
   })
 
   const gate = stageByKey(b.project.currentStage).gates[0]
@@ -441,7 +567,7 @@ async function issueApprovalSheet(actor, snap, b) {
     status: 'Circulating', createdAt: now(), stage: 'CLEARANCE', payload: {}, signatories,
   })
   await logAudit(actor.id, 'FORM_ISSUED', 'forms', form.id, b.project.id, { formType: FORMS.APPROVAL.code })
-  await notify(signatories.filter(s => s.order === 1).map(s => s.userId), {
+  await sendEmail(signatories.filter(s => s.order === 1).map(s => s.userId), {
     projectId: b.project.id, type: 'Signature request',
     title: 'Approval Sheet ready for your signature',
     body: `${b.project.title} has cleared post-defense revisions.`,
@@ -465,7 +591,7 @@ async function writeSignature(actor, form, lineMatch) {
   const nextOrder = open.length ? Math.min(...open.map(s => s.order)) : null
   const nextSigners = open.filter(s => s.order === nextOrder && !s.viaGate).map(s => s.userId)
   if (nextSigners.length) {
-    await notify(nextSigners, {
+    await sendEmail(nextSigners, {
       projectId: form.projectId, type: 'Signature request',
       title: `${form.formType} is ready for your signature`,
       body: `${actor.name} signed as ${signedRole}.`,
@@ -530,7 +656,7 @@ export async function runGate(actor, snap, projectId, gate) {
       // The other executive still has to sign; the project stays here.
       await logAudit(actor.id, 'FINAL_APPROVAL_SIGNED', 'projects', projectId, projectId, { role })
       const other = form.signatories.filter(s => s.order === 5 && s.role !== role).map(s => s.userId)
-      await notify(other, {
+      await sendEmail(other, {
         projectId, type: 'Signature request',
         title: `${b.project.title} awaits your final approval`,
         body: `${actor.name} signed the Approval Sheet as ${role}.`,
@@ -603,6 +729,3 @@ export async function setAccountStatus(actor, snap, userId, status) {
   await logAudit(actor.id, 'ACCOUNT_STATUS_CHANGED', 'users', userId, null, { status })
 }
 
-export async function markNotificationRead(id) {
-  await db.update('notifications', id, { read: true })
-}

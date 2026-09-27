@@ -31,6 +31,8 @@ export const CAPABILITIES = {
   'document.submit': 'Upload a new immutable document version',
   'document.annotate': 'Add non-destructive annotations to a version',
   'annotation.private': 'Annotations stay private until the verdict is recorded',
+  'annotation.respond': 'Add a resolution note to a reviewer’s annotation',
+  'evaluation.submit': 'Submit the panel evaluation form for the defense',
   'review.decide': 'Issue a review decision on a submitted version',
   'ai.view': 'Read the AI-generated manuscript summary',
   'roster.manage': 'Add or remove students in the group',
@@ -47,7 +49,6 @@ export const CAPABILITIES = {
   'weeklylog.submit': 'Submit a weekly accomplishment log',
   'weeklylog.sign': 'Approve, return and sign weekly logs (FM-AAC-SOC-2003)',
   'weeklylog.export': 'Export FM-AAC-SOC-2003 logs',
-  'milestone.confirm': 'Confirm Capstone 2 milestones',
   'finaldefense.recommend': 'Submit the Capstone Recommendation Form (FM-AAC-SOC-2005)',
   'finaldefense.endorse': 'Endorse the project for final defense scheduling',
   'clearance.endorse': 'Endorse the cleared project and sign the Approval Sheet',
@@ -128,6 +129,7 @@ export const PROJECT_POLICIES = [
   g(G.STUDENT, 'weeklylog.submit', all(member, at('IMPLEMENTATION'))),
   g(G.STUDENT, 'weeklylog.export', all(member, from('IMPLEMENTATION'))),
   g(G.STUDENT, 'ai.view', member),
+  g(G.STUDENT, 'annotation.respond', member),
 
   // Instructor 1 — Thesis/Capstone 1 only.
   p(P.INSTRUCTOR_1, 'project.view', during(PHASES.IDEATION, PHASES.PROPOSAL)),
@@ -143,7 +145,6 @@ export const PROJECT_POLICIES = [
   // Instructor 2 — Thesis/Capstone 2 and post-defense requirements. Never annotates.
   p(P.INSTRUCTOR_2, 'project.view', during(PHASES.IMPLEMENTATION, PHASES.CLEARANCE)),
   p(P.INSTRUCTOR_2, 'document.history', during(PHASES.IMPLEMENTATION, PHASES.CLEARANCE)),
-  p(P.INSTRUCTOR_2, 'milestone.confirm', at('IMPLEMENTATION')),
   p(P.INSTRUCTOR_2, 'defense.schedule', at('FINAL_DEFENSE_SCHEDULING')),
   p(P.INSTRUCTOR_2, 'revision.close', at('FINAL_REVISION')),
 
@@ -163,6 +164,7 @@ export const PROJECT_POLICIES = [
     p(role, 'ai.view', from('PANEL_ASSIGNMENT')),
     p(role, 'document.annotate', at(...DEFENSE_STAGES)),
     p(role, 'annotation.private', at(...DEFENSE_STAGES)),
+    p(role, 'evaluation.submit', at('PROPOSAL_DEFENSE', 'FINAL_DEFENSE')),
   ]),
   p(P.PANEL_CHAIR, 'verdict.record', at('PROPOSAL_DEFENSE', 'FINAL_DEFENSE')),
 
@@ -214,6 +216,15 @@ export const caacTag = (role) => '@' + String(role).replace(/[^A-Za-z0-9]/g, '')
 
 export const globalRolesOf = (user) => user?.globalRoles ?? []
 
+/**
+ * "Acting as" (wireframe S-07): a user who holds several roles works in one
+ * of them at a time. While acting as a role, only that role's policies apply —
+ * an Adviser who is also Program Coordinator cannot sign an advisee's log from
+ * the Coordinator context. Users loaded from the store have no `actingAs`, so
+ * resolving someone else's access (e.g. who to email) considers all roles.
+ */
+const actingFilter = (user) => (role) => !user?.actingAs || role === user.actingAs
+
 function evaluate(policies, held, env) {
   const grants = new Map()
   const active = []
@@ -253,10 +264,13 @@ export function resolveContext(user, b) {
     .map(a => a.roleType))]
 
   const env = { user, project: b.project, stage: b.project.currentStage, isMember, projectRoles, bundle: b }
-  const held = new Set([...globalRoles, ...projectRoles])
+  const held = new Set([...globalRoles, ...projectRoles].filter(actingFilter(user)))
   const { grants, active, dormant } = evaluate(PROJECT_POLICIES, held, env)
 
-  return { user, globalRoles, projectRoles, isMember, stage: env.stage, grants, active, dormant }
+  return {
+    user, actingAs: user.actingAs ?? null, globalRoles, projectRoles, isMember,
+    stage: env.stage, grants, active, dormant,
+  }
 }
 
 /** Capabilities that do not belong to any one project (navigation, reports). */
@@ -266,6 +280,7 @@ export function resolveInstitution(user, snap) {
   const sections = (snap?.sections ?? []).filter(s => s.instructorId === user.id)
   const held = new Set(globalRoles)
   if (sections.some(s => s.course === 'Capstone 1')) held.add(P.INSTRUCTOR_1)
+  for (const r of [...held]) if (!actingFilter(user)(r)) held.delete(r)
   const { grants, active, dormant } = evaluate(INSTITUTION_POLICIES, held, { user, sections })
   return { user, globalRoles, sections, grants, active, dormant }
 }
