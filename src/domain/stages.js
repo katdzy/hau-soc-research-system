@@ -239,7 +239,7 @@ export const STAGES = [
       next: 'FINAL_DEFENSE_SCHEDULING',
       requires: (b) => {
         if (!formOf(b, FORMS.F2005.code)) return `${FORMS.F2005.code} has not been submitted.`
-        if (!has(b.assignments, a => a.roleType === P.INSTRUCTOR_2)) return 'Assign an Instructor 2 to publish the schedule.'
+        if (!has(b.assignments, a => a.roleType === P.INSTRUCTOR_2)) return 'No Instructor 2 yet. The System Administrator assigns one to publish the schedule.'
         return null
       },
     }],

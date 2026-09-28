@@ -133,9 +133,9 @@ Seven groups are seeded:
 
 | Group | Parked at |
 |---|---|
-| Group 7 (WD-4A) | Group Formation — walk the whole life cycle |
-| Group 2 (WD-4A) | Adviser Approval — the Dean-as-Adviser conflict |
-| Group 5 (WD-4A) | Proposal Development — v2 returned with annotations |
+| Group 7 (WD-401) | Group Formation — walk the whole life cycle |
+| Group 2 (WD-401) | Adviser Approval — the Dean-as-Adviser conflict |
+| Group 5 (WD-401) | Proposal Development — v2 returned with annotations |
 | Group 3 — Smart Queue Management System | Proposal Defense — evaluations, verdict |
 | Group 1 — IoT-Based Laboratory Equipment Tracking | Implementation — weekly logs, FM-AAC-SOC-2005 |
 | Group 4 — Automated Student Feedback Sentiment Analysis | URO Verification — clearance, signatures |
@@ -227,9 +227,11 @@ reverse, and each is worth settling in the manuscript.
    records the verdict.
 4. **Account verification (#4).** Self-verification through the email approval button; the System
    Administrator grants Global Roles and can suspend accounts.
-5. **Who assigns Instructor 1 and 2 (#5).** Instructor 1 comes from teaching the block (the
-   `sections` collection) and is assigned automatically on group creation; the Program
-   Chair/Coordinator assigns Instructor 2. Assignments are recorded as Accepted.
+5. **Who assigns Instructor 1 and 2 (#5).** The System Administrator (`instructor.assign`).
+   Instructor 1 is assigned per Capstone 1 block (the `sections` collection): the block's instructor
+   creates its groups and becomes Instructor 1 on each, and reassigning the block moves groups still
+   in Capstone 1. Instructor 2 is assigned per project from Proposal Revision onward. The Program
+   Chair/Coordinator assigns the Adviser and Panel. Assignments are recorded as Accepted.
 6. **Adviser approval.** Either the Dean or the Associate Dean may approve, never their own
    assignment. Both sign the Approval Sheet at the end.
 7. **Stage enum (#9).** Adviser Assignment precedes ideation, per the process.

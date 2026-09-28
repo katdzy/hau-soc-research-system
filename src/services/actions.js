@@ -13,9 +13,11 @@ import {
 import {
   DOC_STATUS, DECISIONS, REVISION_WINDOW_DAYS, FORMS, AI_MILESTONES, AI_DISCLOSURE, VERDICTS,
   GLOBAL_ROLES as G, PROJECT_ROLES as P, PANEL_ROLES, ACCOUNT_STATUS, LINK_TYPES, accountType,
-  DOC_TYPES, MANUSCRIPT_SCOPES, ANNOTATION_STATUS,
+  DOC_TYPES, MANUSCRIPT_SCOPES, ANNOTATION_STATUS, capstoneYear, yearDigit, blockExample, blockProblem,
 } from '../domain/constants.js'
-import { stageByKey, stageLabel, resolveNext } from '../domain/stages.js'
+import {
+  stageByKey, stageLabel, resolveNext, STAGES, PHASES, stageIndex, phaseStages,
+} from '../domain/stages.js'
 import {
   resolveContext, resolveInstitution, authorize, allowedDocTypes, can, why,
 } from '../domain/caac.js'
@@ -108,12 +110,13 @@ export async function removeMember(actor, snap, projectId, memberRowId, userId) 
   await logAudit(actor.id, 'MEMBER_REMOVED', 'projectMembers', memberRowId, projectId, { userId })
 }
 
-// Which capability lets someone hand out each Project-Based Role.
+// Which capability lets someone hand out each Project-Based Role from the
+// project workspace. Instructor 1 and 2 are not here: the System Administrator
+// assigns them from CAAC Configuration (see "Instructors" below).
 export const ASSIGNING_CAPABILITY = {
   [P.ADVISER]: 'adviser.assign',
   [P.PANEL_CHAIR]: 'panel.assign',
   [P.PANEL_MEMBER]: 'panel.assign',
-  [P.INSTRUCTOR_2]: 'instructor2.assign',
 }
 
 /** Returns a reason the assignment would break a rule, or null. */
@@ -130,7 +133,34 @@ export async function assignRole(actor, snap, projectId, userId, roleType) {
   const cap = ASSIGNING_CAPABILITY[roleType]
   if (!cap) throw new Error(`${roleType} is not assigned from here.`)
   const { b } = authorizeOn(actor, snap, projectId, cap)
+  return addAssignment(actor, snap, b, userId, roleType)
+}
 
+export async function unassignRole(actor, snap, projectId, assignment) {
+  const cap = ASSIGNING_CAPABILITY[assignment.roleType]
+  if (!cap) throw new Error(`${assignment.roleType} is not unassigned from here.`)
+  authorizeOn(actor, snap, projectId, cap)
+  await removeAssignment(actor, projectId, assignment)
+}
+
+// The System Administrator's tag assignment from CAAC Configuration. It is
+// not bound to the Coordinator's stage window, but the conflict rules hold.
+export async function adminAssignRole(actor, snap, projectId, userId, roleType) {
+  authorize(resolveInstitution(actor, snap), 'admin.caac')
+  if (!ASSIGNING_CAPABILITY[roleType]) throw new Error(`${roleType} is assigned under Instructors.`)
+  const b = bundle(snap, projectId)
+  if (!b) throw new Error('Project not found')
+  return addAssignment(actor, snap, b, userId, roleType)
+}
+
+export async function adminUnassignRole(actor, snap, assignment) {
+  authorize(resolveInstitution(actor, snap), 'admin.caac')
+  if (!ASSIGNING_CAPABILITY[assignment.roleType]) throw new Error(`${assignment.roleType} is changed under Instructors.`)
+  await removeAssignment(actor, assignment.projectId, assignment)
+}
+
+async function addAssignment(actor, snap, b, userId, roleType) {
+  const projectId = b.project.id
   const target = (snap.users ?? []).find(u => u.id === userId)
   if (!target || accountType(target.email) !== 'Faculty') throw new Error('Project roles go to faculty accounts only.')
   const conflict = assignmentConflict(b, userId, roleType)
@@ -152,14 +182,117 @@ export async function assignRole(actor, snap, projectId, userId, roleType) {
   return row
 }
 
-export async function unassignRole(actor, snap, projectId, assignment) {
-  const cap = ASSIGNING_CAPABILITY[assignment.roleType]
-  if (!cap) throw new Error(`${assignment.roleType} is not unassigned from here.`)
-  authorizeOn(actor, snap, projectId, cap)
+async function removeAssignment(actor, projectId, assignment) {
   await db.remove('projectAssignments', assignment.id)
   await logAudit(actor.id, 'ROLE_UNASSIGNED', 'projectAssignments', assignment.id, projectId, {
     userId: assignment.userId, roleType: assignment.roleType,
   })
+}
+
+// --- Instructors (System Administrator) --------------------------------------
+// Instructor 1 follows the Capstone 1 block: whoever the Administrator puts on
+// a block can create its groups and becomes Instructor 1 on each. Instructor 2
+// is assigned per project once it is heading into Capstone 2.
+
+const CAPSTONE_1_STAGES = phaseStages(PHASES.IDEATION, PHASES.PROPOSAL)
+export const INSTRUCTOR_2_STAGES = STAGES
+  .slice(stageIndex('PROPOSAL_REVISION'), stageIndex('ARCHIVED'))
+  .map(s => s.key)
+
+function activeFaculty(snap, userId) {
+  const user = (snap.users ?? []).find(u => u.id === userId)
+  if (!user || accountType(user.email) !== 'Faculty') throw new Error('Instructors must be faculty accounts.')
+  if (user.status !== ACCOUNT_STATUS.ACTIVE) throw new Error(`${user.name}’s account is not active.`)
+  return user
+}
+
+export async function createSection(actor, snap, { block, program, term, instructorId }) {
+  authorize(resolveInstitution(actor, snap), 'instructor.assign')
+  const name = block?.trim().toUpperCase()
+  const when = term?.trim()
+  if (!program) throw new Error('Choose the program.')
+  const year = capstoneYear(program, 'Capstone 1')
+  if (!name) throw new Error(`Enter the block, e.g. ${blockExample(program, year)}.`)
+  const problem = blockProblem(name, program, year)
+  if (problem) throw new Error(problem)
+  if (!when) throw new Error('Enter the academic term.')
+  if ((snap.sections ?? []).some(s => s.course === 'Capstone 1' && s.block === name && s.term === when)) {
+    throw new Error(`${name} already has a Capstone 1 section for ${when}.`)
+  }
+  activeFaculty(snap, instructorId)
+
+  const section = await db.add('sections', { course: 'Capstone 1', block: name, program, term: when, instructorId })
+  await logAudit(actor.id, 'SECTION_CREATED', 'sections', section.id, null, { block: name, instructorId })
+  await sendEmail([instructorId], {
+    projectId: null, type: 'New assignment',
+    title: `You were assigned as ${P.INSTRUCTOR_1} for ${name}`,
+    body: `${actor.name} assigned you to teach Capstone 1 for ${name} (${when}). You can now create its project groups.`,
+  })
+  return section
+}
+
+export async function setSectionInstructor(actor, snap, sectionId, userId) {
+  authorize(resolveInstitution(actor, snap), 'instructor.assign')
+  const section = (snap.sections ?? []).find(s => s.id === sectionId)
+  if (!section) throw new Error('Section not found')
+  if (section.instructorId === userId) return section
+  activeFaculty(snap, userId)
+
+  await db.update('sections', sectionId, { instructorId: userId })
+  // Groups still in Capstone 1 move to the new instructor. Groups already past
+  // it keep the Instructor 1 who taught them.
+  const moving = (snap.projects ?? [])
+    .filter(p => p.sectionId === sectionId && CAPSTONE_1_STAGES.includes(p.currentStage))
+  for (const project of moving) {
+    const old = (snap.projectAssignments ?? [])
+      .filter(a => a.projectId === project.id && a.roleType === P.INSTRUCTOR_1)
+    for (const a of old) await db.remove('projectAssignments', a.id)
+    await db.add('projectAssignments', {
+      projectId: project.id, userId, roleType: P.INSTRUCTOR_1,
+      status: 'Accepted', assignedAt: now(), assignedBy: actor.id,
+    })
+  }
+  await logAudit(actor.id, 'SECTION_INSTRUCTOR_CHANGED', 'sections', sectionId, null, {
+    block: section.block, before: section.instructorId, after: userId, projects: moving.map(p => p.id),
+  })
+  await sendEmail([userId], {
+    projectId: null, type: 'New assignment',
+    title: `You were assigned as ${P.INSTRUCTOR_1} for ${section.block}`,
+    body: `${actor.name} assigned you to teach Capstone 1 for ${section.block}` +
+      (moving.length ? `, including ${moving.length} group${moving.length > 1 ? 's' : ''} already formed.` : '.'),
+  })
+  return section
+}
+
+/** Assigns, replaces or (with `userId` null) clears a project's Instructor 2. */
+export async function setInstructor2(actor, snap, projectId, userId) {
+  authorize(resolveInstitution(actor, snap), 'instructor.assign')
+  const b = bundle(snap, projectId)
+  if (!b) throw new Error('Project not found')
+  if (!INSTRUCTOR_2_STAGES.includes(b.project.currentStage)) {
+    throw new Error(`Instructor 2 is assigned from Proposal Revision onward. ${b.project.groupName} is at ${stageLabel(b.project.currentStage)}.`)
+  }
+  const current = b.assignments.find(a => a.roleType === P.INSTRUCTOR_2)
+  if ((current?.userId ?? null) === (userId || null)) return
+  if (userId) activeFaculty(snap, userId)
+
+  if (current) {
+    await db.remove('projectAssignments', current.id)
+    await logAudit(actor.id, 'ROLE_UNASSIGNED', 'projectAssignments', current.id, projectId, {
+      userId: current.userId, roleType: P.INSTRUCTOR_2,
+    })
+  }
+  if (!userId) return
+  const row = await db.add('projectAssignments', {
+    projectId, userId, roleType: P.INSTRUCTOR_2, status: 'Accepted', assignedAt: now(), assignedBy: actor.id,
+  })
+  await logAudit(actor.id, 'ROLE_ASSIGNED', 'projectAssignments', row.id, projectId, { userId, roleType: P.INSTRUCTOR_2 })
+  await sendEmail([userId], {
+    projectId, type: 'New assignment',
+    title: `You were assigned as ${P.INSTRUCTOR_2}`,
+    body: `${b.project.title}. What you can do on it now depends on this role and on the stage the project is in.`,
+  })
+  return row
 }
 
 // --- Documents ---------------------------------------------------------------
@@ -743,10 +876,13 @@ export async function registerAccount(snap, input) {
   if ((snap.users ?? []).some(u => u.email.toLowerCase() === email)) {
     throw new Error('That address already has an account. Sign in instead.')
   }
+  const block = type === 'Student' ? input.block?.trim().toUpperCase() ?? '' : ''
+  const problem = block && blockProblem(block, input.program, yearDigit(input.yearLevel))
+  if (problem) throw new Error(problem)
   const user = await db.add('users', {
     name: input.name.trim(), email, idNumber: input.idNumber?.trim() ?? '',
     program: input.program ?? '', yearLevel: type === 'Student' ? input.yearLevel ?? '' : '',
-    block: type === 'Student' ? input.block ?? '' : '',
+    block,
     status: ACCOUNT_STATUS.INACTIVE, emailVerified: false, globalRoles: [], programScope: [],
   })
   await logAudit(user.id, 'ACCOUNT_REGISTERED', 'users', user.id, null, { email })

@@ -9,7 +9,8 @@ import Projects from './pages/Projects.jsx'
 import ProjectWorkspace from './pages/ProjectWorkspace.jsx'
 import Records from './pages/Records.jsx'
 import Reports from './pages/Reports.jsx'
-import Admin from './pages/Admin.jsx'
+import Accounts from './pages/admin/Accounts.jsx'
+import Caac from './pages/admin/Caac.jsx'
 import Audit from './pages/Audit.jsx'
 import EmailLog from './pages/EmailLog.jsx'
 import StudentDashboard from './pages/student/StudentDashboard.jsx'
@@ -48,8 +49,8 @@ const DefenseClearance = () => (
     empty="No advisee group is in Implementation." />
 )
 const DefenseEndorsement = () => (
-  <GateListPage title="Defense endorsement" capabilities={['finaldefense.endorse']} withInstructor2
-    lede="After the Adviser’s recommendation, endorse the group for final defense scheduling. Instructor 2 then publishes the schedule."
+  <GateListPage title="Defense endorsement" capabilities={['finaldefense.endorse']}
+    lede="After the Adviser’s recommendation, endorse the group for final defense scheduling. Instructor 2, assigned by the System Administrator, then publishes the schedule."
     empty="No Adviser recommendation is waiting." />
 )
 const ClearanceRouting = () => (
@@ -74,7 +75,7 @@ export default function App() {
           [P.ADVISER]: AdviserDashboard,
           ...forRoles(PANEL, PanelDashboard),
           [G.COORDINATOR]: CoordinatorDashboard,
-          [G.ADMIN]: Admin,
+          [G.ADMIN]: Accounts,
           ...forRoles([P.INSTRUCTOR_1, P.INSTRUCTOR_2, G.DEAN, G.ASSOCIATE_DEAN, G.URO], Worklist),
         }} />} />
 
@@ -110,7 +111,7 @@ export default function App() {
         <Route path="projects/:id" element={<ProjectWorkspace />} />
         <Route path="records" element={<Records />} />
         <Route path="reports" element={<Reports />} />
-        <Route path="admin" element={<Admin />} />
+        <Route path="caac" element={<Caac />} />
         <Route path="audit" element={<Audit />} />
         <Route path="emails" element={<EmailLog />} />
         <Route path="*" element={<Navigate to="/" replace />} />

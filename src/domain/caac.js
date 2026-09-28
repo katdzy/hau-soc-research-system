@@ -42,7 +42,6 @@ export const CAPABILITIES = {
   'adviser.assign': 'Assign the Adviser',
   'adviser.approve': 'Approve the adviser assignment',
   'panel.assign': 'Designate the Panel Chair and Panel Members',
-  'instructor2.assign': 'Assign the Capstone 2 instructor',
   'defense.schedule': 'Create and publish a defense schedule',
   'verdict.record': 'Record the official verdict on FM-AAC-SOC-2004',
   'revision.close': 'Close the revision period and advance the project',
@@ -61,6 +60,7 @@ export const CAPABILITIES = {
   'records.manage': 'Manage the thesis and capstone archive',
   'admin.accounts': 'Manage accounts and Global Role assignments',
   'admin.caac': 'Configure and audit the CAAC tagging framework',
+  'instructor.assign': 'Assign Instructor 1 to Capstone 1 blocks and Instructor 2 to projects',
   'audit.view': 'Read the system activity log',
 }
 
@@ -175,7 +175,6 @@ export const PROJECT_POLICIES = [
   g(G.COORDINATOR, 'adviser.assign', all(inScope, at('ADVISER_ASSIGNMENT'))),
   g(G.COORDINATOR, 'panel.assign', all(inScope, at('PANEL_ASSIGNMENT', 'FINAL_DEFENSE_ENDORSEMENT'))),
   g(G.COORDINATOR, 'defense.schedule', all(inScope, at('PROPOSAL_DEFENSE_SCHEDULING'))),
-  g(G.COORDINATOR, 'instructor2.assign', all(inScope, at('PROPOSAL_REVISION', 'IMPLEMENTATION', 'FINAL_DEFENSE_ENDORSEMENT'))),
   g(G.COORDINATOR, 'finaldefense.endorse', all(inScope, at('FINAL_DEFENSE_ENDORSEMENT'))),
   g(G.COORDINATOR, 'clearance.endorse', all(inScope, at('CLEARANCE'))),
 
@@ -207,6 +206,7 @@ export const INSTITUTION_POLICIES = [
   g(G.ADMIN, 'records.manage', always),
   g(G.ADMIN, 'admin.accounts', always),
   g(G.ADMIN, 'admin.caac', always),
+  g(G.ADMIN, 'instructor.assign', always),
   g(G.ADMIN, 'audit.view', always),
 ]
 

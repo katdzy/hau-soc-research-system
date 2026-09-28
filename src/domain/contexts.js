@@ -99,7 +99,8 @@ export function navFor(role, { project } = {}) {
     case G.ADMIN: return {
       heading: 'System Administrator',
       items: [
-        { to: '/', label: 'Accounts & CAAC', end: true },
+        { to: '/', label: 'Accounts', end: true },
+        { to: '/caac', label: 'CAAC Configuration' },
         { to: '/audit', label: 'Audit Trail' },
         { to: '/emails', label: 'Email Log' },
         { to: '/records', label: 'Records Archive' },

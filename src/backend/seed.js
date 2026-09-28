@@ -1,6 +1,6 @@
 // Demo dataset. Seven groups parked at different points in the life cycle so
 // any segment of the workflow can be exercised without replaying the whole
-// thing. Reset from Administration → Reset demo data.
+// thing. Reset from Accounts → Reset demo data.
 //
 // NOTE: Espinosa (Instructor 1), Almocera (Program Coordinator, IT) and Tayag
 // (Dean, and Group 5's Adviser) appear with the roles recorded in the project
@@ -15,6 +15,9 @@ import {
 
 const WD = 'BSIT — Web Development'
 const NA = 'BSIT — Network Administration'
+const CS = 'BS Computer Science'
+const EMC = 'BS Entertainment and Multimedia Computing'
+const CY = 'BS Cybersecurity'
 const TERM = 'AY 2026–2027, 1st Semester'
 const days = (n) => new Date(Date.now() + n * 864e5).toISOString()
 const dateOnly = (n) => days(n).slice(0, 10)
@@ -24,28 +27,47 @@ const user = (id, name, email, globalRoles, extra = {}) => ({
   id, name, email, globalRoles, programScope: [], status: 'Active', emailVerified: true,
   idNumber: '', program: '', yearLevel: '', block: '', createdAt: days(-200), ...extra,
 })
-const student = (id, name, email, idNumber, program, block) =>
-  user(id, name, email, [G.STUDENT], { idNumber, program, yearLevel: '4th Year', block })
+const student = (id, name, email, idNumber, program, block, yearLevel = '4th Year') =>
+  user(id, name, email, [G.STUDENT], { idNumber, program, yearLevel, block })
 
 const USERS = [
   // --- Students -------------------------------------------------------------
-  student('u_adrian', 'Adrian D. Curley', 'adcurley@student.hau.edu.ph', '2022-0114', WD, 'WD-4A'),
-  student('u_cedric', 'Cedric Luis R. Dungca', 'clrdungca@student.hau.edu.ph', '2022-0118', WD, 'WD-4A'),
-  student('u_karl', 'Karl Andrei T. Dungca', 'katdungca@student.hau.edu.ph', '2022-0119', WD, 'WD-4A'),
-  student('u_sofia', 'Sofia Anne T. Sarmiento', 'satsarmiento@student.hau.edu.ph', '2022-0147', WD, 'WD-4A'),
-  student('u_ivan', 'Ivan R. Manansala', 'irmanansala@student.hau.edu.ph', '2022-0151', WD, 'WD-4A'),
-  student('u_jas', 'Jasmine T. Cruz', 'jtcruz@student.hau.edu.ph', '2022-0156', WD, 'WD-4A'),
-  student('u_luis', 'Luis M. Salas', 'lmsalas@student.hau.edu.ph', '2022-0160', WD, 'WD-4A'),
-  student('u_mika', 'Mika A. Yambao', 'mayambao@student.hau.edu.ph', '2022-0163', WD, 'WD-4A'),
-  student('u_noel', 'Noel B. Pangan', 'nbpangan@student.hau.edu.ph', '2022-0170', WD, 'WD-4A'),
-  student('u_ana', 'Ana Marie L. Bituin', 'amlbituin@student.hau.edu.ph', '2022-0203', WD, 'WD-4B'),
-  student('u_ben', 'Benjamin C. Ocampo', 'bcocampo@student.hau.edu.ph', '2022-0211', WD, 'WD-4B'),
-  student('u_carmen', 'Carmen S. Vidal', 'csvidal@student.hau.edu.ph', '2022-0222', WD, 'WD-4B'),
-  student('u_dina', 'Dina R. Manalili', 'drmanalili@student.hau.edu.ph', '2021-0305', NA, 'NA-4A'),
-  student('u_elmo', 'Elmo P. Garcia', 'epgarcia@student.hau.edu.ph', '2021-0309', NA, 'NA-4A'),
-  student('u_faye', 'Faye D. Lumanog', 'fdlumanog@student.hau.edu.ph', '2021-0402', WD, 'WD-4C'),
-  student('u_gil', 'Gilbert M. Tolentino', 'gmtolentino@student.hau.edu.ph', '2021-0417', WD, 'WD-4C'),
-  student('u_hana', 'Hana Beatriz S. Roque', 'hbsroque@student.hau.edu.ph', '2020-0433', WD, 'WD-4D'),
+  student('u_adrian', 'Adrian D. Curley', 'adcurley@student.hau.edu.ph', '2022-0114', WD, 'WD-401'),
+  student('u_cedric', 'Cedric Luis R. Dungca', 'clrdungca@student.hau.edu.ph', '2022-0118', WD, 'WD-401'),
+  student('u_karl', 'Karl Andrei T. Dungca', 'katdungca@student.hau.edu.ph', '2022-0119', WD, 'WD-401'),
+  student('u_sofia', 'Sofia Anne T. Sarmiento', 'satsarmiento@student.hau.edu.ph', '2022-0147', WD, 'WD-401'),
+  student('u_ivan', 'Ivan R. Manansala', 'irmanansala@student.hau.edu.ph', '2022-0151', WD, 'WD-401'),
+  student('u_jas', 'Jasmine T. Cruz', 'jtcruz@student.hau.edu.ph', '2022-0156', WD, 'WD-401'),
+  student('u_luis', 'Luis M. Salas', 'lmsalas@student.hau.edu.ph', '2022-0160', WD, 'WD-401'),
+  student('u_mika', 'Mika A. Yambao', 'mayambao@student.hau.edu.ph', '2022-0163', WD, 'WD-401'),
+  student('u_noel', 'Noel B. Pangan', 'nbpangan@student.hau.edu.ph', '2022-0170', WD, 'WD-401'),
+  student('u_ana', 'Ana Marie L. Bituin', 'amlbituin@student.hau.edu.ph', '2022-0203', WD, 'WD-402'),
+  student('u_ben', 'Benjamin C. Ocampo', 'bcocampo@student.hau.edu.ph', '2022-0211', WD, 'WD-402'),
+  student('u_carmen', 'Carmen S. Vidal', 'csvidal@student.hau.edu.ph', '2022-0222', WD, 'WD-402'),
+  student('u_dina', 'Dina R. Manalili', 'drmanalili@student.hau.edu.ph', '2021-0305', NA, 'NA-401'),
+  student('u_elmo', 'Elmo P. Garcia', 'epgarcia@student.hau.edu.ph', '2021-0309', NA, 'NA-401'),
+  student('u_faye', 'Faye D. Lumanog', 'fdlumanog@student.hau.edu.ph', '2021-0402', WD, 'WD-403'),
+  student('u_gil', 'Gilbert M. Tolentino', 'gmtolentino@student.hau.edu.ph', '2021-0417', WD, 'WD-403'),
+  student('u_hana', 'Hana Beatriz S. Roque', 'hbsroque@student.hau.edu.ph', '2020-0433', WD, 'WD-404'),
+
+  // Registered students not yet in any group — they fill out the Accounts
+  // page for the other programs. BS Computer Science takes Capstone 1 in 3rd year.
+  student('u_nw_ramos', 'Paolo G. Ramos', 'pgramos@student.hau.edu.ph', '2022-0311', NA, 'NA-401'),
+  student('u_nw_lim', 'Trisha May C. Lim', 'tmclim@student.hau.edu.ph', '2022-0318', NA, 'NA-402'),
+  student('u_nw_bautista', 'Jerome A. Bautista', 'jabautista@student.hau.edu.ph', '2022-0324', NA, 'NA-402'),
+  student('u_cs_villanueva', 'Andrea Nicole P. Villanueva', 'anpvillanueva@student.hau.edu.ph', '2023-0107', CS, 'CS-301', '3rd Year'),
+  student('u_cs_quiambao', 'Mark Anthony D. Quiambao', 'madquiambao@student.hau.edu.ph', '2023-0112', CS, 'CS-301', '3rd Year'),
+  student('u_cs_serrano', 'Bianca L. Serrano', 'blserrano@student.hau.edu.ph', '2023-0126', CS, 'CS-302', '3rd Year'),
+  student('u_cs_mercado', 'Rafael T. Mercado', 'rtmercado@student.hau.edu.ph', '2022-0133', CS, 'CS-401'),
+  student('u_cs_david', 'Kristine Joy R. David', 'kjrdavid@student.hau.edu.ph', '2022-0139', CS, 'CS-401'),
+  student('u_emc_santiago', 'Lorenzo M. Santiago', 'lmsantiago@student.hau.edu.ph', '2022-0505', EMC, 'EMC-401'),
+  student('u_emc_aquino', 'Camille B. Aquino', 'cbaquino@student.hau.edu.ph', '2022-0512', EMC, 'EMC-401'),
+  student('u_emc_navarro', 'Joshua E. Navarro', 'jenavarro@student.hau.edu.ph', '2022-0519', EMC, 'EMC-402'),
+  student('u_emc_pascual', 'Denise Anne F. Pascual', 'dafpascual@student.hau.edu.ph', '2022-0527', EMC, 'EMC-402'),
+  student('u_cy_torres', 'Gabriel S. Torres', 'gstorres@student.hau.edu.ph', '2022-0604', CY, 'CY-401'),
+  student('u_cy_mendoza', 'Alyssa R. Mendoza', 'armendoza@student.hau.edu.ph', '2022-0611', CY, 'CY-401'),
+  student('u_cy_castillo', 'Nathaniel J. Castillo', 'njcastillo@student.hau.edu.ph', '2022-0618', CY, 'CY-401'),
+  student('u_cy_reyes', 'Janelle P. Reyes', 'jpreyes@student.hau.edu.ph', '2022-0625', CY, 'CY-402'),
 
   // --- Faculty and offices ------------------------------------------------------
   // Faculty with no Global Role: every permission they have is project-based.
@@ -67,13 +89,13 @@ const USERS = [
 // Capstone 1 blocks and who teaches them. Teaching a block is what lets an
 // instructor create groups; they become Instructor 1 on each group they create.
 const SECTIONS = [
-  { id: 'sec_wd4a', course: 'Capstone 1', block: 'WD-4A', program: WD, term: TERM, instructorId: 'f_espinosa' },
-  { id: 'sec_wd4b', course: 'Capstone 1', block: 'WD-4B', program: WD, term: TERM, instructorId: 'f_espinosa' },
+  { id: 'sec_wd4a', course: 'Capstone 1', block: 'WD-401', program: WD, term: TERM, instructorId: 'f_espinosa' },
+  { id: 'sec_wd4b', course: 'Capstone 1', block: 'WD-402', program: WD, term: TERM, instructorId: 'f_espinosa' },
 ]
 
 const project = (id, groupName, title, stage, extra = {}) => ({
   id, groupName, title, previousTitles: [], category: 'Capstone', researchArea: extra.researchArea ?? 'Information Systems',
-  program: WD, term: TERM, block: 'WD-4A', sectionId: null,
+  program: WD, term: TERM, block: 'WD-401', sectionId: null,
   currentStage: stage, status: 'Active', archiveResult: null,
   revisionClass: null, revisionDeadline: null,
   createdAt: days(-90), ...extra,
@@ -84,25 +106,25 @@ const PROJECTS = [
     'Development of a Web-Based Thesis and Capstone Project Management and Workflow Automation System for HAU-SOC',
     'PROPOSAL_DEVELOPMENT', {
       sectionId: 'sec_wd4a', createdAt: days(-80), researchArea: 'Workflow Automation',
-      previousTitles: ['Untitled — Group 5 (WD-4A)'],
+      previousTitles: ['Untitled — Group 5 (WD-401)'],
     }),
-  project('p_zeta', 'Group 2', 'Untitled — Group 2 (WD-4A)', 'ADVISER_APPROVAL', {
+  project('p_zeta', 'Group 2', 'Untitled — Group 2 (WD-401)', 'ADVISER_APPROVAL', {
     sectionId: 'sec_wd4a', createdAt: days(-9), researchArea: 'Not yet set',
   }),
-  project('p_theta', 'Group 7', 'Untitled — Group 7 (WD-4A)', 'GROUP_FORMATION', {
+  project('p_theta', 'Group 7', 'Untitled — Group 7 (WD-401)', 'GROUP_FORMATION', {
     sectionId: 'sec_wd4a', createdAt: days(-2), researchArea: 'Not yet set',
   }),
   project('p_beta', 'Group 3', 'Smart Queue Management System for University Clinics', 'PROPOSAL_DEFENSE', {
-    sectionId: 'sec_wd4b', block: 'WD-4B',
+    sectionId: 'sec_wd4b', block: 'WD-402',
   }),
   project('p_gamma', 'Group 1', 'IoT-Based Laboratory Equipment Tracking for Computing Laboratories', 'IMPLEMENTATION', {
-    program: NA, block: 'NA-4A', researchArea: 'Internet of Things', createdAt: days(-150),
+    program: NA, block: 'NA-401', researchArea: 'Internet of Things', createdAt: days(-150),
   }),
   project('p_delta', 'Group 4', 'Automated Student Feedback Sentiment Analysis for Program Assessment', 'URO_VERIFICATION', {
-    block: 'WD-4C', researchArea: 'Data Science', createdAt: days(-200),
+    block: 'WD-403', researchArea: 'Data Science', createdAt: days(-200),
   }),
   project('p_epsilon', 'Group 6', 'Barangay Health Records Digitisation Platform', 'ARCHIVED', {
-    block: 'WD-4D', researchArea: 'Health Informatics', term: 'AY 2025–2026, 2nd Semester', createdAt: days(-400),
+    block: 'WD-404', researchArea: 'Health Informatics', term: 'AY 2025–2026, 2nd Semester', createdAt: days(-400),
     archiveResult: 'Pass', status: 'Archived', archivedAt: days(-40),
   }),
 ]

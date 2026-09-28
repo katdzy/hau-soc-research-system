@@ -126,6 +126,35 @@ export const PROGRAMS = [
   'BS Cybersecurity',
 ]
 
+// A block is the program code, the year level, then a two-digit number:
+// WD-401, CS-301. BS Computer Science takes Capstone 1 in 3rd year (CS-3xx)
+// and Capstone 2 in 4th year (CS-4xx); every other program takes both in 4th.
+export const PROGRAM_CODES = {
+  'BSIT — Web Development': 'WD',
+  'BSIT — Network Administration': 'NA',
+  'BS Computer Science': 'CS',
+  'BS Entertainment and Multimedia Computing': 'EMC',
+  'BS Cybersecurity': 'CY',
+}
+
+export const capstoneYear = (program, course) =>
+  program === 'BS Computer Science' && course === 'Capstone 1' ? 3 : 4
+
+/** '3rd Year' → 3 */
+export const yearDigit = (yearLevel) => parseInt(yearLevel, 10) || null
+
+export const blockExample = (program, year) => `${PROGRAM_CODES[program] ?? 'WD'}-${year}01`
+
+/** Returns why `block` is not a valid block for the program and year, or null. */
+export function blockProblem(block, program, year) {
+  const code = PROGRAM_CODES[program]
+  if (!code) return null
+  if (!new RegExp(`^${code}-${year}\\d{2}$`).test(block)) {
+    return `Blocks for ${program}, year ${year} look like ${blockExample(program, year)}.`
+  }
+  return null
+}
+
 // WEEKLY_ACCOMPLISHMENT (FM-AAC-SOC-2003) — wireframe S-06.
 export const CONSULTATION_MODES = ['Face-to-face', 'Online']
 

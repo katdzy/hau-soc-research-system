@@ -98,7 +98,8 @@ a { color: var(--accent-ink); }
 .panel { background: var(--surface); border: 1px solid var(--rule); border-radius: var(--radius); padding: var(--s3); }
 
 /* --- tables --------------------------------------------------------------- */
-.table-scroll { overflow-x: auto; }
+/* Positioned so visually hidden (absolute) cells stay inside the scroller. */
+.table-scroll { overflow-x: auto; position: relative; }
 .table-scroll > table { min-width: 100%; width: auto; }
 table { width: 100%; border-collapse: collapse; }
 th {

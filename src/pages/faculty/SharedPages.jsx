@@ -1,14 +1,13 @@
-import { useState } from 'react'
 import { Link } from 'react-router-dom'
 import { useApp } from '../../state/AppContext.jsx'
 import { visibleProjects, gateRows } from '../../services/views.js'
-import { runGate, signForm, assignRole } from '../../services/actions.js'
+import { runGate, signForm } from '../../services/actions.js'
 import { canSign } from '../../domain/forms.js'
 import { stageLabel } from '../../domain/stages.js'
 import { useAction, ActionError } from '../../components/useAction.jsx'
 import { PageHead, Chip, Empty } from '../../components/blocks.jsx'
 import { fmtDate } from '../../components/ui.jsx'
-import { ANNOTATION_STATUS as A, PROJECT_ROLES as P, ACCOUNT_STATUS, accountType } from '../../domain/constants.js'
+import { ANNOTATION_STATUS as A, PROJECT_ROLES as P } from '../../domain/constants.js'
 
 // Pages used by more than one context.
 
@@ -99,7 +98,7 @@ export function RevisionSignoffs() {
  * Defense Clearance (Adviser), Defense Endorsement and Clearance Routing
  * (Coordinator).
  */
-export function GateListPage({ title, lede, capabilities, empty, withInstructor2 = false }) {
+export function GateListPage({ title, lede, capabilities, empty }) {
   const { snap, me } = useApp()
   const { run, error, busy } = useAction()
   const rows = gateRows(snap, me, capabilities)
@@ -112,7 +111,6 @@ export function GateListPage({ title, lede, capabilities, empty, withInstructor2
         <section key={b.project.id} className={`gate${blocker ? ' blocked' : ''}`}>
           <h3>{b.project.groupName} — {gate.label}</h3>
           <p className="small muted" style={{ margin: '4px 0 0' }}>{b.project.title} · {stageLabel(b.project.currentStage)}</p>
-          {withInstructor2 && !b.assignments.some(a => a.roleType === P.INSTRUCTOR_2) && <Instructor2Picker b={b} />}
           {blocker
             ? <p className="blocker">{blocker}</p>
             : (
@@ -123,28 +121,6 @@ export function GateListPage({ title, lede, capabilities, empty, withInstructor2
             )}
         </section>
       ))}
-      <ActionError error={error} />
-    </div>
-  )
-}
-
-function Instructor2Picker({ b }) {
-  const { snap, me } = useApp()
-  const { run, error, busy } = useAction()
-  const [pick, setPick] = useState('')
-  const faculty = (snap.users ?? []).filter(u => accountType(u.email) === 'Faculty' && u.status === ACCOUNT_STATUS.ACTIVE)
-  return (
-    <div className="row inline-form">
-      <label className="field">
-        <span className="label">Instructor 2 (publishes the final defense schedule)</span>
-        <select value={pick} onChange={e => setPick(e.target.value)}>
-          <option value="">Select faculty…</option>
-          {faculty.map(u => <option key={u.id} value={u.id}>{u.name}</option>)}
-        </select>
-      </label>
-      <div className="inline-form-action">
-        <button disabled={!pick || busy} onClick={() => run(() => assignRole(me, snap, b.project.id, pick, P.INSTRUCTOR_2))}>Assign</button>
-      </div>
       <ActionError error={error} />
     </div>
   )

@@ -1,6 +1,8 @@
 import { useMemo, useState } from 'react'
 import { useApp } from '../state/AppContext.jsx'
-import { EMAIL_DOMAINS, PROGRAMS, ACCOUNT_STATUS, GLOBAL_ROLES, accountType } from '../domain/constants.js'
+import {
+  EMAIL_DOMAINS, PROGRAMS, ACCOUNT_STATUS, GLOBAL_ROLES, accountType, yearDigit, blockExample,
+} from '../domain/constants.js'
 import { describeStanding } from '../domain/caac.js'
 import { registerAccount, verifyEmail } from '../services/actions.js'
 import {
@@ -60,7 +62,7 @@ export default function SignIn() {
       name: 'Asst. Prof. Kevin Aldrin G. Espinosa',
       globalRole: 'Faculty',
       projectRoles: ['Instructor 1'],
-      description: 'Instructor 1 for Capstone 1 blocks WD-4A & WD-4B (Roster & topic approval authority).',
+      description: 'Instructor 1 for Capstone 1 blocks WD-401 & WD-402 (Roster & topic approval authority).',
     },
   ], [])
 
@@ -219,7 +221,7 @@ export default function SignIn() {
                       <select value={form.yearLevel} onChange={set('yearLevel')} aria-label="Year level">
                         {['3rd Year', '4th Year'].map(y => <option key={y}>{y}</option>)}
                       </select>
-                      <input value={form.block} onChange={set('block')} placeholder="WD-4A" aria-label="Block" />
+                      <input value={form.block} onChange={set('block')} placeholder={blockExample(form.program, yearDigit(form.yearLevel))} aria-label="Block" />
                     </span>
                   </Field>
                 )}
