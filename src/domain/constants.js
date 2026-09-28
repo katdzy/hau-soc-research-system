@@ -32,6 +32,7 @@ export const EMAIL_DOMAINS = {
   STUDENT: '@student.hau.edu.ph',
   FACULTY: '@hau.edu.ph',
 }
+export const ALLOWED_DOMAINS = [EMAIL_DOMAINS.STUDENT, EMAIL_DOMAINS.FACULTY]
 export const accountType = (email = '') =>
   email.toLowerCase().endsWith(EMAIL_DOMAINS.STUDENT) ? 'Student'
     : email.toLowerCase().endsWith(EMAIL_DOMAINS.FACULTY) ? 'Faculty'

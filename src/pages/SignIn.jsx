@@ -33,6 +33,37 @@ export default function SignIn() {
   const [notice, setNotice] = useState('')
   const { run, error, busy, setError } = useAction()
 
+  const multiRoleExamples = useMemo(() => [
+    {
+      id: 'f_bondoc',
+      name: 'Engr. Marites C. Bondoc',
+      globalRole: 'Faculty',
+      projectRoles: ['Adviser', 'Panel Member'],
+      description: 'Adviser on "Automated Student Feedback" (Full version history) AND Panel Member on "Smart Queue System" (Latest version only).',
+    },
+    {
+      id: 'f_almocera',
+      name: 'Mr. Chris Almocera',
+      globalRole: 'Program Chair/Coordinator',
+      projectRoles: ['Adviser'],
+      description: 'Program Coordinator (BSIT oversight) AND Adviser on "IoT-Based Laboratory Equipment Tracking".',
+    },
+    {
+      id: 'f_tayag',
+      name: 'Dr. Marlon I. Tayag',
+      globalRole: 'Dean',
+      projectRoles: ['Adviser'],
+      description: 'Dean (Executive Signatory) AND Adviser on "Group 2" (CAAC conflict-check prevents self-approval of adviser assignment).',
+    },
+    {
+      id: 'f_espinosa',
+      name: 'Asst. Prof. Kevin Aldrin G. Espinosa',
+      globalRole: 'Faculty',
+      projectRoles: ['Instructor 1'],
+      description: 'Instructor 1 for Capstone 1 blocks WD-4A & WD-4B (Roster & topic approval authority).',
+    },
+  ], [])
+
   const personas = useMemo(() => {
     const users = snap.users ?? []
     const students = users.filter(u => u.globalRoles?.includes(GLOBAL_ROLES.STUDENT) && u.id !== 'u_noel').slice(0, 2)
@@ -159,6 +190,7 @@ export default function SignIn() {
                   Resend verification email
                 </button>
               )}
+              )}
             </form>
           ) : (
             <form onSubmit={submitRegister} noValidate>
@@ -224,6 +256,7 @@ export default function SignIn() {
           )}
         </div>
 
+<<<<<<< HEAD
         <p className="faint small auth-fr">
           Domain-restricted registration · secure login · password reset · Firebase Authentication
           {firebase ? '' : ' (local mode: passwords are not checked)'}
@@ -243,6 +276,9 @@ export default function SignIn() {
           </details>
         )}
       </main>
+    </div>
+  )
+}
     </div>
   )
 }

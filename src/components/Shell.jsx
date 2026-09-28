@@ -18,7 +18,7 @@ export default function Shell() {
 
   const projectRoles = {}
   for (const a of snap.projectAssignments ?? []) {
-    if (a.userId === me.id) projectRoles[a.roleType] = (projectRoles[a.roleType] ?? 0) + 1
+    if (a.userId === me.id && a.status !== 'Declined') projectRoles[a.roleType] = (projectRoles[a.roleType] ?? 0) + 1
   }
   const roleSummary = Object.entries(projectRoles).map(([r, n]) => (n > 1 ? `${r} (${n})` : r)).join(', ')
   const subtitle = me.block ? `${me.program?.split(' — ')[0]}-${me.block}` : (me.globalRoles?.[0] ?? 'Faculty, SOC')

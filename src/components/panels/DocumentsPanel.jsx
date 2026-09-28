@@ -1,14 +1,19 @@
 import { useMemo, useState } from 'react'
 import { Link } from 'react-router-dom'
 import { useApp } from '../../state/AppContext.jsx'
-import { can } from '../../domain/caac.js'
-import { Section, Empty, Badge, docTone, fmtDateTime, fmtSize } from '../ui.jsx'
-import { DECISIONS, DOC_STATUS, DOC_TYPES, REVIEWABLE_TYPES } from '../../domain/constants.js'
+import { can, why, allowedDocTypes } from '../../domain/caac.js'
+import { submitDocument, addAnnotation, submitReview, generateAiSummary } from '../../services/actions.js'
+import { useAction, ActionError } from '../useAction.jsx'
+import { Section, Empty, Badge, Field, docTone, fmtDateTime, fmtSize } from '../ui.jsx'
+import {
+  DECISIONS, DOC_STATUS, DOC_TYPES, ANNOTATION_CATEGORIES, REVIEWABLE_TYPES, LINK_TYPES,
+} from '../../domain/constants.js'
 
 const SUMMARISED = [DOC_TYPES.PROPOSAL_MANUSCRIPT, DOC_TYPES.FINAL_MANUSCRIPT]
 
 export default function DocumentsPanel({ b, ctx }) {
   const { snap, me } = useApp()
+  const { run, busy } = useAction()
   const nameOf = (id) => (snap.users ?? []).find(u => u.id === id)?.name ?? id
 
   // Without `document.history` (the panel), only the current version of each
@@ -91,12 +96,17 @@ export default function DocumentsPanel({ b, ctx }) {
             </Section>
 
             {can(ctx, 'ai.view') && SUMMARISED.includes(doc.docType) && (
-              <Section title="AI summary">
+              <Section title="AI summary (Gemini Flash)">
                 {!summary ? (
-                  <p className="small muted">
-                    Generated automatically from the complete manuscript when the defense is
-                    scheduled — once per milestone, never for drafts.
-                  </p>
+                  <div>
+                    <p className="small muted" style={{ marginBottom: 12 }}>
+                      Generated automatically from the complete manuscript when the defense is
+                      scheduled — processed strictly via Google Gemini Flash API on an active paid billing tier.
+                    </p>
+                    <button className="primary small" disabled={busy} onClick={() => run(() => generateAiSummary(me, snap, b.project.id, doc.id))}>
+                      ✨ Generate Gemini Flash Summary
+                    </button>
+                  </div>
                 ) : (
                   <>
                     <div className="note ai" style={{ marginBottom: 16 }}>{summary.label}</div>
@@ -108,9 +118,14 @@ export default function DocumentsPanel({ b, ctx }) {
                         </div>
                       ))}
                     </dl>
-                    <p className="faint small" style={{ marginTop: 12 }}>
-                      {summary.milestone} · version {summary.documentVersion} · generated {fmtDateTime(summary.generatedAt)} · {summary.model}
-                    </p>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: 14 }}>
+                      <p className="faint small" style={{ margin: 0 }}>
+                        {summary.milestone} · version {summary.documentVersion} · generated {fmtDateTime(summary.generatedAt)} · {summary.model}
+                      </p>
+                      <button className="quiet small" disabled={busy} onClick={() => run(() => generateAiSummary(me, snap, b.project.id, doc.id))}>
+                        🔄 Refresh Summary
+                      </button>
+                    </div>
                   </>
                 )}
               </Section>

@@ -1,4 +1,4 @@
-import { EMAIL_DOMAINS } from '../domain/constants.js'
+import { EMAIL_DOMAINS, ALLOWED_DOMAINS } from '../domain/constants.js'
 
 const DOMAINS = Object.values(EMAIL_DOMAINS)
 

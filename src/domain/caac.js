@@ -253,15 +253,20 @@ function evaluate(policies, held, env) {
 }
 
 /** One user's capabilities on one project at its current stage. */
-export function resolveContext(user, b) {
+export function resolveContext(user, b, activeRole = 'ALL') {
   if (!user || !b) {
     return { user, globalRoles: [], projectRoles: [], isMember: false, grants: new Map(), active: [], dormant: [] }
   }
-  const globalRoles = globalRolesOf(user)
+  let globalRoles = globalRolesOf(user)
   const isMember = b.members.some(m => m.userId === user.id)
-  const projectRoles = [...new Set(b.assignments
+  let projectRoles = [...new Set(b.assignments
     .filter(a => a.userId === user.id && a.status !== 'Declined')
     .map(a => a.roleType))]
+
+  if (activeRole && activeRole !== 'ALL') {
+    globalRoles = globalRoles.filter(r => r === activeRole)
+    projectRoles = projectRoles.filter(r => r === activeRole)
+  }
 
   const env = { user, project: b.project, stage: b.project.currentStage, isMember, projectRoles, bundle: b }
   const held = new Set([...globalRoles, ...projectRoles].filter(actingFilter(user)))
@@ -274,9 +279,12 @@ export function resolveContext(user, b) {
 }
 
 /** Capabilities that do not belong to any one project (navigation, reports). */
-export function resolveInstitution(user, snap) {
+export function resolveInstitution(user, snap, activeRole = 'ALL') {
   if (!user) return { user, globalRoles: [], grants: new Map(), active: [], dormant: [], sections: [] }
-  const globalRoles = globalRolesOf(user)
+  let globalRoles = globalRolesOf(user)
+  if (activeRole && activeRole !== 'ALL') {
+    globalRoles = globalRoles.filter(r => r === activeRole)
+  }
   const sections = (snap?.sections ?? []).filter(s => s.instructorId === user.id)
   const held = new Set(globalRoles)
   if (sections.some(s => s.course === 'Capstone 1')) held.add(P.INSTRUCTOR_1)
@@ -303,8 +311,8 @@ export function authorize(ctx, cap) {
  * State-based progressive visibility: a project is visible only when some
  * policy grants `project.view` in the current context.
  */
-export function projectAccess(user, b) {
-  const ctx = resolveContext(user, b)
+export function projectAccess(user, b, activeRole = 'ALL') {
+  const ctx = resolveContext(user, b, activeRole)
   const grant = why(ctx, 'project.view')
   if (grant) return { visible: true, via: grant.role, reason: `${grant.role} · ${grant.condition}` }
   const d = ctx.dormant.find(x => x.cap === 'project.view')

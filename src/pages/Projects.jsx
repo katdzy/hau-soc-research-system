@@ -44,10 +44,21 @@ export default function Projects() {
           ) : (
             <div className="panel">
               <div className="row">
-                <Field label="Block">
-                  <select value={form.sectionId} onChange={e => setForm(f => ({ ...f, sectionId: e.target.value }))}>
-                    {blocks.map(s => <option key={s.id} value={s.id}>{s.block} · {s.program}</option>)}
-                  </select>
+                <Field label="Assigned Block Section" hint={blocks.length === 1 ? 'Constrained to your assigned teaching block.' : 'Select from your assigned Capstone 1 blocks.'}>
+                  {blocks.length === 1 ? (
+                    <input
+                      type="text"
+                      value={`${blocks[0].block} · ${blocks[0].program}`}
+                      disabled
+                      style={{ opacity: 0.9, cursor: 'not-allowed', background: 'rgba(255, 255, 255, 0.05)' }}
+                    />
+                  ) : blocks.length > 1 ? (
+                    <select value={form.sectionId || blocks[0]?.id} onChange={e => setForm(f => ({ ...f, sectionId: e.target.value }))}>
+                      {blocks.map(s => <option key={s.id} value={s.id}>{s.block} · {s.program}</option>)}
+                    </select>
+                  ) : (
+                    <div className="note stop" style={{ fontSize: 13 }}>No assigned Capstone 1 teaching block found for your account.</div>
+                  )}
                 </Field>
                 <Field label="Group name" hint="Leave blank to number it automatically.">
                   <input value={form.groupName} onChange={e => setForm(f => ({ ...f, groupName: e.target.value }))} placeholder="Group 8" />

@@ -48,14 +48,14 @@ function pendingTasks(b, ctx, me) {
   return tasks
 }
 
-export function worklist(snap, me) {
+export function worklist(snap, me, activeRole = 'ALL') {
   if (!me) return []
   return (snap.projects ?? [])
     .map(p => {
       const b = bundle(snap, p.id)
-      const access = projectAccess(me, b)
+      const access = projectAccess(me, b, activeRole)
       if (!access.visible) return null
-      const ctx = resolveContext(me, b)
+      const ctx = resolveContext(me, b, activeRole)
       const stage = stageByKey(p.currentStage)
       const gates = (stage?.gates ?? [])
         .filter(g => can(ctx, g.capability))
