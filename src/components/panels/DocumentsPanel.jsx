@@ -2,7 +2,7 @@ import { useMemo, useState } from 'react'
 import { Link } from 'react-router-dom'
 import { useApp } from '../../state/AppContext.jsx'
 import { can, why, allowedDocTypes } from '../../domain/caac.js'
-import { submitDocument, addAnnotation, submitReview, generateAiSummary } from '../../services/actions.js'
+import { submitDocument, addAnnotation, generateAiSummary } from '../../services/actions.js'
 import { useAction, ActionError } from '../useAction.jsx'
 import { Section, Empty, Badge, Field, docTone, fmtDateTime, fmtSize } from '../ui.jsx'
 import {

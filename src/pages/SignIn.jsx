@@ -190,7 +190,6 @@ export default function SignIn() {
                   Resend verification email
                 </button>
               )}
-              )}
             </form>
           ) : (
             <form onSubmit={submitRegister} noValidate>
@@ -256,7 +255,6 @@ export default function SignIn() {
           )}
         </div>
 
-<<<<<<< HEAD
         <p className="faint small auth-fr">
           Domain-restricted registration · secure login · password reset · Firebase Authentication
           {firebase ? '' : ' (local mode: passwords are not checked)'}
@@ -276,9 +274,6 @@ export default function SignIn() {
           </details>
         )}
       </main>
-    </div>
-  )
-}
     </div>
   )
 }
