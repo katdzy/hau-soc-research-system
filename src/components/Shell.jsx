@@ -1,17 +1,20 @@
+import { Suspense, lazy } from 'react'
 import { NavLink, Outlet, useNavigate } from 'react-router-dom'
 import { useApp } from '../state/AppContext.jsx'
 import { worklist, actionableCount } from '../services/worklist.js'
 import { can, caacTag, resolveInstitution } from '../domain/caac.js'
-import { accountType } from '../domain/constants.js'
+import { ACCOUNT_STATUS, accountType } from '../domain/constants.js'
 
 const link = ({ isActive }) => (isActive ? 'active' : undefined)
+
+// R9: removed from production builds.
+const DevRail = import.meta.env.DEV ? lazy(() => import('../dev/DevRail.jsx')) : null
 
 export default function Shell() {
   const { me, snap, signOut, backendName } = useApp()
   const navigate = useNavigate()
 
   const todo = actionableCount(worklist(snap, me))
-  const unread = (snap.notifications ?? []).filter(n => n.userId === me.id && !n.read).length
   const inst = resolveInstitution(me, snap)
 
   // Project-Based Roles, counted across projects — the second CAAC dimension.
@@ -20,8 +23,12 @@ export default function Shell() {
     if (a.userId === me.id) projectRoles[a.roleType] = (projectRoles[a.roleType] ?? 0) + 1
   }
 
-  const institutional = ['report.generate', 'records.search', 'records.manage', 'audit.view', 'admin.accounts']
+  const institutional = ['report.generate', 'records.search', 'records.manage', 'audit.view']
     .some(c => can(inst, c))
+  const administration = ['admin.accounts', 'admin.caac', 'settings.manage'].some(c => can(inst, c))
+  // Verified registrations waiting for the System Administrator (S0.3).
+  const toActivate = can(inst, 'admin.accounts')
+    ? (snap.users ?? []).filter(u => u.status === ACCOUNT_STATUS.INACTIVE && u.emailVerified).length : 0
 
   return (
     <div className="app">
@@ -62,19 +69,25 @@ export default function Shell() {
             <span>Worklist</span>{todo > 0 && <span className="count">{todo}</span>}
           </NavLink>
           <NavLink to="/projects" className={link}>Projects</NavLink>
-          <NavLink to="/notifications" className={link}>
-            <span>Notifications</span>{unread > 0 && <span className="count">{unread}</span>}
-          </NavLink>
 
           {institutional && <div className="nav-group label">Institutional</div>}
           {can(inst, 'report.generate') && <NavLink to="/reports" className={link}>Reports</NavLink>}
           {(can(inst, 'records.search') || can(inst, 'records.manage')) &&
             <NavLink to="/records" className={link}>Records archive</NavLink>}
           {can(inst, 'audit.view') && <NavLink to="/audit" className={link}>Audit trail</NavLink>}
-          {can(inst, 'admin.accounts') && <NavLink to="/admin" className={link}>Administration</NavLink>}
+
+          {administration && <div className="nav-group label">Administration</div>}
+          {can(inst, 'admin.accounts') && (
+            <NavLink to="/admin/accounts" className={link}>
+              <span>Accounts</span>{toActivate > 0 && <span className="count">{toActivate}</span>}
+            </NavLink>
+          )}
+          {can(inst, 'admin.caac') && <NavLink to="/admin/caac" className={link}>CAAC configuration</NavLink>}
+          {can(inst, 'settings.manage') && <NavLink to="/admin/settings" className={link}>Global settings</NavLink>}
         </div>
 
         <div className="rail-foot">
+          {DevRail && <Suspense fallback={null}><DevRail /></Suspense>}
           <div className="faint small" style={{ marginBottom: 10 }}>
             Backend <span className="mono">{backendName}</span>
           </div>

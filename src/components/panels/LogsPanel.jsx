@@ -1,9 +1,9 @@
 import { useState } from 'react'
 import { useApp } from '../../state/AppContext.jsx'
 import { can } from '../../domain/caac.js'
-import { submitWeeklyLog, decideWeeklyLog, confirmMilestones } from '../../services/actions.js'
+import { submitWeeklyLog, decideWeeklyLog } from '../../services/actions.js'
 import { useAction, ActionError } from '../useAction.jsx'
-import { Section, Empty, Badge, Field, fmtDate, fmtDateTime } from '../ui.jsx'
+import { Section, Empty, Badge, Field, fmtDate } from '../ui.jsx'
 import { FORMS } from '../../domain/constants.js'
 
 const LOG_TONE = { Approved: 'ok', Submitted: 'warn', Returned: 'stop' }
@@ -13,7 +13,6 @@ export default function LogsPanel({ b, ctx }) {
   const { run, error, busy } = useAction()
   const [activities, setActivities] = useState('')
   const [remarks, setRemarks] = useState({})
-  const [milestoneNote, setMilestoneNote] = useState('')
   const nameOf = (id) => (snap.users ?? []).find(u => u.id === id)?.name ?? id
   const approved = b.weeklyLogs.filter(l => l.status === 'Approved').length
 
@@ -98,31 +97,6 @@ export default function LogsPanel({ b, ctx }) {
             })}>
             Submit to the Adviser
           </button>
-        </Section>
-      )}
-
-      {(b.project.milestonesConfirmedAt || can(ctx, 'milestone.confirm')) && (
-        <Section title="Capstone 2 milestones">
-          {b.project.milestonesConfirmedAt ? (
-            <p className="small">
-              Confirmed by {nameOf(b.project.milestonesConfirmedBy)} on {fmtDateTime(b.project.milestonesConfirmedAt)}
-              {b.project.milestonesNote && <span className="muted"> — “{b.project.milestonesNote}”</span>}
-            </p>
-          ) : (
-            <>
-              <p className="small muted">
-                Confirm that the implementation milestones and course requirements are met. The
-                Adviser cannot recommend the group for final defense until you do.
-              </p>
-              <Field label="Note (optional)">
-                <input value={milestoneNote} onChange={e => setMilestoneNote(e.target.value)} />
-              </Field>
-              <button className="primary" disabled={busy}
-                onClick={() => run(() => confirmMilestones(me, snap, b.project.id, milestoneNote))}>
-                Confirm milestones
-              </button>
-            </>
-          )}
         </Section>
       )}
     </>

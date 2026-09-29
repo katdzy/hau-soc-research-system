@@ -35,6 +35,15 @@
   --s1: 8px; --s2: 16px; --s3: 24px; --s4: 32px; --s5: 40px; --s6: 48px; --s8: 64px; --s10: 80px;
   --rail: 264px;
   --radius: 3px;
+
+  /* Annotation marks over a PDF page: a highlighter wash for shared notes, a
+     ruled blue for private panel notes (multiplied over the page's ink). */
+  --mark-shared: rgb(232 190 60 / .38);
+  --mark-shared-line: rgb(176 128 20 / .85);
+  --mark-shared-fill: rgb(232 190 60 / .12);
+  --mark-private: rgb(60 86 112 / .22);
+  --mark-private-fill: rgb(60 86 112 / .08);
+  --mark-draft: rgb(140 29 29 / .12);
 }
 
 * { box-sizing: border-box; }
@@ -199,6 +208,9 @@ input[type="radio"], input[type="checkbox"] { width: auto; accent-color: var(--a
 .select-quiet { width: auto; padding: 2px var(--s1); font-size: 12.5px; border-color: var(--rule); background: transparent; }
 .select-quiet.tone-ok { color: var(--ok); }
 .select-quiet.tone-stop { color: var(--stop); }
+.tone-warn { color: var(--warn); }
+/* A Program Chair/Coordinator's programs, under their Global Roles (Admin). */
+.scope { margin-top: var(--s1); display: flex; flex-direction: column; gap: 4px; }
 
 .row { display: flex; gap: var(--s2); flex-wrap: wrap; }
 .row > * { flex: 1 1 200px; min-width: 0; }
@@ -214,22 +226,39 @@ input[type="radio"], input[type="checkbox"] { width: auto; accent-color: var(--a
 .filters select { flex: 0 1 auto; width: auto; }
 
 /* --- stage timeline ------------------------------------------------------- */
-.timeline { display: flex; flex-direction: column; }
-.tl-phase { margin-top: var(--s2); }
-.tl-phase:first-child { margin-top: 0; }
-.tl-step { display: grid; grid-template-columns: 24px minmax(0,1fr); gap: var(--s1); padding: 2px 0; }
-.tl-dot { display: flex; flex-direction: column; align-items: center; }
-.tl-dot i {
-  width: 9px; height: 9px; border-radius: 50%; margin-top: 6px;
-  background: var(--surface); border: 1.5px solid var(--rule-strong); flex: none;
+/* One horizontal track under the project title: a segment per phase (sized by
+   its number of stages), a dot per stage. Scrolls sideways only on phones. */
+.timeline { margin: 0 0 var(--s4); padding: var(--s2) 0 0; border-top: 1px solid var(--rule); overflow-x: auto; }
+.timeline ol { list-style: none; margin: 0; padding: 0; }
+.tl-phases { display: flex; gap: var(--s2); min-width: 560px; }
+.tl-phase { flex: 1 1 0; min-width: 0; display: flex; flex-direction: column; justify-content: flex-end; }
+.tl-phase-name {
+  font: 600 10.5px/1.3 var(--sans); letter-spacing: .08em; text-transform: uppercase;
+  color: var(--ink-faint); margin-bottom: var(--s1);
 }
-.tl-dot s { flex: 1; width: 1.5px; background: var(--rule); margin: 2px 0; }
-.tl-step.done .tl-dot i { background: var(--ok); border-color: var(--ok); }
-.tl-step.done .tl-dot s { background: var(--ok); opacity: .35; }
-.tl-step.current .tl-dot i { background: var(--accent); border-color: var(--accent); box-shadow: 0 0 0 3px var(--accent-wash); }
-.tl-step .tl-label { font-size: 13px; padding: 2px 0 var(--s1); color: var(--ink-faint); }
-.tl-step.done .tl-label { color: var(--ink-muted); }
-.tl-step.current .tl-label { color: var(--ink); font-weight: 600; }
+.tl-phase.current .tl-phase-name { color: var(--accent-ink); }
+.tl-phase.done .tl-phase-name { color: var(--ink-muted); }
+.tl-track { display: flex; align-items: center; height: 16px; }
+.tl-step { flex: 1 1 0; position: relative; display: flex; align-items: center; height: 100%; }
+/* The rail runs from each dot to the next one. */
+.tl-step::before {
+  content: ""; position: absolute; left: 0; right: 0; top: 50%; height: 2px; margin-top: -1px;
+  background: var(--rule);
+}
+.tl-step.done::before { background: var(--ok); opacity: .45; }
+/* The life cycle ends at Archived: no rail after the last dot. */
+.tl-phase:last-child .tl-step:last-child { flex: 0 0 auto; }
+.tl-phase:last-child .tl-step:last-child::before { display: none; }
+.tl-dot {
+  position: relative; z-index: 1; width: 10px; height: 10px; border-radius: 50%; flex: none;
+  background: var(--surface); border: 1.5px solid var(--rule-strong); cursor: default;
+}
+.tl-dot:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+.tl-step.done .tl-dot { background: var(--ok); border-color: var(--ok); }
+.tl-step.current .tl-dot { width: 12px; height: 12px; background: var(--accent); border-color: var(--accent); box-shadow: 0 0 0 4px var(--accent-wash); }
+.tl-now { display: flex; flex-wrap: wrap; align-items: baseline; gap: 4px var(--s1); margin: 12px 0 0; font-size: 13px; }
+.tl-now-stage { font-weight: 600; }
+.tl-count { margin-left: auto; font: 11.5px var(--mono); }
 
 /* --- CAAC inspector ------------------------------------------------------- */
 .inspector-title { font-size: 14px; }
@@ -269,6 +298,10 @@ input[type="radio"], input[type="checkbox"] { width: auto; accent-color: var(--a
 }
 .tabs button:hover:not(:disabled) { background: var(--surface-sunk); color: var(--ink); }
 .tabs button[aria-selected="true"] { color: var(--accent-ink); border-bottom-color: var(--accent); font-weight: 600; }
+.tab-n {
+  font: 600 11px var(--mono); color: var(--accent-ink); background: var(--accent-wash);
+  border-radius: 9px; padding: 1px 6px; margin-left: 6px;
+}
 
 /* --- documents ------------------------------------------------------------ */
 /* Sized by the tab panel, not the viewport: next to the inspector the panel is
@@ -286,8 +319,98 @@ input[type="radio"], input[type="checkbox"] { width: auto; accent-color: var(--a
 }
 .version.is-selected { border-left-color: var(--accent); background: var(--accent-wash); }
 .version-head { display: flex; justify-content: space-between; gap: var(--s1); font-size: 13px; }
+.version-group + .version-group { margin-top: var(--s3); }
+.version-group-head { padding-bottom: var(--s1); border-bottom: 1px solid var(--rule-strong); }
+.topic-list { margin: 0; padding-left: 20px; font-size: 13px; display: flex; flex-direction: column; gap: 4px; }
+.topic-list .is-approved { font-weight: 600; }
+
+/* --- file viewer and annotations (S3.6, S4.2, S5.5) ----------------------- */
+/* The PDF is drawn by pdf.js onto a canvas; annotations are boxes in a layer
+   above it, never ink on the file. A highlighter wash for shared notes, a
+   ruled blue for private panel notes, a dashed crimson outline for the mark
+   being drafted. */
+.review-desk { display: grid; grid-template-columns: minmax(0, 1fr); gap: 0 var(--s4); }
+@container (min-width: 1040px) {
+  .review-desk:not(.is-plain) { grid-template-columns: minmax(0, 1fr) minmax(0, 320px); align-items: start; }
+  .review-desk:not(.is-plain) > :last-child { position: sticky; top: var(--s2); max-height: calc(100vh - 32px); overflow: auto; }
+}
+.viewer { border: 1px solid var(--rule-strong); background: var(--surface-sunk); }
+.viewer-bar {
+  display: flex; align-items: center; gap: var(--s2); flex-wrap: wrap;
+  padding: var(--s1); border-bottom: 1px solid var(--rule-strong); background: var(--surface);
+}
+.viewer-zoom { margin-left: auto; display: inline-flex; align-items: center; gap: var(--s1); }
+.viewer-zoom button { padding: 2px 10px; font-size: 14px; line-height: 1.2; }
+.seg { display: inline-flex; }
+.seg button { border-radius: 0; font-size: 12.5px; padding: 4px 12px; }
+.seg button + button { margin-left: -1px; }
+.seg button:first-child { border-radius: var(--radius) 0 0 var(--radius); }
+.seg button:last-child { border-radius: 0 var(--radius) var(--radius) 0; }
+.seg button[aria-pressed="true"] { background: var(--ink); border-color: var(--ink); color: var(--surface); }
+.viewer-sample { margin: 0; padding: var(--s1) 12px; background: var(--warn-wash); color: var(--warn); border-bottom: 1px solid var(--rule); }
+.viewer-status { padding: var(--s3) var(--s2); font-size: 13px; color: var(--ink-muted); border: 1px dashed var(--rule-strong); }
+.viewer-pages {
+  height: min(78vh, 1100px); overflow: auto; padding: var(--s2);
+  display: flex; flex-direction: column; align-items: flex-start; gap: var(--s2);
+}
+/* Auto margins, not align-items: center, so a zoomed page scrolls instead of clipping on the left. */
+.pdf-page { position: relative; flex: none; margin-inline: auto; background: #fff; box-shadow: 0 0 0 1px var(--rule-strong); }
+.pdf-page canvas { display: block; }
+.page-no { position: absolute; right: -4px; bottom: 4px; transform: translateX(100%); font-size: 10.5px; color: var(--ink-faint); }
+
+/* pdf.js text layer — the parts of pdf_viewer.css the selection needs. */
+.text-host { position: absolute; inset: 0; z-index: 1; }
+.textLayer { position: absolute; inset: 0; overflow: clip; line-height: 1; text-align: initial; transform-origin: 0 0; z-index: 1; outline: none;
+  -webkit-text-size-adjust: none; text-size-adjust: none; forced-color-adjust: none;
+  --min-font-size: 1; --text-scale-factor: calc(var(--total-scale-factor) * var(--min-font-size)); --min-font-size-inv: calc(1 / var(--min-font-size)); }
+.textLayer :is(span, br) { color: transparent; position: absolute; white-space: pre; cursor: text; transform-origin: 0% 0%; }
+.textLayer > :not(.markedContent), .textLayer .markedContent span:not(.markedContent) {
+  z-index: 1; --font-height: 0; font-size: calc(var(--text-scale-factor) * var(--font-height));
+  --scale-x: 1; --rotate: 0deg; transform: rotate(var(--rotate)) scaleX(var(--scale-x)) scale(var(--min-font-size-inv)); }
+.textLayer .markedContent { display: contents; }
+.textLayer ::selection { background: rgb(140 29 29 / .22); }
+.textLayer br::selection { background: transparent; }
+.textLayer .endOfContent { display: block; position: absolute; inset: 100% 0 0; z-index: 0; cursor: default; user-select: none; }
+.textLayer.selecting .endOfContent { top: 0; }
+.viewer-pages:not(.is-text) :is(.text-host, .textLayer) { pointer-events: none; }
+
+.page-marks { position: absolute; inset: 0; z-index: 2; pointer-events: none; }
+.mark-rect { position: absolute; }
+.mark.is-text .mark-rect { background: var(--mark-shared); mix-blend-mode: multiply; }
+.mark.is-area .mark-rect { border: 2px solid var(--mark-shared-line); background: var(--mark-shared-fill); }
+.mark.is-private.is-text .mark-rect { background: var(--mark-private); }
+.mark.is-private.is-area .mark-rect { border-color: var(--info); background: var(--mark-private-fill); }
+.mark.is-draft .mark-rect { background: var(--mark-draft); outline: 1.5px dashed var(--accent); mix-blend-mode: normal; border: 0; }
+.mark.is-focus .mark-rect { outline: 2px solid var(--ink); outline-offset: 1px; }
+.mark-tag {
+  position: absolute; transform: translateX(calc(-100% - 6px)); pointer-events: auto; /* in the margin, clear of the words */
+  min-width: 24px; height: 24px; padding: 0 6px; border-radius: 12px; /* WCAG 2.5.8 target size */
+  font: 600 11px/22px var(--mono); text-align: center;
+  background: var(--ink); color: var(--surface); border: 1px solid var(--surface);
+}
+.mark.is-private .mark-tag { background: var(--info); }
+.mark-tag:hover:not(:disabled) { background: var(--accent); }
+.area-capture { position: absolute; inset: 0; z-index: 3; cursor: crosshair; touch-action: none; }
+
+.note-list { list-style: none; margin: 0; padding: 0; }
+.note-list .entry.is-focus { background: var(--accent-wash); box-shadow: -8px 0 0 var(--accent-wash), 8px 0 0 var(--accent-wash); }
+.note-n {
+  display: inline-block; min-width: 20px; height: 20px; padding: 0 5px; border-radius: 10px;
+  font-size: 11px; font-weight: 600; line-height: 20px; text-align: center; background: var(--surface-sunk); color: var(--ink);
+}
+.draft-anchor {
+  display: flex; justify-content: space-between; align-items: baseline; gap: var(--s1);
+  /* Drawn like the draft mark on the page, so the two read as the same thing. */
+  padding: var(--s1) 12px; margin-bottom: var(--s2); outline: 1.5px dashed var(--accent); outline-offset: -1.5px; background: var(--accent-wash);
+}
+button.linkish {
+  border: 0; background: none; padding: 0; font: inherit; color: var(--accent-ink);
+  text-decoration: underline; text-underline-offset: 2px; cursor: pointer;
+}
+button.linkish:hover:not(:disabled) { background: none; color: var(--accent); }
 
 /* --- misc ----------------------------------------------------------------- */
+.sr-only { position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; border: 0; }
 .empty { padding: var(--s3) 0; color: var(--ink-faint); font-size: 13px; margin: 0; }
 .stack { display: flex; flex-direction: column; gap: var(--s2); }
 .inline { display: flex; align-items: center; gap: var(--s1); flex-wrap: wrap; }
@@ -326,14 +449,16 @@ input[type="radio"], input[type="checkbox"] { width: auto; accent-color: var(--a
 .auth .tabs { margin: calc(-1 * var(--s1)) 0 var(--s3); }
 .mail { margin-top: var(--s3); border: 1px dashed var(--rule-strong); border-radius: var(--radius); padding: var(--s2); background: var(--paper); }
 .mail-head { display: flex; flex-direction: column; gap: 2px; padding-bottom: 12px; border-bottom: 1px solid var(--rule); }
-.personas h2 { margin-bottom: var(--s1); }
-.persona-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(232px, 1fr)); gap: 1px; background: var(--rule); border: 1px solid var(--rule); border-radius: var(--radius); overflow: hidden; }
-.persona {
-  background: var(--surface); border: 0; border-radius: 0; text-align: left;
-  padding: 12px var(--s2); display: flex; flex-direction: column; gap: 2px; font-weight: 400;
+/* Dev builds: the demo panel sits beside the sign-in form, and under it on narrow screens. */
+.signin.has-demo {
+  display: grid; grid-template-columns: minmax(0, 360px) minmax(0, 1fr); gap: var(--s8);
+  align-items: start; justify-content: stretch; max-width: 1360px; margin: 0 auto; padding-inline: var(--s5);
 }
-.persona:hover:not(:disabled) { background: var(--accent-wash); }
-.persona .pname { font-weight: 600; font-size: 13px; }
+.signin.has-demo .signin-card { position: sticky; top: var(--s8); }
+@media (max-width: 1080px) {
+  .signin.has-demo { grid-template-columns: minmax(0, 1fr); gap: var(--s6); padding: var(--s5) var(--s2); }
+  .signin.has-demo .signin-card { position: static; max-width: 560px; }
+}
 
 @media (max-width: 1080px) {
   .split { grid-template-columns: minmax(0, 1fr); gap: var(--s4); }
@@ -347,3 +472,80 @@ input[type="radio"], input[type="checkbox"] { width: auto; accent-color: var(--a
   .kv dd { margin-bottom: var(--s1); }
   .stat-row { gap: var(--s3); }
 }
+
+/* --- student dashboard: the group's desk --------------------------------- */
+.group-desk {
+  display: grid; grid-template-columns: minmax(0, 1fr) 280px; gap: var(--s5);
+  padding-bottom: var(--s4); border-bottom: 1px solid var(--rule-strong);
+}
+.group-title { font-size: 20px; margin: var(--s1) 0 4px; }
+.group-sub { margin: var(--s3) 0 var(--s1); }
+.group-people { border-left: 1px solid var(--rule); padding-left: var(--s3); }
+@media (max-width: 860px) {
+  .group-desk { grid-template-columns: minmax(0, 1fr); gap: var(--s3); }
+  .group-people { border-left: 0; padding-left: 0; border-top: 1px solid var(--rule); padding-top: var(--s2); }
+}
+.todo .urgent a { color: var(--stop); }
+
+/* --- Instructor 1: the block desk ---------------------------------------- */
+.block-desk { padding-bottom: var(--s4); border-bottom: 1px solid var(--rule-strong); }
+.block-grid { display: grid; grid-template-columns: minmax(0, 1fr) 280px; gap: var(--s5); }
+.plain-list { list-style: none; margin: 4px 0 0; padding: 0; display: flex; flex-direction: column; gap: 4px; }
+@media (max-width: 1180px) {
+  .block-grid { grid-template-columns: minmax(0, 1fr); gap: var(--s3); }
+  .block-grid .group-people { border-left: 0; padding-left: 0; border-top: 1px solid var(--rule); padding-top: var(--s2); order: -1; }
+}
+
+/* --- pills: category filters and program labels --------------------------- */
+.pills { display: flex; flex-wrap: wrap; gap: var(--s1); margin: 0 0 var(--s2); }
+.pill {
+  display: inline-flex; align-items: center; gap: 6px; min-height: 32px;
+  padding: 4px 12px; border: 1px solid var(--rule-strong); border-radius: 999px;
+  background: var(--surface); color: var(--ink-muted); font-size: 12.5px; font-weight: 500;
+}
+.pill:hover { border-color: var(--ink-faint); color: var(--ink); }
+.pill[aria-pressed="true"] { background: var(--accent-wash); border-color: var(--accent); color: var(--accent-ink); font-weight: 600; }
+.pill-n { font: 11px var(--mono); color: var(--ink-faint); }
+.pill[aria-pressed="true"] .pill-n { color: var(--accent-ink); }
+.program-pill {
+  display: inline-flex; align-items: baseline; padding: 0 8px; border-radius: 999px;
+  background: var(--surface-sunk); border: 1px solid var(--rule); font: 500 11px/18px var(--mono); color: var(--ink);
+}
+
+/* --- step sequence in the Next-step panel ---------------------------------- */
+.visually-hidden { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
+.steps { list-style: none; margin: var(--s2) 0 0; padding: 0; display: flex; flex-direction: column; }
+.step { display: grid; grid-template-columns: 24px minmax(0, 1fr); gap: 12px; padding: 8px 0; position: relative; }
+.step + .step::before {
+  content: ""; position: absolute; left: 11px; top: -8px; height: 16px; border-left: 1.5px solid var(--rule-strong);
+}
+.step-mark {
+  width: 24px; height: 24px; border-radius: 50%; display: inline-flex; align-items: center; justify-content: center;
+  font: 600 11px/1 var(--mono); border: 1.5px solid var(--rule-strong); color: var(--ink-faint); background: var(--surface);
+}
+.step.is-done .step-mark { background: var(--ok); border-color: var(--ok); color: #fff; }
+.step.is-done .step-body { color: var(--ink-muted); }
+.step.is-now .step-mark { background: var(--accent); border-color: var(--accent); color: #fff; box-shadow: 0 0 0 3px var(--accent-wash); }
+.step.is-later .step-body { color: var(--ink-faint); }
+.step-body { font-size: 13px; min-width: 0; }
+.step-now {
+  margin-left: 8px; padding: 1px 8px; border-radius: 999px; font: 600 10.5px/16px var(--sans);
+  letter-spacing: .06em; text-transform: uppercase; background: var(--accent-wash); color: var(--accent-ink);
+}
+
+/* --- faculty dashboard: hat rows ------------------------------------------ */
+.hat-row { padding: var(--s2) 0; border-bottom: 1px solid var(--rule); }
+.hat-row:first-child { padding-top: 0; }
+.hat-row:last-child { border-bottom: 0; }
+.btn.small { padding: 4px 12px; font-size: 12.5px; }
+.queue-clear { margin: 0 0 var(--s5); max-width: 72ch; }
+.records-search { display: flex; gap: var(--s1); max-width: 560px; }
+.records-search input { flex: 1 1 auto; }
+.hat-counts { display: flex; flex-wrap: wrap; gap: var(--s1) var(--s4); margin: 0 0 var(--s2); }
+.hat-counts > div { display: flex; align-items: baseline; gap: var(--s1); }
+.hat-counts dt { font-size: 12.5px; color: var(--ink-faint); }
+.hat-counts dd { margin: 0; font-size: 13px; color: var(--ink-faint); }
+.hat-counts .has-items dt { color: var(--ink); }
+.hat-counts .has-items dd { color: var(--accent-ink); font-weight: 600; }
+@media (max-width: 860px) { .prog-long { display: none; } }
+.panel-facts { margin: var(--s1) 0 0; font-size: 12.5px; }

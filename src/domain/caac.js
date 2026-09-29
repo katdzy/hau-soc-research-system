@@ -21,17 +21,21 @@
 // CAAC Inspector renders. The service layer calls `authorize()` before every
 // write — the local stand-in for the Cloud Function check.
 
-import { GLOBAL_ROLES as G, PROJECT_ROLES as P, PANEL_ROLES, DOC_TYPES } from './constants.js'
-import { PHASES, stageIndex, stageLabel, phaseStages } from './stages.js'
+import { GLOBAL_ROLES as G, PROJECT_ROLES as P, PANEL_ROLES, DOC_TYPES, DOC_STATUS, COURSES } from './constants.js'
+import { PHASES, stageIndex, stageLabel, phaseStages, uroReturnOutstanding } from './stages.js'
+import { FLAGS } from './flags.js'
 
 export const CAPABILITIES = {
   // Project scope
   'project.view': 'Open the project workspace',
+  'document.read': 'Read the project\u2019s submitted documents',
+  'annotation.viewReleased': 'Read private panel notes once the verdict releases them',
   'document.history': 'See superseded versions, not only the latest',
   'document.submit': 'Upload a new immutable document version',
   'document.annotate': 'Add non-destructive annotations to a version',
   'annotation.private': 'Annotations stay private until the verdict is recorded',
   'review.decide': 'Issue a review decision on a submitted version',
+  'review.return': 'Return a submitted version for revision (no approval)',
   'ai.view': 'Read the AI-generated manuscript summary',
   'roster.manage': 'Add or remove students in the group',
   'roster.endorse': 'Forward the block roster to the Program Chair/Coordinator',
@@ -43,15 +47,20 @@ export const CAPABILITIES = {
   'instructor2.assign': 'Assign the Capstone 2 instructor',
   'defense.schedule': 'Create and publish a defense schedule',
   'verdict.record': 'Record the official verdict on FM-AAC-SOC-2004',
+  'verdict.correct': 'Correct a verdict just recorded, before anyone acts on it',
   'revision.close': 'Close the revision period and advance the project',
+  'revision.verify': 'Verify revisions against the panel’s requirements and sign FM-AAC-SOC-2004',
   'weeklylog.submit': 'Submit a weekly accomplishment log',
   'weeklylog.sign': 'Approve, return and sign weekly logs (FM-AAC-SOC-2003)',
   'weeklylog.export': 'Export FM-AAC-SOC-2003 logs',
   'milestone.confirm': 'Confirm Capstone 2 milestones',
+  'readiness.confirm': 'Confirm, with the Adviser, that the group is ready for final defense',
+  'requirements.confirm': 'Confirm the post-defense course requirements',
   'finaldefense.recommend': 'Submit the Capstone Recommendation Form (FM-AAC-SOC-2005)',
   'finaldefense.endorse': 'Endorse the project for final defense scheduling',
   'clearance.endorse': 'Endorse the cleared project and sign the Approval Sheet',
   'uro.verify': 'Verify the certificates and sign for the URO',
+  'uro.return': 'Return the certificates to the group with remarks',
   'final.approve': 'Give final approval by signing the Approval Sheet',
   // Institution scope
   'group.create': 'Create project groups for a Capstone 1 block',
@@ -59,7 +68,8 @@ export const CAPABILITIES = {
   'records.search': 'Search and filter the records-table archive',
   'records.manage': 'Manage the thesis and capstone archive',
   'admin.accounts': 'Manage accounts and Global Role assignments',
-  'admin.caac': 'Configure and audit the CAAC tagging framework',
+  'admin.caac': 'Configure and audit the CAAC tagging framework, including permission overrides',
+  'settings.manage': 'Change global settings such as the revision countdown length',
   'audit.view': 'Read the system activity log',
 }
 
@@ -101,11 +111,11 @@ const notTheAdviser = cond(
 )
 const acceptsUploads = cond(
   'the current stage accepts submissions',
-  env => allowedDocTypes(env.stage).length > 0,
+  env => allowedDocTypes(env.stage, env.bundle).length > 0,
 )
 const teachesBlock = cond(
-  'you teach a Capstone 1 block this term',
-  env => env.sections.some(s => s.course === 'Capstone 1'),
+  'you teach a Capstone 1 section this term',
+  env => env.sections.some(s => s.course === COURSES.C1),
 )
 
 // --- Policies ----------------------------------------------------------------
@@ -117,81 +127,140 @@ const policy = (dimension, role, cap, when) => ({ dimension, role, cap, when })
 const g = (role, cap, when) => policy(GLOBAL, role, cap, when)
 const p = (role, cap, when) => policy(PROJECT, role, cap, when)
 
+// Opening a project and reading its documents go together for every role
+// except the System Administrator, who may open a project record for
+// configuration and audit but never reads a manuscript (§2.2, T20).
+const viewAndRead = (make, role, when) => [make(role, 'project.view', when), make(role, 'document.read', when)]
+
+// OQ#2 (flag AI_SUMMARY_AUDIENCE) — feature not built yet (R12), guard only.
+const inAiAudience = (role) => FLAGS.AI_SUMMARY_AUDIENCE.includes(role)
+
 const DEFENSE_STAGES = ['PROPOSAL_DEFENSE_SCHEDULING', 'PROPOSAL_DEFENSE', 'FINAL_DEFENSE_SCHEDULING', 'FINAL_DEFENSE']
 const ADVISER_REVIEW_STAGES = ['PROPOSAL_DEVELOPMENT', 'PROPOSAL_REVISION', 'IMPLEMENTATION', 'FINAL_REVISION']
 
+// Program Chair/Coordinator steps. Their stages are also the only stages at
+// which the PC opens a project (NEW-11, flag PC_PROGRAM_VISIBILITY); outside
+// them the PC sees program-level counts and status through Reports.
+const PC_STEPS = [
+  ['adviser.assign', ['ADVISER_ASSIGNMENT']],
+  ['panel.assign', ['PANEL_ASSIGNMENT', 'FINAL_DEFENSE_ENDORSEMENT']],
+  ...(FLAGS.PROPOSAL_DEFENSE_SCHEDULER === G.COORDINATOR ? [['defense.schedule', ['PROPOSAL_DEFENSE_SCHEDULING']]] : []),
+  ...(FLAGS.INSTRUCTOR_2_ASSIGNER === G.COORDINATOR ? [['instructor2.assign', ['PROPOSAL_REVISION', 'FINAL_DEFENSE_ENDORSEMENT']]] : []),
+  ['finaldefense.endorse', ['FINAL_DEFENSE_ENDORSEMENT']],
+  ['clearance.endorse', ['CLEARANCE']],
+]
+export const PC_STEP_STAGES = [...new Set(PC_STEPS.flatMap(([, stages]) => stages))]
+const pcStepActive = cond(
+  'one of your Program Chair/Coordinator steps is active',
+  env => PC_STEP_STAGES.includes(env.stage),
+)
+const pcView = FLAGS.PC_PROGRAM_VISIBILITY === 'full' ? from('ADVISER_ASSIGNMENT') : pcStepActive
+
+const i1View = FLAGS.I1_ACCESS_AFTER_ROUTING === 'read-only'
+  ? always
+  : during(PHASES.IDEATION, PHASES.PROPOSAL)
+
+const noSelfApproval = FLAGS.BLOCK_SELF_APPROVAL ? notTheAdviser : always
+
+const adviserAppointed = cond(
+  'the Dean and Associate Dean have approved your appointment',
+  env => stageIndex(env.stage) > stageIndex('ADVISER_APPROVAL'),
+)
+
 export const PROJECT_POLICIES = [
   // Student — a Global Role, but every permission depends on group membership.
-  g(G.STUDENT, 'project.view', member),
+  ...viewAndRead(g, G.STUDENT, member),
   g(G.STUDENT, 'document.history', member),
   g(G.STUDENT, 'document.submit', all(member, acceptsUploads)),
   g(G.STUDENT, 'weeklylog.submit', all(member, at('IMPLEMENTATION'))),
   g(G.STUDENT, 'weeklylog.export', all(member, from('IMPLEMENTATION'))),
-  g(G.STUDENT, 'ai.view', member),
+  ...(inAiAudience(G.STUDENT) ? [g(G.STUDENT, 'ai.view', member)] : []),
+  // OQ#3 (flag PANEL_NOTES_RELEASE): released panel notes go to the students.
+  ...(FLAGS.PANEL_NOTES_RELEASE === 'students-on-verdict' ? [g(G.STUDENT, 'annotation.viewReleased', member)] : []),
 
-  // Instructor 1 — Thesis/Capstone 1 only.
-  p(P.INSTRUCTOR_1, 'project.view', during(PHASES.IDEATION, PHASES.PROPOSAL)),
-  p(P.INSTRUCTOR_1, 'document.history', during(PHASES.IDEATION, PHASES.PROPOSAL)),
+  // Instructor 1 — Thesis/Capstone 1 only (NEW-6, flag I1_ACCESS_AFTER_ROUTING).
+  ...viewAndRead(p, P.INSTRUCTOR_1, i1View),
+  p(P.INSTRUCTOR_1, 'document.history', i1View),
   p(P.INSTRUCTOR_1, 'roster.manage', at('GROUP_FORMATION')),
   p(P.INSTRUCTOR_1, 'roster.endorse', at('GROUP_FORMATION')),
   p(P.INSTRUCTOR_1, 'document.annotate', at('TOPIC_PROPOSAL', 'PROPOSAL_DEVELOPMENT')),
   p(P.INSTRUCTOR_1, 'review.decide', at('TOPIC_PROPOSAL')),
+  // S4.2 — Instructor 1 may return drafts; approving them is the Adviser's.
+  p(P.INSTRUCTOR_1, 'review.return', at('PROPOSAL_DEVELOPMENT')),
   p(P.INSTRUCTOR_1, 'topic.register', at('TOPIC_PROPOSAL')),
   p(P.INSTRUCTOR_1, 'proposal.approveForDefense', at('PROPOSAL_DEVELOPMENT')),
   p(P.INSTRUCTOR_1, 'revision.close', at('PROPOSAL_REVISION')),
+  ...(inAiAudience(P.INSTRUCTOR_1) ? [p(P.INSTRUCTOR_1, 'ai.view', i1View)] : []),
 
   // Instructor 2 — Thesis/Capstone 2 and post-defense requirements. Never annotates.
-  p(P.INSTRUCTOR_2, 'project.view', during(PHASES.IMPLEMENTATION, PHASES.CLEARANCE)),
+  ...viewAndRead(p, P.INSTRUCTOR_2, during(PHASES.IMPLEMENTATION, PHASES.CLEARANCE)),
   p(P.INSTRUCTOR_2, 'document.history', during(PHASES.IMPLEMENTATION, PHASES.CLEARANCE)),
   p(P.INSTRUCTOR_2, 'milestone.confirm', at('IMPLEMENTATION')),
+  // S6.7 readiness check (NEW-43) and S8.5 post-defense requirements (NEW-44).
+  ...(FLAGS.I2_READINESS_CHECK === 'own-step' ? [p(P.INSTRUCTOR_2, 'readiness.confirm', at('IMPLEMENTATION'))] : []),
+  p(P.INSTRUCTOR_2, 'requirements.confirm', at(...FLAGS.POST_DEFENSE_REQUIREMENTS_STAGES)),
   p(P.INSTRUCTOR_2, 'defense.schedule', at('FINAL_DEFENSE_SCHEDULING')),
-  p(P.INSTRUCTOR_2, 'revision.close', at('FINAL_REVISION')),
+  ...(inAiAudience(P.INSTRUCTOR_2) ? [p(P.INSTRUCTOR_2, 'ai.view', during(PHASES.IMPLEMENTATION, PHASES.CLEARANCE))] : []),
 
-  // Adviser — the whole life cycle.
-  p(P.ADVISER, 'project.view', always),
-  p(P.ADVISER, 'document.history', always),
-  p(P.ADVISER, 'ai.view', always),
+  // NEW-2 (flag PROPOSAL_DEFENSE_SCHEDULER) when it is not the Program Chair.
+  ...([P.INSTRUCTOR_1, P.INSTRUCTOR_2].includes(FLAGS.PROPOSAL_DEFENSE_SCHEDULER)
+    ? [p(FLAGS.PROPOSAL_DEFENSE_SCHEDULER, 'defense.schedule', at('PROPOSAL_DEFENSE_SCHEDULING'))] : []),
+
+  // Adviser — from the approved appointment (S2.2: "Adviser: group appears
+  // under Advising") to the end of the life cycle. A proposed Adviser holds
+  // the assignment row but no access while the Dean and AD decide.
+  ...viewAndRead(p, P.ADVISER, adviserAppointed),
+  p(P.ADVISER, 'document.history', adviserAppointed),
+  ...(inAiAudience(P.ADVISER) ? [p(P.ADVISER, 'ai.view', adviserAppointed)] : []),
   p(P.ADVISER, 'document.annotate', at('TOPIC_PROPOSAL', ...ADVISER_REVIEW_STAGES)),
   p(P.ADVISER, 'review.decide', at(...ADVISER_REVIEW_STAGES)),
-  p(P.ADVISER, 'weeklylog.sign', at('IMPLEMENTATION')),
+  // S3.2 / S3.6 — the Adviser may also return topics and the concept paper;
+  // approving them is Instructor 1's (§3 "I1 is the gate, Adviser reviews").
+  p(P.ADVISER, 'review.return', at('TOPIC_PROPOSAL')),
   p(P.ADVISER, 'weeklylog.export', from('IMPLEMENTATION')),
   p(P.ADVISER, 'finaldefense.recommend', at('IMPLEMENTATION')),
 
+  p(P.ADVISER, 'revision.verify', at('PROPOSAL_REVISION', 'FINAL_REVISION')),
+
+  // Weekly log signer (OQ#7, flag WEEKLY_LOG_SIGNER).
+  p(FLAGS.WEEKLY_LOG_SIGNER, 'weeklylog.sign', at('IMPLEMENTATION')),
+
   // Panel — access opens at Panel Assignment; latest version only (no history).
   ...PANEL_ROLES.flatMap(role => [
-    p(role, 'project.view', from('PANEL_ASSIGNMENT')),
-    p(role, 'ai.view', from('PANEL_ASSIGNMENT')),
+    ...viewAndRead(p, role, from('PANEL_ASSIGNMENT')),
+    ...(inAiAudience(role) ? [p(role, 'ai.view', from('PANEL_ASSIGNMENT'))] : []),
     p(role, 'document.annotate', at(...DEFENSE_STAGES)),
     p(role, 'annotation.private', at(...DEFENSE_STAGES)),
+    p(role, 'revision.verify', at('PROPOSAL_REVISION', 'FINAL_REVISION')),
   ]),
   p(P.PANEL_CHAIR, 'verdict.record', at('PROPOSAL_DEFENSE', 'FINAL_DEFENSE')),
+  // NEW-42: every verdict leads to a revision stage, where the Chair may correct it.
+  p(P.PANEL_CHAIR, 'verdict.correct', at('PROPOSAL_REVISION', 'FINAL_REVISION')),
 
   // Program Chair/Coordinator — only for projects in their programs, and only
-  // once Instructor 1 has forwarded the roster.
-  g(G.COORDINATOR, 'project.view', all(inScope, from('ADVISER_ASSIGNMENT'))),
-  g(G.COORDINATOR, 'document.history', all(inScope, from('ADVISER_ASSIGNMENT'))),
-  g(G.COORDINATOR, 'adviser.assign', all(inScope, at('ADVISER_ASSIGNMENT'))),
-  g(G.COORDINATOR, 'panel.assign', all(inScope, at('PANEL_ASSIGNMENT', 'FINAL_DEFENSE_ENDORSEMENT'))),
-  g(G.COORDINATOR, 'defense.schedule', all(inScope, at('PROPOSAL_DEFENSE_SCHEDULING'))),
-  g(G.COORDINATOR, 'instructor2.assign', all(inScope, at('PROPOSAL_REVISION', 'IMPLEMENTATION', 'FINAL_DEFENSE_ENDORSEMENT'))),
-  g(G.COORDINATOR, 'finaldefense.endorse', all(inScope, at('FINAL_DEFENSE_ENDORSEMENT'))),
-  g(G.COORDINATOR, 'clearance.endorse', all(inScope, at('CLEARANCE'))),
+  // while one of their steps is active (NEW-11).
+  ...viewAndRead(g, G.COORDINATOR, all(inScope, pcView)),
+  g(G.COORDINATOR, 'document.history', all(inScope, pcView)),
+  ...PC_STEPS.map(([cap, stages]) => g(G.COORDINATOR, cap, all(inScope, at(...stages)))),
 
   // Dean and Associate Dean — progressive visibility: only while a stage
   // involves them, plus the archive.
   ...[G.DEAN, G.ASSOCIATE_DEAN].flatMap(role => [
-    g(role, 'project.view', at('ADVISER_APPROVAL', 'FINAL_APPROVAL', 'ARCHIVED')),
+    ...viewAndRead(g, role, at('ADVISER_APPROVAL', 'FINAL_APPROVAL', 'ARCHIVED')),
     g(role, 'document.history', at('FINAL_APPROVAL', 'ARCHIVED')),
-    g(role, 'adviser.approve', all(at('ADVISER_APPROVAL'), notTheAdviser)),
+    g(role, 'adviser.approve', all(at('ADVISER_APPROVAL'), noSelfApproval)),
     g(role, 'final.approve', at('FINAL_APPROVAL')),
   ]),
 
   // University Research Office
-  g(G.URO, 'project.view', at('URO_VERIFICATION')),
+  ...viewAndRead(g, G.URO, at('URO_VERIFICATION')),
   g(G.URO, 'uro.verify', at('URO_VERIFICATION')),
+  // NEW-7 (flag URO_RETURN_PATH): return the certificates to the group (NEW-45).
+  ...(FLAGS.URO_RETURN_PATH ? [g(G.URO, 'uro.return', at('URO_VERIFICATION'))] : []),
 
-  // System Administrator — no manuscript access while a project is active.
-  g(G.ADMIN, 'project.view', at('ARCHIVED')),
+  // System Administrator — opens the project record for configuration and
+  // audit (§2.2), never its documents: no document.read, no annotate (T20).
+  g(G.ADMIN, 'project.view', always),
 ]
 
 export const INSTITUTION_POLICIES = [
@@ -205,6 +274,7 @@ export const INSTITUTION_POLICIES = [
   g(G.ADMIN, 'records.manage', always),
   g(G.ADMIN, 'admin.accounts', always),
   g(G.ADMIN, 'admin.caac', always),
+  g(G.ADMIN, 'settings.manage', always),
   g(G.ADMIN, 'audit.view', always),
 ]
 
@@ -214,13 +284,37 @@ export const caacTag = (role) => '@' + String(role).replace(/[^A-Za-z0-9]/g, '')
 
 export const globalRolesOf = (user) => user?.globalRoles ?? []
 
-function evaluate(policies, held, env) {
+/** Only active, verified accounts hold any grant (S0.3, flag ACCOUNT_ACTIVATION). */
+export const isActiveAccount = (user) =>
+  Boolean(user) && user.status === 'Active' && user.emailVerified !== false
+
+/**
+ * Permission overrides (flag PERMISSION_OVERRIDES = 'deny-only'): the System
+ * Administrator's active revocations for this user. `projectId: null` applies
+ * everywhere. An override can only take a capability away — never add one.
+ */
+export function overridesFor(user, rows, projectId = null) {
+  if (FLAGS.PERMISSION_OVERRIDES !== 'deny-only' || !user) return []
+  return (rows ?? []).filter(o =>
+    o.userId === user.id && o.effect === 'deny' && !o.liftedAt &&
+    (o.projectId == null || o.projectId === projectId))
+}
+
+/** The sentence a denial shows when an override, not the policy, is the reason. */
+export const overrideReason = (o) =>
+  `Revoked for your account by a System Administrator override${o.reason ? ` (“${o.reason}”)` : ''}.`
+
+function evaluate(policies, held, env, overrides = []) {
+  const revoked = new Map(overrides.map(o => [o.capability, o]))
   const grants = new Map()
   const active = []
   const dormant = []
   for (const pol of policies) {
     if (!held.has(pol.role)) continue
-    if (pol.when.test(env)) {
+    if (pol.when.test(env) && revoked.has(pol.cap)) {
+      const o = revoked.get(pol.cap)
+      dormant.push({ cap: pol.cap, role: pol.role, dimension: pol.dimension, unmet: [overrideReason(o)], override: o })
+    } else if (pol.when.test(env)) {
       const grant = { cap: pol.cap, role: pol.role, dimension: pol.dimension, condition: pol.when.label }
       active.push(grant)
       if (!grants.has(pol.cap)) grants.set(pol.cap, grant)
@@ -232,13 +326,23 @@ function evaluate(policies, held, env) {
   return {
     grants,
     active,
-    dormant: dormant.filter(d => {
-      const key = `${d.cap}|${d.role}`
-      if (grants.has(d.cap) || seen.has(key)) return false
-      seen.add(key)
-      return true
-    }),
+    // An override-revoked entry sorts first, so a denial names the override.
+    dormant: dormant
+      .sort((a, b) => Number(Boolean(b.override)) - Number(Boolean(a.override)))
+      .filter(d => {
+        const key = `${d.cap}|${d.role}`
+        if (grants.has(d.cap) || seen.has(key)) return false
+        seen.add(key)
+        return true
+      }),
   }
+}
+
+/** Why a dormant capability is not granted, in one sentence. */
+export function denialOf(d, stage) {
+  if (d.override) return overrideReason(d.override)
+  return `Not permitted right now. Your ${d.role} role allows this only if: ${d.unmet.join('; ')}.` +
+    (stage ? ` The project is at ${stageLabel(stage)}.` : '')
 }
 
 /** One user's capabilities on one project at its current stage. */
@@ -253,8 +357,9 @@ export function resolveContext(user, b) {
     .map(a => a.roleType))]
 
   const env = { user, project: b.project, stage: b.project.currentStage, isMember, projectRoles, bundle: b }
-  const held = new Set([...globalRoles, ...projectRoles])
-  const { grants, active, dormant } = evaluate(PROJECT_POLICIES, held, env)
+  const held = new Set(isActiveAccount(user) ? [...globalRoles, ...projectRoles] : [])
+  const overrides = overridesFor(user, b.overrides, b.project.id)
+  const { grants, active, dormant } = evaluate(PROJECT_POLICIES, held, env, overrides)
 
   return { user, globalRoles, projectRoles, isMember, stage: env.stage, grants, active, dormant }
 }
@@ -264,9 +369,10 @@ export function resolveInstitution(user, snap) {
   if (!user) return { user, globalRoles: [], grants: new Map(), active: [], dormant: [], sections: [] }
   const globalRoles = globalRolesOf(user)
   const sections = (snap?.sections ?? []).filter(s => s.instructorId === user.id)
-  const held = new Set(globalRoles)
-  if (sections.some(s => s.course === 'Capstone 1')) held.add(P.INSTRUCTOR_1)
-  const { grants, active, dormant } = evaluate(INSTITUTION_POLICIES, held, { user, sections })
+  const held = new Set(isActiveAccount(user) ? globalRoles : [])
+  if (isActiveAccount(user) && sections.some(s => s.course === COURSES.C1)) held.add(P.INSTRUCTOR_1)
+  const overrides = overridesFor(user, (snap?.permissionOverrides ?? []).filter(o => o.projectId == null))
+  const { grants, active, dormant } = evaluate(INSTITUTION_POLICIES, held, { user, sections }, overrides)
   return { user, globalRoles, sections, grants, active, dormant }
 }
 
@@ -280,8 +386,8 @@ export function authorize(ctx, cap) {
   if (can(ctx, cap)) return
   const d = ctx?.dormant?.find(x => x.cap === cap)
   throw new AccessDenied(d
-    ? `Not permitted right now. Your ${d.role} role grants "${cap}" only if: ${d.unmet.join('; ')}.`
-    : `Not permitted: no role you hold grants "${cap}" on this project.`)
+    ? denialOf(d)
+    : `Not permitted: no role you hold grants "${cap}".`)
 }
 
 /**
@@ -295,27 +401,58 @@ export function projectAccess(user, b) {
   const d = ctx.dormant.find(x => x.cap === 'project.view')
   return {
     visible: false,
-    reason: d
-      ? `Your ${d.role} role opens this project only if: ${d.unmet.join('; ')}. It is now at ${stageLabel(b.project.currentStage)}.`
-      : 'None of your roles gives you access to this project.',
+    reason: d?.override ? overrideReason(d.override)
+      : d ? `Your ${d.role} role opens this project only if: ${d.unmet.join('; ')}. It is now at ${stageLabel(b.project.currentStage)}.`
+        : 'None of your roles gives you access to this project.',
   }
 }
 
-/** Which document types the current stage accepts. */
-export function allowedDocTypes(stage) {
+/**
+ * Which document types the current stage accepts (§3 student steps):
+ * S3.1/S3.5 topics and concept paper · S4.1 drafts · S5.3 complete proposal
+ * manuscript + video link once the defense is scheduled · S5.7/S8.1 revised
+ * manuscript · S6.3/S6.6 drafts and deployment information · S7.4 final
+ * manuscript + video link once scheduled · S9.1/S9.2 certificates, and at
+ * URO Verification the certificates the URO returned (pass the bundle `b`).
+ */
+export function allowedDocTypes(stage, b = null) {
   switch (stage) {
     case 'TOPIC_PROPOSAL': return [DOC_TYPES.TOPIC_PROPOSAL, DOC_TYPES.CONCEPT_PAPER]
     case 'PROPOSAL_DEVELOPMENT': return [DOC_TYPES.PROPOSAL_MANUSCRIPT]
+    case 'PROPOSAL_DEFENSE': return [DOC_TYPES.PROPOSAL_MANUSCRIPT, DOC_TYPES.PRESENTATION_VIDEO]
     case 'PROPOSAL_REVISION':
     case 'FINAL_REVISION': return [DOC_TYPES.REVISED_MANUSCRIPT]
-    case 'IMPLEMENTATION': return [DOC_TYPES.FINAL_MANUSCRIPT, DOC_TYPES.DEPLOYMENT_INFO, DOC_TYPES.PRESENTATION_VIDEO]
-    case 'FINAL_DEFENSE_ENDORSEMENT':
-    case 'FINAL_DEFENSE_SCHEDULING': return [DOC_TYPES.PRESENTATION_VIDEO]
+    case 'IMPLEMENTATION': return [DOC_TYPES.FINAL_MANUSCRIPT, DOC_TYPES.DEPLOYMENT_INFO]
+    case 'FINAL_DEFENSE': return [DOC_TYPES.FINAL_MANUSCRIPT, DOC_TYPES.PRESENTATION_VIDEO]
     case 'CLEARANCE': return [
       DOC_TYPES.FINAL_MANUSCRIPT, DOC_TYPES.EDITORS_CERTIFICATE, DOC_TYPES.PLAGIARISM_CERTIFICATE,
     ]
+    // S9.4 return path — only the certificates the URO sent back, until replaced.
+    case 'URO_VERIFICATION': return b ? uroReturnOutstanding(b) : []
     default: return []
   }
+}
+
+const latestOfType = (b, docType) =>
+  b.documents.filter(d => d.docType === docType)
+    .sort((x, y) => y.versionNumber - x.versionNumber)[0] ?? null
+
+/**
+ * Why a type the stage accepts cannot be submitted yet, or null. Topics close
+ * once Instructor 1 approves one (S3.3); the concept paper waits until that
+ * topic is registered as the title (S3.5 precondition S3.4).
+ */
+export function uploadBlocker(b, docType) {
+  const topicApproved = b.documents.some(d => d.docType === DOC_TYPES.TOPIC_PROPOSAL && d.status === DOC_STATUS.APPROVED)
+  if (docType === DOC_TYPES.TOPIC_PROPOSAL && topicApproved) {
+    return 'Instructor 1 has already approved one of your topics.'
+  }
+  if (docType === DOC_TYPES.CONCEPT_PAPER) {
+    if (!topicApproved) return 'Instructor 1 has to approve one of your proposed topics first.'
+    if (!b.project.topicRegisteredAt) return 'Instructor 1 has to register your approved topic as the title first.'
+    if (latestOfType(b, DOC_TYPES.CONCEPT_PAPER)?.status === DOC_STATUS.APPROVED) return 'Your concept paper is already approved.'
+  }
+  return null
 }
 
 /** Short description of someone's standing, e.g. "Dean · Adviser on 1 project". */

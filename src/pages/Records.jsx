@@ -1,8 +1,8 @@
 import { useMemo, useState } from 'react'
-import { Link } from 'react-router-dom'
+import { Link, useSearchParams } from 'react-router-dom'
 import { useApp } from '../state/AppContext.jsx'
 import { resolveInstitution, can } from '../domain/caac.js'
-import { Section, Empty, Badge, Restricted, fmtDate } from '../components/ui.jsx'
+import { Section, Empty, Badge, Restricted, fmtDate, downloadCsv } from '../components/ui.jsx'
 import { PROGRAMS, PROJECT_ROLES as P } from '../domain/constants.js'
 
 // The records-table archive: cleared projects, searchable and filterable by
@@ -12,7 +12,8 @@ import { PROGRAMS, PROJECT_ROLES as P } from '../domain/constants.js'
 export default function Records() {
   const { snap, me } = useApp()
   const inst = resolveInstitution(me, snap)
-  const [query, setQuery] = useState('')
+  const [params] = useSearchParams()
+  const [query, setQuery] = useState(() => params.get('q') ?? '')
   const [program, setProgram] = useState('')
   const [term, setTerm] = useState('')
 
@@ -31,6 +32,13 @@ export default function Records() {
     (!program || p.program === program) &&
     (!term || p.term === term) &&
     (!q || [p.title, p.researchArea, adviserOf(p), ...membersOf(p)].some(v => v?.toLowerCase().includes(q))))
+
+  // The record, never its manuscript: no abstract, document or annotation text.
+  const exportRows = () => downloadCsv(
+    'records-archive.csv',
+    ['Project', 'Program', 'Research area', 'Term', 'Adviser', 'Students', 'Archived', 'Result'],
+    rows.map(p => [p.title, p.program, p.researchArea, p.term, adviserOf(p), membersOf(p).join('; '), fmtDate(p.archivedAt), p.archiveResult]),
+  )
 
   return (
     <div className="page">
@@ -56,7 +64,10 @@ export default function Records() {
         </select>
       </div>
 
-      <Section title={`${rows.length} of ${archived.length} records`}>
+      <Section
+        title={`${rows.length} of ${archived.length} records`}
+        aside={rows.length > 0 && <button className="small" onClick={exportRows}>Export CSV</button>}
+      >
         {rows.length === 0 && <Empty>No archived projects match.</Empty>}
         {rows.length > 0 && (
           <div className="table-scroll"><table>

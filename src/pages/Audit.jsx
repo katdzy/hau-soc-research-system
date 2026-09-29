@@ -9,7 +9,8 @@ export default function Audit() {
   if (!can(resolveInstitution(me, snap), 'audit.view')) {
     return <Restricted>The system activity log is read by the System Administrator.</Restricted>
   }
-  const nameOf = (id) => (snap.users ?? []).find(u => u.id === id)?.name ?? id
+  const nameOf = (id) => id === 'system' ? 'System' : (snap.users ?? []).find(u => u.id === id)?.name ?? id
+  const show = (v) => (v == null ? '—' : typeof v === 'object' ? JSON.stringify(v) : String(v))
   const titleOf = (id) => {
     const t = (snap.projects ?? []).find(p => p.id === id)?.title
     if (!t) return '—'
@@ -47,8 +48,8 @@ export default function Audit() {
             <thead>
               <tr>
                 <th className="tight">When</th><th className="tight">Action</th>
-                <th className="tight">Actor</th><th className="tight">Project</th>
-                <th className="tight">Entity</th><th>Detail</th>
+                <th className="tight">Actor · role hat</th><th className="tight">Project</th>
+                <th className="tight">Entity</th><th>Before → after</th>
               </tr>
             </thead>
             <tbody>
@@ -56,11 +57,12 @@ export default function Audit() {
                 <tr key={l.id}>
                   <td className="tight mono faint" style={{ fontSize: 11.5 }}>{fmtDateTime(l.at)}</td>
                   <td className="tight"><Badge>{l.action}</Badge></td>
-                  <td className="tight small">{nameOf(l.actorId)}</td>
+                  <td className="tight small">{nameOf(l.actorId)}<div className="faint">{l.hat ?? '—'}</div></td>
                   <td className="tight small muted">{l.projectId ? titleOf(l.projectId) : '—'}</td>
                   <td className="tight mono faint" style={{ fontSize: 11.5 }}>{l.entityType}/{l.entityId}</td>
                   <td className="mono faint" style={{ fontSize: 11.5, whiteSpace: 'nowrap' }}>
-                    {detail(l.meta) || '—'}
+                    {show(l.before)} → {show(l.after)}
+                    {detail(l.meta) && <div>{detail(l.meta)}</div>}
                   </td>
                 </tr>
               ))}

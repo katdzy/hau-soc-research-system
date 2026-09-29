@@ -1,10 +1,12 @@
-import { useState } from 'react'
-import { Link, useParams } from 'react-router-dom'
+import { useEffect, useRef, useState } from 'react'
+import { Link, useNavigate, useParams, useSearchParams } from 'react-router-dom'
 import { useApp } from '../state/AppContext.jsx'
 import { bundle } from '../services/core.js'
-import { resolveContext, projectAccess } from '../domain/caac.js'
-import { stageByKey } from '../domain/stages.js'
-import { Badge, Countdown, Empty } from '../components/ui.jsx'
+import { resolveContext, can } from '../domain/caac.js'
+import { viewBundle } from '../domain/guard.js'
+import { stageByKey, sectionNow } from '../domain/stages.js'
+import { programCode } from '../domain/constants.js'
+import { Badge, Countdown } from '../components/ui.jsx'
 import StageTimeline from '../components/StageTimeline.jsx'
 import CaacInspector from '../components/CaacInspector.jsx'
 import OverviewPanel from '../components/panels/OverviewPanel.jsx'
@@ -26,30 +28,56 @@ const TABS = [
 export default function ProjectWorkspace() {
   const { id } = useParams()
   const { snap, me } = useApp()
-  const [tab, setTab] = useState('overview')
+  const [params] = useSearchParams()
+  // `?tab=` lets a worklist item open the tab where its work is done.
+  const [tab, setTab] = useState(() => (TABS.some(t => t.key === params.get('tab')) ? params.get('tab') : 'overview'))
 
-  const b = bundle(snap, id)
-  if (!b) return <div className="page"><Empty>That project no longer exists.</Empty></div>
+  const raw = bundle(snap, id)
+  // Everything below renders from the guard-filtered bundle, never the raw one.
+  const b = viewBundle(me, raw)
 
-  const ctx = resolveContext(me, b)
-  const access = projectAccess(me, b)
-  const stage = stageByKey(b.project.currentStage)
+  // Progressive visibility: completing your own step can move the project to a
+  // stage that no longer involves you (the Program Chair routing an adviser to
+  // the Dean). Instead of a dead end, return to the worklist and say where it went.
+  const navigate = useNavigate()
+  const seen = useRef(null)
+  // Only for the same signed-in user: a persona switch must not reveal the title.
+  if (b) seen.current = { id, title: b.project.title, userId: me.id }
+  useEffect(() => {
+    if (!b && seen.current?.id === id && seen.current?.userId === me.id && raw) {
+      navigate('/', {
+        replace: true,
+        state: {
+          forUserId: me.id,
+          notice: `“${seen.current.title}” moved to ${stageByKey(raw.project.currentStage)?.label}. That step is not yours, so it has left your worklist.`,
+        },
+      })
+    }
+  }, [b, id, raw, navigate, me.id])
 
-  if (!access.visible) {
+  // A missing project and one you may not open look the same, so a pasted URL
+  // reveals neither the title nor the stage.
+  if (!b) {
     return (
       <div className="page">
         <header className="page-head">
-          <div className="label">Access not granted</div>
-          <h1>{b.project.title}</h1>
-          <p className="lede">{access.reason}</p>
+          <div className="label">Not available</div>
+          <h1>This project is not available to you</h1>
+          <p className="lede">
+            Projects open only to their group, the faculty assigned to them, and the offices whose
+            step is active at the project’s current stage.
+          </p>
         </header>
-        <div className="split">
-          <Link className="btn" to="/" style={{ justifySelf: 'start' }}>Back to worklist</Link>
-          <CaacInspector ctx={ctx} project={b.project} />
-        </div>
+        <Link className="btn" to="/">Back to worklist</Link>
       </div>
     )
   }
+
+  const ctx = resolveContext(me, raw)
+  const stage = stageByKey(b.project.currentStage)
+  // No document access (the System Administrator) → the record and its history only.
+  const tabs = can(ctx, 'document.read') ? TABS : TABS.filter(t => ['overview', 'history'].includes(t.key))
+  const shown = tabs.some(t => t.key === tab) ? tab : 'overview'
 
   return (
     <div className="page">
@@ -58,16 +86,18 @@ export default function ProjectWorkspace() {
         <h1>{b.project.title}</h1>
         <div className="inline" style={{ marginTop: 8 }}>
           <Badge tone="accent">{stage?.label}</Badge>
-          <Badge>{b.project.program}</Badge>
-          <span className="faint small">{b.project.block} · {b.project.term}</span>
+          <span title={b.project.program}><Badge>{programCode(b.project.program)}</Badge></span>
+          <span className="faint small">{(({ section, course, term }) => `${section} · ${course} · ${term}`)(sectionNow(b.project))}</span>
           <Countdown deadline={b.project.revisionDeadline} />
         </div>
         {stage && <p className="lede" style={{ marginTop: 16 }}>{stage.blurb}</p>}
       </header>
 
+      <StageTimeline current={b.project.currentStage} history={b.history} />
+
       <div className="tabs" role="tablist" aria-label="Project workspace">
-        {TABS.map(t => (
-          <button key={t.key} role="tab" aria-selected={tab === t.key} onClick={() => setTab(t.key)}>
+        {tabs.map(t => (
+          <button key={t.key} role="tab" aria-selected={shown === t.key} onClick={() => setTab(t.key)}>
             {t.label}
           </button>
         ))}
@@ -75,20 +105,16 @@ export default function ProjectWorkspace() {
 
       <div className="split">
         <div role="tabpanel">
-          {tab === 'overview' && <OverviewPanel b={b} ctx={ctx} goTo={setTab} />}
-          {tab === 'documents' && <DocumentsPanel b={b} ctx={ctx} />}
-          {tab === 'logs' && <LogsPanel b={b} ctx={ctx} />}
-          {tab === 'defense' && <DefensePanel b={b} ctx={ctx} />}
-          {tab === 'forms' && <FormsPanel b={b} ctx={ctx} />}
-          {tab === 'history' && <HistoryPanel b={b} />}
+          {shown === 'overview' && <OverviewPanel b={b} ctx={ctx} goTo={setTab} />}
+          {shown === 'documents' && <DocumentsPanel b={b} ctx={ctx} />}
+          {shown === 'logs' && <LogsPanel b={b} ctx={ctx} />}
+          {shown === 'defense' && <DefensePanel b={b} ctx={ctx} />}
+          {shown === 'forms' && <FormsPanel b={b} ctx={ctx} />}
+          {shown === 'history' && <HistoryPanel b={b} />}
         </div>
 
         <aside className="side">
           <CaacInspector ctx={ctx} project={b.project} />
-          <div className="panel">
-            <div className="label" style={{ marginBottom: 12 }}>Life cycle</div>
-            <StageTimeline current={b.project.currentStage} history={b.history} />
-          </div>
         </aside>
       </div>
     </div>

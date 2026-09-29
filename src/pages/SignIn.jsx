@@ -1,211 +1,126 @@
-import { useMemo, useState } from 'react'
+import { Suspense, lazy, useState } from 'react'
 import { useApp } from '../state/AppContext.jsx'
-import { EMAIL_DOMAINS, GLOBAL_ROLES, PROGRAMS } from '../domain/constants.js'
-import { Field } from '../components/ui.jsx'
-import { db, backendName } from '../backend/index.js'
 import {
-  validateInstitutionalEmail,
-  registerWithFirebase,
-  loginWithFirebase,
-} from '../services/authService.js'
+  EMAIL_DOMAINS, PROGRAM_INFO, ACCOUNT_STATUS, COURSES, accountType, normalizeEmail, sectionProblem, courseSchedule,
+} from '../domain/constants.js'
+import { Field } from '../components/ui.jsx'
+import { registerAccount, confirmProviderVerification } from '../services/actions.js'
+import { registerWithFirebase, loginWithFirebase } from '../services/authService.js'
 
-const STUDENT_DOMAIN = '@student.hau.edu.ph'
-const makeCode = () => String(Math.floor(100000 + Math.random() * 900000))
+// R9: the demo panel (persona switcher) exists only in dev builds; this branch
+// is removed from the production bundle.
+const DemoPanel = import.meta.env.DEV ? lazy(() => import('../dev/DemoPanel.jsx')) : null
 
-const PERSONA_ORDER = [
-  GLOBAL_ROLES.STUDENT, GLOBAL_ROLES.INSTRUCTOR_1, GLOBAL_ROLES.INSTRUCTOR_2,
-  GLOBAL_ROLES.FACULTY, GLOBAL_ROLES.COORDINATOR, GLOBAL_ROLES.ASSOCIATE_DEAN,
-  GLOBAL_ROLES.DEAN, GLOBAL_ROLES.URO, GLOBAL_ROLES.ADMIN,
-]
+const DOMAINS = Object.values(EMAIL_DOMAINS).join(' and ')
 
-export default function SignIn() {
-  const { snap, signIn } = useApp()
+export default function SignIn({ seeding = false }) {
+  const { snap, signIn, backendName } = useApp()
   const [tab, setTab] = useState('login') // 'login' | 'register'
-  
-  // Login form state
+
   const [loginEmail, setLoginEmail] = useState('')
   const [loginPassword, setLoginPassword] = useState('')
 
-  // Register form state (restricted to Students)
-  const [regEmail, setRegEmail] = useState('')
-  const [regPassword, setRegPassword] = useState('')
-  const [regName, setRegName] = useState('')
-  const [regProgram, setRegProgram] = useState(PROGRAMS[0])
-  const [regIdNumber, setRegIdNumber] = useState('')
+  const [reg, setReg] = useState({ name: '', email: '', password: '', program: PROGRAM_INFO[0].name, idNumber: '', block: '' })
+  const setField = (k) => (e) => setReg(r => ({ ...r, [k]: e.target.value }))
 
-  // Verification & Status states
-  const [unverifiedUser, setUnverifiedUser] = useState(null)
-  const [pendingOtp, setPendingOtp] = useState(null)
-  const [enteredOtp, setEnteredOtp] = useState('')
+  const [unverified, setUnverified] = useState(null)
   const [error, setError] = useState('')
   const [successMsg, setSuccessMsg] = useState('')
   const [loading, setLoading] = useState(false)
 
   const isFirebaseMode = backendName === 'firebase'
+  const regType = accountType(reg.email)
 
-  const personas = useMemo(() => {
-    const users = snap.users ?? []
-    const pick = (role, n) => users.filter(u => u.globalRole === role).slice(0, n)
-    return [
-      ...pick(GLOBAL_ROLES.STUDENT, 3),
-      ...PERSONA_ORDER.filter(r => r !== GLOBAL_ROLES.STUDENT).flatMap(r => pick(r, r === GLOBAL_ROLES.FACULTY ? 4 : 1)),
-    ]
-  }, [snap.users])
+  function clear() { setError(''); setSuccessMsg(''); setUnverified(null) }
 
-  // Handle Firebase or OTP Sign In (accepts both @hau.edu.ph and @student.hau.edu.ph)
+  /** An account may sign in once its email is verified and it is active (S0.2–S0.4). */
+  function admit(user) {
+    if (!user) { setError('No account is registered to that institutional address.'); return }
+    if (!user.emailVerified) { setError('Verify your email address first — use the link in the verification email.'); return }
+    if (user.status !== ACCOUNT_STATUS.ACTIVE) {
+      setError(user.status === ACCOUNT_STATUS.INACTIVE
+        ? 'Your email is verified. The System Administrator still has to activate the account.'
+        : 'That account has been suspended. Contact the System Administrator.')
+      return
+    }
+    signIn(user.id)
+  }
+
   async function handleSignIn(e) {
     e.preventDefault()
-    setError('')
-    setSuccessMsg('')
-    setUnverifiedUser(null)
+    clear()
+    const email = normalizeEmail(loginEmail)
+    if (!accountType(email)) { setError(`Sign-in is restricted to ${DOMAINS} addresses.`); return }
 
-    const normEmail = loginEmail.trim().toLowerCase()
-    const check = validateInstitutionalEmail(normEmail)
-    if (!check.valid) {
-      setError(check.error)
+    if (!isFirebaseMode) {
+      // Local prototype backend: no passwords. The Firebase build authenticates
+      // with Firebase Auth (below).
+      admit((snap.users ?? []).find(u => normalizeEmail(u.email) === email))
       return
     }
 
-    if (isFirebaseMode) {
-      if (!loginPassword) {
-        setError('Please enter your password.')
-        return
-      }
-      setLoading(true)
-      try {
-        const { user: fbUser, emailVerified, resendVerification } = await loginWithFirebase(normEmail, loginPassword)
-        if (!emailVerified) {
-          setUnverifiedUser({ email: normEmail, resend: resendVerification })
-          setError(`Verification required: A verification email was sent to ${normEmail}. Please check your inbox and verify your email before signing in.`)
-          setLoading(false)
-          return
-        }
-
-        // Find or create local user record matching the verified email
-        let matchedUser = (snap.users ?? []).find(u => u.email.toLowerCase() === normEmail)
-        if (!matchedUser) {
-          // Auto-provision user record if first sign-in
-          const isStudent = normEmail.endsWith(STUDENT_DOMAIN)
-          const newUser = {
-            id: 'u_' + Date.now(),
-            name: fbUser.displayName || normEmail.split('@')[0],
-            email: normEmail,
-            globalRole: isStudent ? GLOBAL_ROLES.STUDENT : GLOBAL_ROLES.FACULTY,
-            status: 'Active',
-            createdAt: new Date().toISOString(),
-          }
-          matchedUser = await db.add('users', newUser)
-        }
-        signIn(matchedUser.id)
-      } catch (err) {
-        setError(err.message || 'Failed to sign in. Please check your credentials.')
-      } finally {
-        setLoading(false)
-      }
-    } else {
-      // Local zero-setup OTP mock
-      const user = (snap.users ?? []).find(u => u.email.toLowerCase() === normEmail)
-      if (!user) { setError('No account is registered to that institutional address.'); return }
-      if (user.status !== 'Active') { setError('That account has been deactivated. Contact the System Administrator.'); return }
-      setPendingOtp({ user, code: makeCode() })
-      setEnteredOtp('')
-    }
-  }
-
-  // Handle Self-Service Student Registration (Strictly restricted to @student.hau.edu.ph)
-  async function handleRegister(e) {
-    e.preventDefault()
-    setError('')
-    setSuccessMsg('')
-    setUnverifiedUser(null)
-
-    const normEmail = regEmail.trim().toLowerCase()
-
-    // Enforce student domain restriction for self-registration
-    if (!normEmail.endsWith(STUDENT_DOMAIN)) {
-      setError(`Self-registration is strictly restricted to students using a ${STUDENT_DOMAIN} email address. Faculty, Instructor, and Administrative accounts are created directly by the System Administrator.`)
-      return
-    }
-
-    if (!regName.trim()) {
-      setError('Please provide your full name.')
-      return
-    }
-
-    if (isFirebaseMode) {
-      if (!regPassword || regPassword.length < 6) {
-        setError('Password must be at least 6 characters long.')
-        return
-      }
-      setLoading(true)
-      try {
-        await registerWithFirebase(normEmail, regPassword)
-
-        // Create student user profile in system store
-        const newProfile = {
-          id: 'u_' + Date.now(),
-          name: regName.trim(),
-          email: normEmail,
-          globalRole: GLOBAL_ROLES.STUDENT,
-          program: regProgram,
-          idNumber: regIdNumber.trim(),
-          status: 'Active',
-          createdAt: new Date().toISOString(),
-        }
-        await db.add('users', newProfile)
-
-        setSuccessMsg(`Account created successfully! A verification email has been sent to ${normEmail}. Please check your inbox and verify your account before logging in.`)
-        setTab('login')
-        setLoginEmail(normEmail)
-        setRegPassword('')
-      } catch (err) {
-        setError(err.message || 'Failed to register account.')
-      } finally {
-        setLoading(false)
-      }
-    } else {
-      // Local mode registration
-      const newProfile = {
-        id: 'u_' + Date.now(),
-        name: regName.trim(),
-        email: normEmail,
-        globalRole: GLOBAL_ROLES.STUDENT,
-        program: regProgram,
-        idNumber: regIdNumber.trim(),
-        status: 'Active',
-        createdAt: new Date().toISOString(),
-      }
-      const added = await db.add('users', newProfile)
-      setPendingOtp({ user: added, code: makeCode() })
-      setEnteredOtp('')
-    }
-  }
-
-  async function handleResendVerification() {
-    if (!unverifiedUser?.resend) return
+    if (!loginPassword) { setError('Enter your password.'); return }
     setLoading(true)
-    setError('')
     try {
-      await unverifiedUser.resend()
-      setSuccessMsg(`A new verification email has been sent to ${unverifiedUser.email}. Please check your inbox.`)
+      const { emailVerified, resendVerification } = await loginWithFirebase(email, loginPassword)
+      if (!emailVerified) {
+        setUnverified({ email, resend: resendVerification })
+        setError(`Verify ${email} first — check your inbox for the verification email.`)
+        return
+      }
+      admit(await confirmProviderVerification(email))
     } catch (err) {
-      setError(err.message || 'Failed to resend verification email.')
+      setError(err.message || 'Sign-in failed. Check your credentials.')
     } finally {
       setLoading(false)
     }
   }
 
-  function verifyOtp(e) {
+  async function handleRegister(e) {
     e.preventDefault()
-    if (enteredOtp.trim() !== pendingOtp.code) {
-      setError('That code does not match. Request a new one if it expired.')
-      return
+    clear()
+    const email = normalizeEmail(reg.email)
+    if (!accountType(email)) { setError(`Registration is restricted to ${DOMAINS} addresses.`); return }
+    if (!reg.name.trim()) { setError('Enter your full name.'); return }
+    if (regType === 'Student' && sectionProblem(reg.block, reg.program)) { setError(sectionProblem(reg.block, reg.program)); return }
+
+    setLoading(true)
+    try {
+      if (isFirebaseMode) {
+        if (reg.password.length < 6) throw new Error('Password must be at least 6 characters long.')
+        await registerWithFirebase(email, reg.password)
+      }
+      await registerAccount(null, { ...reg, email })
+      setSuccessMsg(
+        `Account created for ${email}. Open the verification email to confirm the address` +
+        `${import.meta.env.DEV && !isFirebaseMode ? ' (in this prototype: Dev tools → Outbox)' : ''}. ` +
+        'The System Administrator then activates the account.',
+      )
+      setTab('login')
+      setLoginEmail(email)
+      setReg(r => ({ ...r, password: '' }))
+    } catch (err) {
+      setError(err.message || 'Registration failed.')
+    } finally {
+      setLoading(false)
     }
-    signIn(pendingOtp.user.id)
+  }
+
+  async function handleResend() {
+    if (!unverified?.resend) return
+    setLoading(true)
+    try {
+      await unverified.resend()
+      setSuccessMsg(`A new verification email was sent to ${unverified.email}.`)
+    } catch (err) {
+      setError(err.message || 'Could not resend the verification email.')
+    } finally {
+      setLoading(false)
+    }
   }
 
   return (
-    <div className="signin">
+    <div className={`signin${DemoPanel ? ' has-demo' : ''}`}>
       <div className="signin-card">
         <header className="signin-head">
           <div className="wordmark" style={{ marginBottom: 14 }}>
@@ -214,194 +129,103 @@ export default function SignIn() {
           </div>
           <h1>Thesis &amp; Capstone Workflow System</h1>
           <p className="lede" style={{ marginTop: 8 }}>
-            Institutional portal for students, faculty, and administrators.
+            Institutional portal for students, faculty and offices.
             Restricted to <strong>@hau.edu.ph</strong> and <strong>@student.hau.edu.ph</strong> accounts.
           </p>
         </header>
 
-        {/* Tab Navigation */}
-        <div className="tab-bar" style={{ display: 'flex', gap: 12, marginBottom: 20 }}>
-          <button
-            type="button"
-            className={tab === 'login' ? 'primary' : 'quiet'}
-            onClick={() => { setTab('login'); setError(''); setSuccessMsg('') }}
-          >
-            Sign In
-          </button>
-          <button
-            type="button"
-            className={tab === 'register' ? 'primary' : 'quiet'}
-            onClick={() => { setTab('register'); setError(''); setSuccessMsg('') }}
-          >
-            Student Registration
-          </button>
+        <div className="tabs" role="tablist" aria-label="Account" style={{ marginBottom: 20 }}>
+          <button role="tab" aria-selected={tab === 'login'} onClick={() => { setTab('login'); clear() }}>Sign in</button>
+          <button role="tab" aria-selected={tab === 'register'} onClick={() => { setTab('register'); clear() }}>Register</button>
         </div>
 
         <div className="panel" style={{ marginBottom: 26 }}>
-          {successMsg && (
-            <div className="note success" style={{ marginBottom: 16, color: 'var(--go, #10b981)', background: 'rgba(16, 185, 129, 0.1)', padding: 12, borderRadius: 6 }}>
-              {successMsg}
-            </div>
-          )}
+          {successMsg && <p className="note" role="status" style={{ marginBottom: 16 }}>{successMsg}</p>}
 
-          {pendingOtp ? (
-            <form onSubmit={verifyOtp}>
-              <p className="small muted">
-                A one-time code was sent to <strong>{pendingOtp.user.email}</strong>.
-              </p>
-              <div className="note" style={{ marginBottom: 14 }}>
-                Prototype stand-in for the SMTP step — your code is{' '}
-                <strong className="mono">{pendingOtp.code}</strong>
-              </div>
-              <Field label="6-digit code">
+          {tab === 'login' ? (
+            <form onSubmit={handleSignIn} noValidate>
+              <Field label="Institutional email" hint={`Allowed domains: ${DOMAINS}`}>
                 <input
-                  value={enteredOtp}
-                  onChange={e => setEnteredOtp(e.target.value)}
-                  inputMode="numeric"
-                  maxLength={6}
-                  autoFocus
+                  type="email" value={loginEmail} onChange={e => setLoginEmail(e.target.value)}
+                  placeholder="name@hau.edu.ph" autoComplete="username" required
                 />
               </Field>
-              {error && <p className="small" style={{ color: 'var(--stop)' }}>{error}</p>}
-              <div className="actions" style={{ marginTop: 14 }}>
-                <button className="primary" type="submit">Verify and sign in</button>
-                <button type="button" className="quiet" onClick={() => { setPendingOtp(null); setError('') }}>
-                  Use a different address
-                </button>
-              </div>
-            </form>
-          ) : tab === 'login' ? (
-            <form onSubmit={handleSignIn}>
-              <Field label="Institutional email" hint={`Allowed domains: ${EMAIL_DOMAINS.join(', ')}`}>
-                <input
-                  type="email"
-                  value={loginEmail}
-                  onChange={e => setLoginEmail(e.target.value)}
-                  placeholder="katdungca@student.hau.edu.ph or kagespinosa@hau.edu.ph"
-                  autoComplete="username"
-                  required
-                />
-              </Field>
-
               {isFirebaseMode && (
                 <Field label="Password">
                   <input
-                    type="password"
-                    value={loginPassword}
-                    onChange={e => setLoginPassword(e.target.value)}
-                    placeholder="••••••••"
-                    autoComplete="current-password"
-                    required
+                    type="password" value={loginPassword} onChange={e => setLoginPassword(e.target.value)}
+                    autoComplete="current-password" required
                   />
                 </Field>
               )}
-
-              {error && <p className="small" style={{ color: 'var(--stop)', marginBottom: 12 }}>{error}</p>}
-
-              {unverifiedUser && (
-                <div style={{ marginBottom: 14 }}>
-                  <button
-                    type="button"
-                    className="quiet"
-                    disabled={loading}
-                    onClick={handleResendVerification}
-                    style={{ background: 'rgba(255, 255, 255, 0.08)', padding: '6px 14px', borderRadius: 6, fontWeight: 500 }}
-                  >
-                    Resend Email
-                  </button>
-                </div>
+              {error && <p className="small" role="alert" style={{ color: 'var(--stop)', marginBottom: 12 }}>{error}</p>}
+              {unverified && (
+                <p style={{ marginBottom: 14 }}>
+                  <button type="button" className="quiet" disabled={loading} onClick={handleResend}>Resend verification email</button>
+                </p>
               )}
-
               <button className="primary" type="submit" disabled={loading}>
-                {loading ? 'Processing…' : isFirebaseMode ? 'Sign In with Firebase' : 'Send verification code'}
+                {loading ? 'Signing in…' : 'Sign in'}
               </button>
             </form>
           ) : (
-            <form onSubmit={handleRegister}>
-              <div className="note" style={{ marginBottom: 16, fontSize: 13, background: 'rgba(255, 255, 255, 0.05)', padding: 10, borderRadius: 6 }}>
-                <strong>Student Self-Registration:</strong> Restricted to <code>@student.hau.edu.ph</code> accounts. Faculty, Instructor, Program Chair, Dean, Associate Dean, and URO accounts are provisioned by the System Administrator.
-              </div>
-
-              <Field label="Full Name">
-                <input
-                  type="text"
-                  value={regName}
-                  onChange={e => setRegName(e.target.value)}
-                  placeholder="Karl Andrei T. Dungca"
-                  required
-                />
+            <form onSubmit={handleRegister} noValidate>
+              <Field label="Full name">
+                <input type="text" value={reg.name} onChange={setField('name')} autoComplete="name" required />
               </Field>
-
-              <Field label="Student Email" hint={`Must end with ${STUDENT_DOMAIN}`}>
-                <input
-                  type="email"
-                  value={regEmail}
-                  onChange={e => setRegEmail(e.target.value)}
-                  placeholder="katdungca@student.hau.edu.ph"
-                  autoComplete="username"
-                  required
-                />
+              <Field
+                label="Institutional email"
+                hint={regType ? `Registers a ${regType.toLowerCase()} account.` : `Must be an ${DOMAINS} address.`}
+              >
+                <input type="email" value={reg.email} onChange={setField('email')} autoComplete="username" required />
               </Field>
-
               {isFirebaseMode && (
                 <Field label="Password" hint="At least 6 characters">
-                  <input
-                    type="password"
-                    value={regPassword}
-                    onChange={e => setRegPassword(e.target.value)}
-                    placeholder="••••••••"
-                    autoComplete="new-password"
-                    required
-                  />
+                  <input type="password" value={reg.password} onChange={setField('password')} autoComplete="new-password" required />
                 </Field>
               )}
-
-              <Field label="Role">
-                <input type="text" value="Student" disabled style={{ opacity: 0.8, cursor: 'not-allowed' }} />
-              </Field>
-
-              <Field label="Program">
-                <select value={regProgram} onChange={e => setRegProgram(e.target.value)}>
-                  {PROGRAMS.map(p => (
-                    <option key={p} value={p}>{p}</option>
-                  ))}
-                </select>
-              </Field>
-
-              <Field label="Student ID Number">
-                <input
-                  type="text"
-                  value={regIdNumber}
-                  onChange={e => setRegIdNumber(e.target.value)}
-                  placeholder="2022-0119"
-                  required
-                />
-              </Field>
-
-              {error && <p className="small" style={{ color: 'var(--stop)', marginBottom: 12 }}>{error}</p>}
-
+              {regType === 'Student' && (
+                <>
+                  <Field label="Program">
+                    <select value={reg.program} onChange={setField('program')}>
+                      {PROGRAM_INFO.map(p => <option key={p.code} value={p.name}>{p.code} — {p.name}</option>)}
+                    </select>
+                  </Field>
+                  <div className="row">
+                    <Field label="Student number"><input value={reg.idNumber} onChange={setField('idNumber')} /></Field>
+                    <Field label="Section" hint={sectionHint(reg.program)}>
+                      <input value={reg.block} onChange={setField('block')} placeholder={sectionHint(reg.program).replace(/^e\.g\. /, '').split(' ')[0]} />
+                    </Field>
+                  </div>
+                </>
+              )}
+              {regType === 'Faculty' && (
+                <p className="small muted">
+                  Faculty accounts start with no office role. The System Administrator activates the
+                  account and assigns Dean, Associate Dean, Program Chair/Coordinator or URO where it applies;
+                  project roles come from assignments on each project.
+                </p>
+              )}
+              {error && <p className="small" role="alert" style={{ color: 'var(--stop)', marginBottom: 12 }}>{error}</p>}
               <button className="primary" type="submit" disabled={loading}>
-                {loading ? 'Registering…' : 'Register Student Account'}
+                {loading ? 'Registering…' : 'Register'}
               </button>
             </form>
           )}
         </div>
 
-        <div className="label" style={{ marginBottom: 8 }}>Demo personas — skips verification</div>
-        <div className="persona-grid">
-          {personas.map(u => (
-            <button key={u.id} className="persona" onClick={() => signIn(u.id)}>
-              <span className="pname">{u.name}</span>
-              <span className="small muted">{u.globalRole}</span>
-            </button>
-          ))}
-        </div>
-        <p className="faint small" style={{ marginTop: 14 }}>
-          Engr. Marites C. Bondoc is an Adviser on one project and a Panel Member on another.
-          Mr. Chris Almocera is Program Coordinator institution-wide and an Adviser on one project.
-          Sign in as either to see contextual access resolve differently per project.
-        </p>
+        {seeding && <p className="note">Setting up demo data… this only happens once. Refresh in a moment.</p>}
       </div>
+      {!seeding && DemoPanel && (
+        <Suspense fallback={null}><DemoPanel /></Suspense>
+      )}
     </div>
   )
+}
+
+/** "e.g. WD-401 · Capstone 1 in 4th Year, 1st Semester" for the chosen program. */
+function sectionHint(program) {
+  const info = PROGRAM_INFO.find(p => p.name === program) ?? PROGRAM_INFO[0]
+  const year = info.capstone[COURSES.C1].year
+  return `e.g. ${info.code}-${year}01 · Capstone 1 in ${courseSchedule(info.name, COURSES.C1)}`
 }

@@ -1,19 +1,19 @@
-import { EMAIL_DOMAINS } from '../domain/constants.js'
+import { EMAIL_DOMAINS, isInstitutionalEmail, normalizeEmail } from '../domain/constants.js'
 
 /**
  * Validates whether an email belongs to an allowed institutional domain.
  * Allowed domains: @hau.edu.ph and @student.hau.edu.ph
  */
 export function validateInstitutionalEmail(email = '') {
-  const norm = (email || '').trim().toLowerCase()
+  const norm = normalizeEmail(email)
   if (!norm) {
     return { valid: false, error: 'Email address is required.' }
   }
-  const isAllowed = EMAIL_DOMAINS.some(d => norm.endsWith(d))
-  if (!isAllowed) {
+  // Exact domain match (constants.js) — the same check registration uses.
+  if (!isInstitutionalEmail(norm)) {
     return {
       valid: false,
-      error: `Access is strictly restricted to ${EMAIL_DOMAINS.join(' and ')} institutional email addresses.`,
+      error: `Access is strictly restricted to ${Object.values(EMAIL_DOMAINS).join(' and ')} institutional email addresses.`,
     }
   }
   return { valid: true, error: null }

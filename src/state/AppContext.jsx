@@ -1,10 +1,17 @@
 import { createContext, useContext, useEffect, useMemo, useRef, useState } from 'react'
-import { db, backendName } from '../backend/index.js'
+import { db, backendName, isLiveBackend } from '../backend/index.js'
 import { buildSeed } from '../backend/seed.js'
 import { emptyStore, COLLECTIONS } from '../backend/schema.js'
+import { getSessionUserId, setSessionUserId } from './session.js'
+import { flagOverdueRevisions } from '../services/actions.js'
 
-const SESSION_KEY = 'hausoc.session'
 const AppCtx = createContext(null)
+
+function refuseLive() {
+  if (isLiveBackend) {
+    throw new Error('Dev data controls run only against the local backend or the Firebase emulators, never a live project.')
+  }
+}
 
 const blankSnapshot = () => Object.fromEntries(COLLECTIONS.map(c => [c, []]))
 
@@ -13,9 +20,7 @@ const ensureArray = (v) => (Array.isArray(v) ? v : Object.values(v ?? {}))
 export function AppProvider({ children }) {
   const [snap, setSnap] = useState(blankSnapshot)
   const [ready, setReady] = useState(false)
-  const [userId, setUserId] = useState(() => {
-    try { return localStorage.getItem(SESSION_KEY) } catch { return null }
-  })
+  const [userId, setUserId] = useState(getSessionUserId)
   const seeding = useRef(false)
 
   useEffect(() => db.subscribe((next) => { setSnap(next); setReady(true) }), [])
@@ -31,6 +36,15 @@ export function AppProvider({ children }) {
     }
   }, [ready, usersList])
 
+  // S8.2 — the overdue check. A scheduled Cloud Function in the Firebase build.
+  useEffect(() => {
+    if (!ready || backendName !== 'local') return
+    const run = () => flagOverdueRevisions().catch(() => {})
+    run()
+    const t = setInterval(run, 60_000)
+    return () => clearInterval(t)
+  }, [ready])
+
   const me = useMemo(
     () => usersList.find(u => u.id === userId) ?? null,
     [usersList, userId],
@@ -38,10 +52,13 @@ export function AppProvider({ children }) {
 
   const value = useMemo(() => ({
     snap, ready, me, backendName,
-    signIn: (id) => { try { localStorage.setItem(SESSION_KEY, id) } catch {} ; setUserId(id) },
-    signOut: () => { try { localStorage.removeItem(SESSION_KEY) } catch {} ; setUserId(null) },
-    resetDemoData: async () => { await db.replaceAll(buildSeed()) },
-    wipe: async () => { await db.replaceAll(emptyStore()) },
+    signIn: (id) => { setSessionUserId(id); setUserId(id) },
+    signOut: () => { setSessionUserId(null); setUserId(null) },
+    // Dev tools only (R9) — the production UI never calls these. They replace
+    // the whole store, so they refuse to run against a real Firebase project.
+    replaceStore: async (store) => { refuseLive(); await db.replaceAll(store) },
+    resetDemoData: async () => { refuseLive(); await db.replaceAll(buildSeed()) },
+    wipe: async () => { refuseLive(); await db.replaceAll(emptyStore()) },
   }), [snap, ready, me])
 
   return <AppCtx.Provider value={value}>{children}</AppCtx.Provider>

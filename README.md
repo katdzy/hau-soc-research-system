@@ -142,7 +142,7 @@ policy after adviser feedback means editing one file.
 
 | Stubbed | In production |
 |---|---|
-| Email | Written to the in-app Notifications list. `notificationService.js` sends the same event through Resend. |
+| Email | The only notification channel — there is no in-app notification list (team decision 2026-09-29). The prototype records each email in the dev outbox; the Firebase build sends it through Resend. |
 | Verification email | Shown on screen. Firebase Authentication sends it; passwords are not stored locally. |
 | File upload | File name and size are recorded, no binary. Firebase Cloud Storage holds the PDF. |
 | AI summary | A labelled placeholder (one seeded summary shows the real structure). The Gemini call is audit-logged. |

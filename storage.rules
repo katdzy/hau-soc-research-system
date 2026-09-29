@@ -1,0 +1,77 @@
+rules_version = '2';
+
+// Cloud Storage rules for submitted files (src/backend/files.js).
+//
+// A file lives at projects/{projectId}/documents/{fileId}, one path per
+// document version. Files are immutable (CLAUDE.md invariants): a group member
+// may create a PDF at a new path, and nobody may overwrite or delete one.
+// Annotations never touch the file — they are Firestore records drawn over it.
+//
+// Reads mirror `document.read` in firestore.rules (canViewProject — keep the
+// two in step), so the System Administrator never opens a file (T20). The
+// panel's latest-version-only rule (T15) is enforced on the `documents`
+// records the client lists; a panelist who already holds an old file's path
+// could still fetch it — close that with a Cloud Function-issued URL if the
+// team needs it.
+
+service firebase.storage {
+  match /b/{bucket}/o {
+
+    function institutional() {
+      return request.auth != null && request.auth.token.email_verified == true && (
+        request.auth.token.email.matches('.*@hau[.]edu[.]ph') ||
+        request.auth.token.email.matches('.*@student[.]hau[.]edu[.]ph')
+      );
+    }
+
+    function holds(role) { return role in request.auth.token.globalRoles; }
+    function projectRoles(projectId) { return request.auth.token.projects.get(projectId, []); }
+    function projectOf(projectId) {
+      return firestore.get(/databases/(default)/documents/projects/$(projectId)).data;
+    }
+    function stageIn(project, stages) { return project.currentStage in stages; }
+    function capstone1(project) {
+      return stageIn(project, ['GROUP_FORMATION', 'ADVISER_ASSIGNMENT', 'ADVISER_APPROVAL',
+        'TOPIC_PROPOSAL', 'PROPOSAL_DEVELOPMENT', 'PANEL_ASSIGNMENT',
+        'PROPOSAL_DEFENSE_SCHEDULING', 'PROPOSAL_DEFENSE', 'PROPOSAL_REVISION']);
+    }
+
+    // Same conditions as canViewProject in firestore.rules.
+    function canReadFiles(projectId) {
+      let roles = projectRoles(projectId);
+      let project = projectOf(projectId);
+      return institutional() && (
+        'Member' in roles
+        || ('Adviser' in roles
+            && !stageIn(project, ['GROUP_FORMATION', 'ADVISER_ASSIGNMENT', 'ADVISER_APPROVAL']))
+        || ('Instructor 1' in roles && capstone1(project))
+        || ('Instructor 2' in roles && !capstone1(project))
+        || (('Panel Chair' in roles || 'Panel Member' in roles)
+            && !stageIn(project, ['GROUP_FORMATION', 'ADVISER_ASSIGNMENT', 'ADVISER_APPROVAL',
+                                  'TOPIC_PROPOSAL', 'PROPOSAL_DEVELOPMENT']))
+        || (holds('Program Chair/Coordinator')
+            && project.program in request.auth.token.programScope
+            && stageIn(project, ['ADVISER_ASSIGNMENT', 'PANEL_ASSIGNMENT', 'PROPOSAL_DEFENSE_SCHEDULING',
+                                 'PROPOSAL_REVISION', 'FINAL_DEFENSE_ENDORSEMENT', 'CLEARANCE']))
+        || ((holds('Dean') || holds('Associate Dean'))
+            && stageIn(project, ['ADVISER_APPROVAL', 'FINAL_APPROVAL', 'ARCHIVED']))
+        || (holds('University Research Office') && stageIn(project, ['URO_VERIFICATION']))
+      );
+    }
+
+    match /projects/{projectId}/documents/{fileId} {
+      allow read: if canReadFiles(projectId);
+      // Write-once: only a group member, only a new path, only a PDF (MAX_PDF_MB = 25).
+      allow create: if institutional()
+        && 'Member' in projectRoles(projectId)
+        && resource == null
+        && request.resource.contentType == 'application/pdf'
+        && request.resource.size <= 25 * 1024 * 1024;
+      allow update, delete: if false;
+    }
+
+    match /{everything=**} {
+      allow read, write: if false;
+    }
+  }
+}

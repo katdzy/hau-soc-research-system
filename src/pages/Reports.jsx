@@ -1,12 +1,23 @@
 import { useApp } from '../state/AppContext.jsx'
-import { Section, Badge, Empty, Restricted } from '../components/ui.jsx'
-import { PHASES, stageByKey, stageIndex } from '../domain/stages.js'
-import { GLOBAL_ROLES as G, PROJECT_ROLES as P } from '../domain/constants.js'
+import { Section, Badge, Empty, Restricted, downloadCsv } from '../components/ui.jsx'
+import { PHASES, stageByKey, stageIndex, sectionNow } from '../domain/stages.js'
+import { GLOBAL_ROLES as G, PROJECT_ROLES as P, programCode } from '../domain/constants.js'
 import { can, resolveInstitution } from '../domain/caac.js'
 
 // Aggregate reporting. Figures cover projects the viewer may not be able to
 // open — reports show counts and stages, never documents. A Program
 // Chair/Coordinator's reports are scoped to the programs they coordinate.
+
+/**
+ * The projects a user's reports cover: school-wide for the Dean, Associate
+ * Dean and System Administrator; the coordinated programs for a Program
+ * Chair/Coordinator (NEW-11: counts and status only, never documents).
+ */
+export function reportScope(me, snap) {
+  const schoolWide = (me.globalRoles ?? []).some(r => [G.DEAN, G.ASSOCIATE_DEAN, G.ADMIN].includes(r))
+  const scope = schoolWide ? null : (me.programScope ?? [])
+  return { scope, projects: (snap.projects ?? []).filter(p => !scope || scope.includes(p.program)) }
+}
 
 export default function Reports() {
   const { snap, me } = useApp()
@@ -15,9 +26,7 @@ export default function Reports() {
     return <Restricted>Reports are for the Dean, Associate Dean, Program Chair/Coordinator and System Administrator.</Restricted>
   }
 
-  const schoolWide = (me.globalRoles ?? []).some(r => [G.DEAN, G.ASSOCIATE_DEAN, G.ADMIN].includes(r))
-  const scope = schoolWide ? null : (me.programScope ?? [])
-  const projects = (snap.projects ?? []).filter(p => !scope || scope.includes(p.program))
+  const { scope, projects } = reportScope(me, snap)
   const ids = new Set(projects.map(p => p.id))
   const assignments = (snap.projectAssignments ?? []).filter(a => ids.has(a.projectId))
   const users = snap.users ?? []
@@ -46,16 +55,12 @@ export default function Reports() {
     .filter(r => r.advisees || r.panels || r.instructing)
     .sort((a, b) => (b.advisees + b.panels) - (a.advisees + a.panels))
 
-  const csv = () => {
-    const header = 'Project,Program,Block,Stage,Status,Result'
-    const lines = projects.map(p =>
-      [p.title, p.program, p.block, stageByKey(p.currentStage)?.label, p.status, p.archiveResult ?? '']
-        .map(v => `"${String(v ?? '').replace(/"/g, '""')}"`).join(','))
-    const url = URL.createObjectURL(new Blob([[header, ...lines].join('\n')], { type: 'text/csv' }))
-    const a = document.createElement('a')
-    a.href = url; a.download = 'capstone-projects.csv'; a.click()
-    URL.revokeObjectURL(url)
-  }
+  // Status data only — no document, annotation or summary content.
+  const csv = () => downloadCsv(
+    'capstone-projects.csv',
+    ['Project', 'Program', 'Section', 'Course', 'Stage', 'Status', 'Result'],
+    projects.map(p => [p.title, p.program, sectionNow(p).section, sectionNow(p).course, stageByKey(p.currentStage)?.label, p.status, p.archiveResult]),
+  )
 
   return (
     <div className="page">
@@ -64,7 +69,7 @@ export default function Reports() {
         <h1>{scope ? 'Program reports' : 'School of Computing reports'}</h1>
         <p className="lede">
           {scope
-            ? `Scoped to the programs you coordinate: ${scope.join(', ')}.`
+            ? `Scoped to the programs you coordinate: ${scope.map(programCode).join(', ')}.`
             : 'Project statuses, completion and faculty workload across the School of Computing.'}
         </p>
       </header>
@@ -102,7 +107,7 @@ export default function Reports() {
             {[...projects].sort((a, b) => stageIndex(a.currentStage) - stageIndex(b.currentStage)).map(p => (
               <tr key={p.id}>
                 <td>{p.title}</td>
-                <td className="small muted">{p.program}</td>
+                <td className="small muted" title={p.program}>{programCode(p.program)}</td>
                 <td><Badge>{stageByKey(p.currentStage)?.label}</Badge></td>
                 <td className="tight">{p.archiveResult ? <Badge tone="ok">{p.archiveResult}</Badge> : <span className="faint small">—</span>}</td>
               </tr>

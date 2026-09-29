@@ -46,28 +46,43 @@ service cloud.firestore {
     }
 
     // State-based progressive visibility: the same person can read a project
-    // at one stage and not at another.
+    // at one stage and not at another. Mirrors `project.view` + `document.read`
+    // in caac.js (flags as set in src/domain/flags.js on 2026-09-29).
     function canViewProject(projectId, project) {
       let roles = projectRoles(projectId);
       return institutional() && (
-        'Member' in roles || 'Adviser' in roles
-        || ('Instructor 1' in roles && capstone1(project))
+        'Member' in roles
+        // An Adviser gets access once the Dean and AD approve the appointment (S2.2).
+        || ('Adviser' in roles
+            && !stageIn(project, ['GROUP_FORMATION', 'ADVISER_ASSIGNMENT', 'ADVISER_APPROVAL']))
+        || ('Instructor 1' in roles && capstone1(project))           // I1_ACCESS_AFTER_ROUTING = 'none'
         || ('Instructor 2' in roles && !capstone1(project))
         || (('Panel Chair' in roles || 'Panel Member' in roles)
             && !stageIn(project, ['GROUP_FORMATION', 'ADVISER_ASSIGNMENT', 'ADVISER_APPROVAL',
                                   'TOPIC_PROPOSAL', 'PROPOSAL_DEVELOPMENT']))
+        // NEW-11 (PC_PROGRAM_VISIBILITY = summary-outside-pc-steps): only while a PC step is active.
         || (holds('Program Chair/Coordinator')
             && project.program in request.auth.token.programScope
-            && project.currentStage != 'GROUP_FORMATION')
+            && stageIn(project, ['ADVISER_ASSIGNMENT', 'PANEL_ASSIGNMENT', 'PROPOSAL_DEFENSE_SCHEDULING',
+                                 'PROPOSAL_REVISION', 'FINAL_DEFENSE_ENDORSEMENT', 'CLEARANCE']))
         || ((holds('Dean') || holds('Associate Dean'))
             && stageIn(project, ['ADVISER_APPROVAL', 'FINAL_APPROVAL', 'ARCHIVED']))
         || (holds('University Research Office') && stageIn(project, ['URO_VERIFICATION']))
-        || (holds('System Administrator') && stageIn(project, ['ARCHIVED']))
       );
+    }
+
+    // §2.2: the System Administrator opens the project record for configuration
+    // and audit, never its documents (T20).
+    function canOpenRecord(projectId, project) {
+      return canViewProject(projectId, project) || (institutional() && holds('System Administrator'));
     }
 
     function viaProject(projectId) {
       return canViewProject(projectId, get(/databases/$(database)/documents/projects/$(projectId)).data);
+    }
+
+    function projectOf(projectId) {
+      return get(/databases/$(database)/documents/projects/$(projectId)).data;
     }
 
     match /users/{userId} {
@@ -81,31 +96,59 @@ service cloud.firestore {
     }
 
     match /projects/{projectId} {
-      allow read: if canViewProject(projectId, resource.data);
+      allow read: if canOpenRecord(projectId, resource.data);
       allow write: if false;
     }
 
+    // Project record: who is in it, who is assigned, what happened.
     match /{col}/{docId} {
-      allow read: if col in [
-          'projectMembers', 'projectAssignments', 'documents', 'reviews',
-          'aiSummaries', 'weeklyLogs', 'defenses', 'forms', 'workflowHistory'
-        ] && viaProject(resource.data.projectId);
+      allow read: if col in ['projectMembers', 'projectAssignments', 'workflowHistory']
+        && canOpenRecord(resource.data.projectId, projectOf(resource.data.projectId));
       allow write: if false;
     }
 
-    // Panel notes stay private to their author until the Panel Chair records
-    // the verdict; the Cloud Function stamps `releasedAt` at that moment.
-    match /annotations/{annotationId} {
-      allow read: if institutional() && (
-        resource.data.authorId == request.auth.uid ||
-        (viaProject(resource.data.projectId) &&
-          (resource.data.visibility == 'shared' || resource.data.releasedAt != null))
+    // Project content: never the System Administrator.
+    match /{col}/{docId} {
+      allow read: if col in ['documents', 'reviews', 'weeklyLogs', 'defenses', 'forms']
+        && viaProject(resource.data.projectId);
+      allow write: if false;
+    }
+
+    // OQ#2 (AI_SUMMARY_AUDIENCE = Adviser + Panel). Feature not built yet (R12).
+    match /aiSummaries/{summaryId} {
+      allow read: if viaProject(resource.data.projectId) && (
+        'Adviser' in projectRoles(resource.data.projectId)
+        || 'Panel Chair' in projectRoles(resource.data.projectId)
+        || 'Panel Member' in projectRoles(resource.data.projectId)
       );
       allow write: if false;
     }
 
-    match /notifications/{notificationId} {
-      allow read: if signedIn() && resource.data.userId == request.auth.uid;
+    // Private panel notes: the author always; once the Panel Chair records the
+    // verdict (`releasedAt`), the group's students (OQ#3, PANEL_NOTES_RELEASE).
+    // Never shared between panelists. Shared notes follow project visibility.
+    match /annotations/{annotationId} {
+      allow read: if institutional() && viaProject(resource.data.projectId) && (
+        resource.data.authorId == request.auth.uid
+        || resource.data.visibility == 'shared'
+        || (resource.data.releasedAt != null && 'Member' in projectRoles(resource.data.projectId))
+      );
+      allow write: if false;
+    }
+
+    // Permission overrides (flag PERMISSION_OVERRIDES = 'deny-only'). The claims
+    // sync must drop a project from token.projects while `project.view` or
+    // `document.read` is revoked for it, so the rules above also honour the
+    // override. Readable by the System Administrator and the affected account.
+    match /permissionOverrides/{overrideId} {
+      allow read: if institutional()
+        && (holds('System Administrator') || resource.data.userId == request.auth.uid);
+      allow write: if false;
+    }
+
+    // Global settings (revision countdown). Every signed-in account reads them.
+    match /settings/{settingId} {
+      allow read: if institutional();
       allow write: if false;
     }
 

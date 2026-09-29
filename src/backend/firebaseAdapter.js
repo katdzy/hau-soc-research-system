@@ -11,6 +11,7 @@
 //   VITE_BACKEND=firebase VITE_USE_EMULATORS=true npm run dev
 
 import { COLLECTIONS, emptyStore } from './schema.js'
+import { nowIso } from './clock.js'
 
 const emptySnapshot = () => Object.fromEntries(COLLECTIONS.map(c => [c, []]))
 let mirror = emptySnapshot()
@@ -36,7 +37,7 @@ async function init() {
   if (import.meta.env.VITE_USE_EMULATORS === 'true') {
     firestore.connectFirestoreEmulator(db, '127.0.0.1', 8080)
   }
-  fb = { db, ...firestore }
+  fb = { app, db, ...firestore }
 
   // Mirror every collection locally so the UI keeps one synchronous snapshot.
   for (const name of COLLECTIONS) {
@@ -46,6 +47,11 @@ async function init() {
     })
   }
   return fb
+}
+
+/** The initialised Firebase app — the file store (files.js) shares it. */
+export async function firebaseApp() {
+  return (await init()).app
 }
 
 export const firebaseAdapter = {
@@ -62,14 +68,14 @@ export const firebaseAdapter = {
   async add(collection, data) {
     const { db, doc, setDoc, collection: col } = await init()
     const id = data.id ?? doc(col(db, collection)).id
-    const payload = { ...data, id, createdAt: data.createdAt ?? new Date().toISOString() }
+    const payload = { ...data, id, createdAt: data.createdAt ?? nowIso() }
     await setDoc(doc(db, collection, id), payload)
     return payload
   },
 
   async update(collection, id, patch) {
     const { db, doc, updateDoc } = await init()
-    const payload = { ...patch, updatedAt: new Date().toISOString() }
+    const payload = { ...patch, updatedAt: nowIso() }
     await updateDoc(doc(db, collection, id), payload)
     return { id, ...payload }
   },
@@ -83,6 +89,13 @@ export const firebaseAdapter = {
     const { db, doc, getDoc } = await init()
     const snap = await getDoc(doc(db, collection, id))
     return snap.exists() ? { id: snap.id, ...snap.data() } : null
+  },
+
+  // Not atomic here: in the Firebase build a multi-collection write belongs in
+  // a Cloud Function running a Firestore transaction (OQ#1). Kept so services
+  // can call the same surface.
+  async transaction(fn) {
+    return fn()
   },
 
   async replaceAll(next) {

@@ -1,0 +1,17 @@
+# Base: Node 22 on Alpine with OpenJDK 17 (required by Firebase Emulator Suite)
+FROM node:22-alpine
+
+# Install Java (OpenJDK 17 is the smallest LTS available on Alpine)
+RUN apk add --no-cache openjdk21-jre-headless
+
+WORKDIR /app
+
+# Install firebase-tools globally
+RUN npm install -g firebase-tools
+
+# Copy project files (firebase.json, firestore rules/indexes, etc.)
+COPY . .
+
+EXPOSE 4000 5001 8080 9099 9199
+
+CMD ["firebase", "emulators:start", "--project", "demo-local"]

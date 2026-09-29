@@ -6,8 +6,14 @@ import {
 } from '../../services/actions.js'
 import { useAction, ActionError } from '../useAction.jsx'
 import { Section, Empty, Badge, Field, fmtDate } from '../ui.jsx'
-import { GLOBAL_ROLES as G, ACCOUNT_STATUS, accountType } from '../../domain/constants.js'
+import {
+  GLOBAL_ROLES as G, ACCOUNT_STATUS, COURSES, accountType, capstone2SectionOf, nextSemester,
+} from '../../domain/constants.js'
+import { courseOfStage } from '../../domain/stages.js'
+import { FLAGS } from '../../domain/flags.js'
 import GatePanel from './GatePanel.jsx'
+import Capstone2Checks from './Capstone2Checks.jsx'
+import UroReview from './UroReview.jsx'
 
 export default function OverviewPanel({ b, ctx, goTo }) {
   const { snap, me } = useApp()
@@ -35,6 +41,10 @@ export default function OverviewPanel({ b, ctx, goTo }) {
         <GatePanel b={b} ctx={ctx} goTo={goTo} />
       </Section>
 
+      <UroReview b={b} ctx={ctx} goTo={goTo} />
+
+      <Capstone2Checks b={b} ctx={ctx} />
+
       <Section title="Project record">
         <dl className="kv">
           <dt>Title</dt><dd>{b.project.title}</dd>
@@ -45,10 +55,15 @@ export default function OverviewPanel({ b, ctx, goTo }) {
             </>
           )}
           <dt>Program</dt><dd>{b.project.program}</dd>
-          <dt>Block</dt><dd>{b.project.block}</dd>
+          <dt>Capstone 1 section</dt><dd>{b.project.block} <span className="faint small">· {b.project.term}</span></dd>
+          <dt>Capstone 2 section</dt>
+          <dd>
+            {capstone2SectionOf(b.project.block)} <span className="faint small">· {nextSemester(b.project.term)}
+              {courseOfStage(b.project.currentStage) === COURSES.C1 && ' (upcoming)'}</span>
+          </dd>
           <dt>Research area</dt><dd>{b.project.researchArea}</dd>
-          <dt>Academic term</dt><dd>{b.project.term}</dd>
-          <dt>Registered</dt><dd>{fmtDate(b.project.createdAt)}</dd>
+          <dt>Group created</dt><dd>{fmtDate(b.project.createdAt)}</dd>
+          {b.project.topicRegisteredAt && <><dt>Title registered</dt><dd>{fmtDate(b.project.topicRegisteredAt)}</dd></>}
           {b.project.archiveResult && (
             <>
               <dt>Result</dt>
@@ -60,12 +75,12 @@ export default function OverviewPanel({ b, ctx, goTo }) {
 
       <Section
         title="Group members"
-        aside={<span className="faint small">{b.members.length} student{b.members.length === 1 ? '' : 's'}</span>}
+        aside={<span className={`small ${b.members.length < FLAGS.GROUP_SIZE ? 'tone-warn' : 'faint'}`}>{b.members.length} of {FLAGS.GROUP_SIZE} students</span>}
       >
         {b.members.length === 0 && <Empty>No students added yet.</Empty>}
         {b.members.length > 0 && (
           <table>
-            <thead><tr><th>Student</th><th>Student number</th><th>Year and block</th><th className="tight" /></tr></thead>
+            <thead><tr><th>Student</th><th>Student number</th><th>Year and section</th><th className="tight" /></tr></thead>
             <tbody>
               {b.members.map(m => {
                 const u = users.find(x => x.id === m.userId)
@@ -89,11 +104,11 @@ export default function OverviewPanel({ b, ctx, goTo }) {
           </table>
         )}
 
-        {can(ctx, 'roster.manage') && (
+        {can(ctx, 'roster.manage') && b.members.length < FLAGS.GROUP_SIZE && (
           <div className="row inline-form">
             <Field label={`Add a student from ${b.project.block}`}>
               <select value={pickMember} onChange={e => setPickMember(e.target.value)}>
-                <option value="">{candidates.length ? 'Select a student…' : 'Everyone in the block is already grouped'}</option>
+                <option value="">{candidates.length ? 'Select a student…' : 'Everyone in the section is already grouped'}</option>
                 {candidates.map(u => <option key={u.id} value={u.id}>{u.name} — {u.idNumber}</option>)}
               </select>
             </Field>
