@@ -82,6 +82,16 @@ export const fmtDateTime = (iso) =>
 export const fmtSize = (bytes) =>
   !bytes ? '—' : bytes > 1e6 ? `${(bytes / 1e6).toFixed(1)} MB` : `${Math.round(bytes / 1e3)} KB`
 
+/** Download rows as a CSV file. Every cell is quoted. */
+export function downloadCsv(filename, header, rows) {
+  const cell = (v) => `"${String(v ?? '').replace(/"/g, '""')}"`
+  const text = [header, ...rows].map(r => r.map(cell).join(',')).join('\n')
+  const url = URL.createObjectURL(new Blob([text], { type: 'text/csv' }))
+  const a = document.createElement('a')
+  a.href = url; a.download = filename; a.click()
+  URL.revokeObjectURL(url)
+}
+
 export function daysLeft(iso) {
   if (!iso) return null
   return Math.ceil((new Date(iso) - Date.now()) / 864e5)

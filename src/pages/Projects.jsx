@@ -5,8 +5,8 @@ import { worklist } from '../services/worklist.js'
 import { createProject } from '../services/actions.js'
 import { useAction, ActionError } from '../components/useAction.jsx'
 import { Section, Badge, Empty, Field, fmtDate } from '../components/ui.jsx'
-import { STAGES } from '../domain/stages.js'
-import { PROGRAMS } from '../domain/constants.js'
+import { STAGES, sectionNow } from '../domain/stages.js'
+import { PROGRAMS, programCode, COURSES } from '../domain/constants.js'
 import { can, resolveInstitution } from '../domain/caac.js'
 
 export default function Projects() {
@@ -18,8 +18,8 @@ export default function Projects() {
 
   const inst = resolveInstitution(me, snap)
   const canCreate = can(inst, 'group.create')
-  const blocks = inst.sections.filter(s => s.course === 'Capstone 1')
-  const [form, setForm] = useState({ groupName: '', title: '', sectionId: blocks[0]?.id ?? '', researchArea: '' })
+  const blocks = inst.sections.filter(s => s.course === COURSES.C1)
+  const [form, setForm] = useState({ title: '', sectionId: blocks[0]?.id ?? '', researchArea: '' })
   const creating = params.get('new') === '1'
 
   const rows = worklist(snap, me).filter(r =>
@@ -44,24 +44,13 @@ export default function Projects() {
           ) : (
             <div className="panel">
               <div className="row">
-                <Field label="Assigned Block Section" hint={blocks.length === 1 ? 'Constrained to your assigned teaching block.' : 'Select from your assigned Capstone 1 blocks.'}>
-                  {blocks.length === 1 ? (
-                    <input
-                      type="text"
-                      value={`${blocks[0].block} · ${blocks[0].program}`}
-                      disabled
-                      style={{ opacity: 0.9, cursor: 'not-allowed', background: 'rgba(255, 255, 255, 0.05)' }}
-                    />
-                  ) : blocks.length > 1 ? (
-                    <select value={form.sectionId || blocks[0]?.id} onChange={e => setForm(f => ({ ...f, sectionId: e.target.value }))}>
-                      {blocks.map(s => <option key={s.id} value={s.id}>{s.block} · {s.program}</option>)}
-                    </select>
-                  ) : (
-                    <div className="note stop" style={{ fontSize: 13 }}>No assigned Capstone 1 teaching block found for your account.</div>
-                  )}
+                <Field label="Section">
+                  <select value={form.sectionId} onChange={e => setForm(f => ({ ...f, sectionId: e.target.value }))}>
+                    {blocks.map(s => <option key={s.id} value={s.id}>{s.block} · {s.course} · {s.term}</option>)}
+                  </select>
                 </Field>
-                <Field label="Group name" hint="Leave blank to number it automatically.">
-                  <input value={form.groupName} onChange={e => setForm(f => ({ ...f, groupName: e.target.value }))} placeholder="Group 8" />
+                <Field label="Working title" hint="Replaced by the registered topic after ideation.">
+                  <input value={form.title} onChange={e => setForm(f => ({ ...f, title: e.target.value }))} placeholder="Untitled — Group 7" />
                 </Field>
               </div>
               <div className="actions">
@@ -106,8 +95,8 @@ export default function Projects() {
               {rows.map(r => (
                 <tr key={r.project.id}>
                   <td>
-                    <Link className="row-link" to={`/projects/${r.project.id}`}>{r.project.groupName} · {r.project.title}</Link>
-                    <div className="faint small">{r.project.program} · {r.project.block}</div>
+                    <Link className="row-link" to={`/projects/${r.project.id}`}>{r.project.title}</Link>
+                    <div className="faint small" title={r.project.program}>{programCode(r.project.program)} · {sectionNow(r.project).section}</div>
                   </td>
                   <td><Badge tone={r.project.currentStage === 'ARCHIVED' ? 'ok' : 'neutral'}>{r.stage?.label}</Badge></td>
                   <td className="small muted" title={r.access.reason}>{r.access.via}</td>

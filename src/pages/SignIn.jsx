@@ -1,281 +1,231 @@
-import { useMemo, useState } from 'react'
+import { Suspense, lazy, useState } from 'react'
 import { useApp } from '../state/AppContext.jsx'
 import {
-  EMAIL_DOMAINS, PROGRAMS, ACCOUNT_STATUS, GLOBAL_ROLES, accountType, yearDigit, blockExample,
+  EMAIL_DOMAINS, PROGRAM_INFO, ACCOUNT_STATUS, COURSES, accountType, normalizeEmail, sectionProblem, courseSchedule,
 } from '../domain/constants.js'
-import { describeStanding } from '../domain/caac.js'
-import { registerAccount, verifyEmail } from '../services/actions.js'
-import {
-  validateInstitutionalEmail, registerWithFirebase, loginWithFirebase, sendPasswordReset,
-} from '../services/authService.js'
-import { useAction, ActionError } from '../components/useAction.jsx'
 import { Field } from '../components/ui.jsx'
+import { registerAccount, confirmProviderVerification } from '../services/actions.js'
+import { registerWithFirebase, loginWithFirebase } from '../services/authService.js'
 
-// Wireframes S-00 (sign in) and S-01 (register). Domain-restricted to
-// @hau.edu.ph and @student.hau.edu.ph. With VITE_BACKEND=firebase this is
-// Firebase Authentication — credentials, the verification email and password
-// reset. Locally the verification email is shown on screen and passwords are
-// neither stored nor checked. There is no OTP step.
+// R9: the demo panel (persona switcher) exists only in dev builds; this branch
+// is removed from the production bundle.
+const DemoPanel = import.meta.env.DEV ? lazy(() => import('../dev/DemoPanel.jsx')) : null
 
-const DOMAINS = Object.values(EMAIL_DOMAINS)
-const BLANK = {
-  name: '', idNumber: '', email: '', program: PROGRAMS[0], yearLevel: '4th Year', block: '',
-  password: '', confirm: '',
-}
+const DOMAINS = Object.values(EMAIL_DOMAINS).join(' and ')
 
-export default function SignIn() {
+export default function SignIn({ seeding = false }) {
   const { snap, signIn, backendName } = useApp()
-  const firebase = backendName === 'firebase'
-  const [mode, setMode] = useState('signin')
-  const [email, setEmail] = useState('')
-  const [password, setPassword] = useState('')
-  const [form, setForm] = useState(BLANK)
-  const [mailFor, setMailFor] = useState(null)
-  const [resend, setResend] = useState(null)
-  const [notice, setNotice] = useState('')
-  const { run, error, busy, setError } = useAction()
+  const [tab, setTab] = useState('login') // 'login' | 'register'
 
-  const multiRoleExamples = useMemo(() => [
-    {
-      id: 'f_bondoc',
-      name: 'Engr. Marites C. Bondoc',
-      globalRole: 'Faculty',
-      projectRoles: ['Adviser', 'Panel Member'],
-      description: 'Adviser on "Automated Student Feedback" (Full version history) AND Panel Member on "Smart Queue System" (Latest version only).',
-    },
-    {
-      id: 'f_almocera',
-      name: 'Mr. Chris Almocera',
-      globalRole: 'Program Chair/Coordinator',
-      projectRoles: ['Adviser'],
-      description: 'Program Coordinator (BSIT oversight) AND Adviser on "IoT-Based Laboratory Equipment Tracking".',
-    },
-    {
-      id: 'f_tayag',
-      name: 'Dr. Marlon I. Tayag',
-      globalRole: 'Dean',
-      projectRoles: ['Adviser'],
-      description: 'Dean (Executive Signatory) AND Adviser on "Group 2" (CAAC conflict-check prevents self-approval of adviser assignment).',
-    },
-    {
-      id: 'f_espinosa',
-      name: 'Asst. Prof. Kevin Aldrin G. Espinosa',
-      globalRole: 'Faculty',
-      projectRoles: ['Instructor 1'],
-      description: 'Instructor 1 for Capstone 1 blocks WD-401 & WD-402 (Roster & topic approval authority).',
-    },
-  ], [])
+  const [loginEmail, setLoginEmail] = useState('')
+  const [loginPassword, setLoginPassword] = useState('')
 
-  const personas = useMemo(() => {
-    const users = snap.users ?? []
-    const students = users.filter(u => u.globalRoles?.includes(GLOBAL_ROLES.STUDENT) && u.id !== 'u_noel').slice(0, 2)
-    const staff = users.filter(u => !u.globalRoles?.includes(GLOBAL_ROLES.STUDENT) && u.status === ACCOUNT_STATUS.ACTIVE)
-    return [...students, ...staff]
-  }, [snap.users])
+  const [reg, setReg] = useState({ name: '', email: '', password: '', program: PROGRAM_INFO[0].name, idNumber: '', block: '' })
+  const setField = (k) => (e) => setReg(r => ({ ...r, [k]: e.target.value }))
 
-  const set = (k) => (e) => setForm(f => ({ ...f, [k]: e.target.value }))
-  const regType = accountType(form.email.trim())
-  const go = (m) => { setMode(m); setError(''); setNotice(''); setMailFor(null); setResend(null) }
-  const profileFor = (address) => (snap.users ?? []).find(u => u.email.toLowerCase() === address)
+  const [unverified, setUnverified] = useState(null)
+  const [error, setError] = useState('')
+  const [successMsg, setSuccessMsg] = useState('')
+  const [loading, setLoading] = useState(false)
 
-  function submitSignIn(e) {
+  const isFirebaseMode = backendName === 'firebase'
+  const regType = accountType(reg.email)
+
+  function clear() { setError(''); setSuccessMsg(''); setUnverified(null) }
+
+  /** An account may sign in once its email is verified and it is active (S0.2–S0.4). */
+  function admit(user) {
+    if (!user) { setError('No account is registered to that institutional address.'); return }
+    if (!user.emailVerified) { setError('Verify your email address first — use the link in the verification email.'); return }
+    if (user.status !== ACCOUNT_STATUS.ACTIVE) {
+      setError(user.status === ACCOUNT_STATUS.INACTIVE
+        ? 'Your email is verified. The System Administrator still has to activate the account.'
+        : 'That account has been suspended. Contact the System Administrator.')
+      return
+    }
+    signIn(user.id)
+  }
+
+  async function handleSignIn(e) {
     e.preventDefault()
-    setNotice(''); setResend(null)
-    run(async () => {
-      const address = email.trim().toLowerCase()
-      const check = validateInstitutionalEmail(address)
-      if (!check.valid) throw new Error(check.error)
-      if (!password) throw new Error('Enter your password.')
+    clear()
+    const email = normalizeEmail(loginEmail)
+    if (!accountType(email)) { setError(`Sign-in is restricted to ${DOMAINS} addresses.`); return }
 
-      if (firebase) {
-        const result = await loginWithFirebase(address, password)
-        if (!result.emailVerified) {
-          setResend(() => result.resendVerification)
-          throw new Error(`Verify your address first — we sent a link to ${address}.`)
-        }
-        let profile = profileFor(address)
-        if (!profile) profile = await registerAccount(snap, { name: result.user.displayName || address.split('@')[0], email: address })
-        if (!profile.emailVerified) await verifyEmail(profile.id)
-        if (profile.status === ACCOUNT_STATUS.SUSPENDED) throw new Error('This account is suspended. Contact the System Administrator.')
-        signIn(profile.id)
+    if (!isFirebaseMode) {
+      // Local prototype backend: no passwords. The Firebase build authenticates
+      // with Firebase Auth (below).
+      admit((snap.users ?? []).find(u => normalizeEmail(u.email) === email))
+      return
+    }
+
+    if (!loginPassword) { setError('Enter your password.'); return }
+    setLoading(true)
+    try {
+      const { emailVerified, resendVerification } = await loginWithFirebase(email, loginPassword)
+      if (!emailVerified) {
+        setUnverified({ email, resend: resendVerification })
+        setError(`Verify ${email} first — check your inbox for the verification email.`)
         return
       }
-
-      const profile = profileFor(address)
-      if (!profile) throw new Error('No account is registered to that address. Create one first.')
-      if (!profile.emailVerified) {
-        setMailFor(profile)
-        throw new Error('Verify your address first — the verification email is shown below.')
-      }
-      if (profile.status !== ACCOUNT_STATUS.ACTIVE) {
-        throw new Error(`This account is ${profile.status.toLowerCase()}. Contact the System Administrator.`)
-      }
-      signIn(profile.id)
-    })
+      admit(await confirmProviderVerification(email))
+    } catch (err) {
+      setError(err.message || 'Sign-in failed. Check your credentials.')
+    } finally {
+      setLoading(false)
+    }
   }
 
-  function forgotPassword() {
-    setNotice('')
-    run(async () => {
-      const address = email.trim().toLowerCase()
-      const check = validateInstitutionalEmail(address)
-      if (!check.valid) throw new Error('Enter your institutional email first, then choose “Forgot password?”.')
-      if (firebase) await sendPasswordReset(address)
-      setNotice(firebase
-        ? `A password reset link was sent to ${address}.`
-        : 'In the Firebase build a reset link is emailed. The local prototype does not store passwords.')
-    })
-  }
-
-  function submitRegister(e) {
+  async function handleRegister(e) {
     e.preventDefault()
-    run(async () => {
-      if (!form.name.trim()) throw new Error('Enter your full name.')
-      const check = validateInstitutionalEmail(form.email)
-      if (!check.valid) throw new Error(check.error)
-      if (form.password.length < 8) throw new Error('Use a password of at least 8 characters.')
-      if (form.password !== form.confirm) throw new Error('The passwords do not match.')
-      if (firebase) await registerWithFirebase(form.email, form.password)
-      const profile = await registerAccount(snap, form)
-      setForm(BLANK)
-      if (firebase) {
-        setEmail(profile.email)
-        go('signin')
-        setNotice(`Account created. Open the link we sent to ${profile.email}, then sign in.`)
-      } else {
-        setMailFor(profile)
+    clear()
+    const email = normalizeEmail(reg.email)
+    if (!accountType(email)) { setError(`Registration is restricted to ${DOMAINS} addresses.`); return }
+    if (!reg.name.trim()) { setError('Enter your full name.'); return }
+    if (regType === 'Student' && sectionProblem(reg.block, reg.program)) { setError(sectionProblem(reg.block, reg.program)); return }
+
+    setLoading(true)
+    try {
+      if (isFirebaseMode) {
+        if (reg.password.length < 6) throw new Error('Password must be at least 6 characters long.')
+        await registerWithFirebase(email, reg.password)
       }
-    })
+      await registerAccount(null, { ...reg, email })
+      setSuccessMsg(
+        `Account created for ${email}. Open the verification email to confirm the address` +
+        `${import.meta.env.DEV && !isFirebaseMode ? ' (in this prototype: Dev tools → Outbox)' : ''}. ` +
+        'The System Administrator then activates the account.',
+      )
+      setTab('login')
+      setLoginEmail(email)
+      setReg(r => ({ ...r, password: '' }))
+    } catch (err) {
+      setError(err.message || 'Registration failed.')
+    } finally {
+      setLoading(false)
+    }
   }
 
-  function approve() {
-    run(async () => {
-      await verifyEmail(mailFor.id)
-      setEmail(mailFor.email)
-      go('signin')
-      setNotice('Address verified — your account is active. Sign in to continue.')
-    })
+  async function handleResend() {
+    if (!unverified?.resend) return
+    setLoading(true)
+    try {
+      await unverified.resend()
+      setSuccessMsg(`A new verification email was sent to ${unverified.email}.`)
+    } catch (err) {
+      setError(err.message || 'Could not resend the verification email.')
+    } finally {
+      setLoading(false)
+    }
   }
 
   return (
-    <div className="auth-page">
-      <aside className="auth-brand">
-        <div className="wordmark"><span className="crest">HAU</span></div>
-        <p className="auth-school">Holy Angel University<br />School of Computing</p>
-        <h1 className="auth-title">Thesis &amp; Capstone Project Management and Workflow Automation System</h1>
-        <p className="auth-foot">Context-Aware Access Control · Immutable versioning · Audit trail</p>
-      </aside>
+    <div className={`signin${DemoPanel ? ' has-demo' : ''}`}>
+      <div className="signin-card">
+        <header className="signin-head">
+          <div className="wordmark" style={{ marginBottom: 14 }}>
+            <span className="crest">HAU</span>
+            <strong>School of Computing</strong>
+          </div>
+          <h1>Thesis &amp; Capstone Workflow System</h1>
+          <p className="lede" style={{ marginTop: 8 }}>
+            Institutional portal for students, faculty and offices.
+            Restricted to <strong>@hau.edu.ph</strong> and <strong>@student.hau.edu.ph</strong> accounts.
+          </p>
+        </header>
 
-      <main className="auth-main">
-        <div className="auth-card panel">
-          {mode === 'signin' ? (
-            <form onSubmit={submitSignIn} noValidate>
-              <h2 className="auth-h">Sign in</h2>
-              <p className="small muted">Use your institutional HAU account. Access is restricted to registered School of Computing accounts.</p>
-              <Field label="Institutional email address">
-                <input type="email" value={email} onChange={e => setEmail(e.target.value)}
-                  placeholder="juan.delacruz@student.hau.edu.ph" autoComplete="username" />
+        <div className="tabs" role="tablist" aria-label="Account" style={{ marginBottom: 20 }}>
+          <button role="tab" aria-selected={tab === 'login'} onClick={() => { setTab('login'); clear() }}>Sign in</button>
+          <button role="tab" aria-selected={tab === 'register'} onClick={() => { setTab('register'); clear() }}>Register</button>
+        </div>
+
+        <div className="panel" style={{ marginBottom: 26 }}>
+          {successMsg && <p className="note" role="status" style={{ marginBottom: 16 }}>{successMsg}</p>}
+
+          {tab === 'login' ? (
+            <form onSubmit={handleSignIn} noValidate>
+              <Field label="Institutional email" hint={`Allowed domains: ${DOMAINS}`}>
+                <input
+                  type="email" value={loginEmail} onChange={e => setLoginEmail(e.target.value)}
+                  placeholder="name@hau.edu.ph" autoComplete="username" required
+                />
               </Field>
-              <Field label="Password">
-                <input type="password" value={password} onChange={e => setPassword(e.target.value)} autoComplete="current-password" />
-              </Field>
-              <div className="auth-links small">
-                <button type="button" className="link" onClick={forgotPassword}>Forgot password?</button>
-                <span>No account yet? <button type="button" className="link" onClick={() => go('register')}>Register</button></span>
-              </div>
-              <button className="primary block" type="submit" disabled={busy}>Continue</button>
-              {notice && <p className="small ok-text" role="status">{notice}</p>}
-              <ActionError error={error} />
-              {resend && (
-                <button type="button" className="quiet small" disabled={busy}
-                  onClick={() => run(async () => { await resend(); setNotice('A new verification link was sent.') })}>
-                  Resend verification email
-                </button>
+              {isFirebaseMode && (
+                <Field label="Password">
+                  <input
+                    type="password" value={loginPassword} onChange={e => setLoginPassword(e.target.value)}
+                    autoComplete="current-password" required
+                  />
+                </Field>
               )}
+              {error && <p className="small" role="alert" style={{ color: 'var(--stop)', marginBottom: 12 }}>{error}</p>}
+              {unverified && (
+                <p style={{ marginBottom: 14 }}>
+                  <button type="button" className="quiet" disabled={loading} onClick={handleResend}>Resend verification email</button>
+                </p>
+              )}
+              <button className="primary" type="submit" disabled={loading}>
+                {loading ? 'Signing in…' : 'Sign in'}
+              </button>
             </form>
           ) : (
-            <form onSubmit={submitRegister} noValidate>
-              <h2 className="auth-h">Create an account</h2>
-              <p className="small muted">
-                Only {DOMAINS.join(' and ')} addresses can register. Roles are assigned by the System
-                Administrator after sign-up; student addresses receive the Student role on verification.
-              </p>
-              <div className="row">
-                <Field label="Full name"><input value={form.name} onChange={set('name')} autoComplete="name" placeholder="Juan Dela Cruz" /></Field>
-                <Field label={regType === 'Faculty' ? 'Employee ID number' : 'Student / employee ID number'}>
-                  <input value={form.idNumber} onChange={set('idNumber')} />
-                </Field>
-              </div>
-              <Field label="Institutional email address" hint={regType ? `${regType} account` : undefined}>
-                <input type="email" value={form.email} onChange={set('email')} autoComplete="email" placeholder="juan.delacruz@student.hau.edu.ph" />
+            <form onSubmit={handleRegister} noValidate>
+              <Field label="Full name">
+                <input type="text" value={reg.name} onChange={setField('name')} autoComplete="name" required />
               </Field>
-              <div className="row">
-                <Field label="Academic program">
-                  <select value={form.program} onChange={set('program')}>
-                    {PROGRAMS.map(p => <option key={p}>{p}</option>)}
-                  </select>
+              <Field
+                label="Institutional email"
+                hint={regType ? `Registers a ${regType.toLowerCase()} account.` : `Must be an ${DOMAINS} address.`}
+              >
+                <input type="email" value={reg.email} onChange={setField('email')} autoComplete="username" required />
+              </Field>
+              {isFirebaseMode && (
+                <Field label="Password" hint="At least 6 characters">
+                  <input type="password" value={reg.password} onChange={setField('password')} autoComplete="new-password" required />
                 </Field>
-                {regType !== 'Faculty' && (
-                  <Field label="Year level and block (students)">
-                    <span className="row tight-row">
-                      <select value={form.yearLevel} onChange={set('yearLevel')} aria-label="Year level">
-                        {['3rd Year', '4th Year'].map(y => <option key={y}>{y}</option>)}
-                      </select>
-                      <input value={form.block} onChange={set('block')} placeholder={blockExample(form.program, yearDigit(form.yearLevel))} aria-label="Block" />
-                    </span>
+              )}
+              {regType === 'Student' && (
+                <>
+                  <Field label="Program">
+                    <select value={reg.program} onChange={setField('program')}>
+                      {PROGRAM_INFO.map(p => <option key={p.code} value={p.name}>{p.code} — {p.name}</option>)}
+                    </select>
                   </Field>
-                )}
-              </div>
-              <div className="row">
-                <Field label="Password" hint="At least 8 characters.">
-                  <input type="password" value={form.password} onChange={set('password')} autoComplete="new-password" />
-                </Field>
-                <Field label="Confirm password">
-                  <input type="password" value={form.confirm} onChange={set('confirm')} autoComplete="new-password" />
-                </Field>
-              </div>
-              <button className="primary block" type="submit" disabled={busy}>Create account</button>
-              <ActionError error={error} />
-              <p className="small muted" style={{ marginTop: 16 }}>
-                Already registered? <button type="button" className="link" onClick={() => go('signin')}>Sign in</button>
-              </p>
+                  <div className="row">
+                    <Field label="Student number"><input value={reg.idNumber} onChange={setField('idNumber')} /></Field>
+                    <Field label="Section" hint={sectionHint(reg.program)}>
+                      <input value={reg.block} onChange={setField('block')} placeholder={sectionHint(reg.program).replace(/^e\.g\. /, '').split(' ')[0]} />
+                    </Field>
+                  </div>
+                </>
+              )}
+              {regType === 'Faculty' && (
+                <p className="small muted">
+                  Faculty accounts start with no office role. The System Administrator activates the
+                  account and assigns Dean, Associate Dean, Program Chair/Coordinator or URO where it applies;
+                  project roles come from assignments on each project.
+                </p>
+              )}
+              {error && <p className="small" role="alert" style={{ color: 'var(--stop)', marginBottom: 12 }}>{error}</p>}
+              <button className="primary" type="submit" disabled={loading}>
+                {loading ? 'Registering…' : 'Register'}
+              </button>
             </form>
-          )}
-
-          {mailFor && (
-            <div className="mail" aria-live="polite">
-              <div className="mail-head">
-                <span className="label">Verification email · shown here in the prototype</span>
-                <div className="small"><span className="faint">To</span> <span className="mono">{mailFor.email}</span></div>
-                <div className="small"><span className="faint">From</span> HAU-SOC Research &lt;no-reply@hausoc-research.org&gt;</div>
-              </div>
-              <p className="small" style={{ margin: '12px 0' }}>
-                Someone registered <strong>{mailFor.email}</strong>. If this was you, approve it to activate the account.
-              </p>
-              <button className="primary" onClick={approve} disabled={busy}>Yes, this is my account</button>
-            </div>
           )}
         </div>
 
-        <p className="faint small auth-fr">
-          Domain-restricted registration · secure login · password reset · Firebase Authentication
-          {firebase ? '' : ' (local mode: passwords are not checked)'}
-        </p>
-
-        {!firebase && (
-          <details className="personas" open>
-            <summary className="label">Demo accounts — sign in without a password</summary>
-            <div className="persona-grid">
-              {personas.map(u => (
-                <button key={u.id} className="persona" onClick={() => signIn(u.id)}>
-                  <span className="pname">{u.name}</span>
-                  <span className="small muted">{describeStanding(u, snap)}</span>
-                </button>
-              ))}
-            </div>
-          </details>
-        )}
-      </main>
+        {seeding && <p className="note">Setting up demo data… this only happens once. Refresh in a moment.</p>}
+      </div>
+      {!seeding && DemoPanel && (
+        <Suspense fallback={null}><DemoPanel /></Suspense>
+      )}
     </div>
   )
+}
+
+/** "e.g. WD-401 · Capstone 1 in 4th Year, 1st Semester" for the chosen program. */
+function sectionHint(program) {
+  const info = PROGRAM_INFO.find(p => p.name === program) ?? PROGRAM_INFO[0]
+  const year = info.capstone[COURSES.C1].year
+  return `e.g. ${info.code}-${year}01 · Capstone 1 in ${courseSchedule(info.name, COURSES.C1)}`
 }

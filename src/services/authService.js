@@ -1,21 +1,19 @@
-import { EMAIL_DOMAINS, ALLOWED_DOMAINS } from '../domain/constants.js'
-
-const DOMAINS = Object.values(EMAIL_DOMAINS)
+import { EMAIL_DOMAINS, isInstitutionalEmail, normalizeEmail } from '../domain/constants.js'
 
 /**
  * Validates whether an email belongs to an allowed institutional domain.
  * Allowed domains: @hau.edu.ph and @student.hau.edu.ph
  */
 export function validateInstitutionalEmail(email = '') {
-  const norm = (email || '').trim().toLowerCase()
+  const norm = normalizeEmail(email)
   if (!norm) {
     return { valid: false, error: 'Email address is required.' }
   }
-  const isAllowed = DOMAINS.some(d => norm.endsWith(d))
-  if (!isAllowed) {
+  // Exact domain match (constants.js) — the same check registration uses.
+  if (!isInstitutionalEmail(norm)) {
     return {
       valid: false,
-      error: `Use your institutional address (${DOMAINS.join(' or ')}).`,
+      error: `Access is strictly restricted to ${Object.values(EMAIL_DOMAINS).join(' and ')} institutional email addresses.`,
     }
   }
   return { valid: true, error: null }
@@ -107,12 +105,4 @@ export async function loginWithFirebase(email, password) {
 export async function sendFirebaseEmailVerification(user) {
   const { sendEmailVerification } = await getAuthInstance()
   await sendEmailVerification(user)
-}
-
-/** FR-05 password reset — Firebase sends the reset link to the institutional address. */
-export async function sendPasswordReset(email) {
-  const check = validateInstitutionalEmail(email)
-  if (!check.valid) throw new Error(check.error)
-  const { auth, sendPasswordResetEmail } = await getAuthInstance()
-  await sendPasswordResetEmail(auth, email.trim().toLowerCase())
 }
