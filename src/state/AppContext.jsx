@@ -27,9 +27,10 @@ export function AppProvider({ children }) {
 
   const usersList = useMemo(() => ensureArray(snap?.users), [snap?.users])
 
-  // First run on a blank store: load the demo dataset.
+  // First run on a blank store: load the demo dataset. Never on a live
+  // project — replaceAll wipes every collection first.
   useEffect(() => {
-    if (!ready || seeding.current) return
+    if (!ready || seeding.current || isLiveBackend) return
     if (usersList.length === 0) {
       seeding.current = true
       db.replaceAll(buildSeed()).finally(() => { seeding.current = false })
