@@ -47,16 +47,16 @@ export default function LogsPanel({ b, ctx }) {
         {b.weeklyLogs.map(l => (
           <div className="entry" key={l.id}>
             <div className="entry-head">
-              <strong style={{ fontSize: 13 }}>Week {l.weekNo}</strong>
+              <strong className="text-sm">Week {l.weekNo}</strong>
               <Badge tone={LOG_TONE[l.status]}>{l.status}</Badge>
             </div>
             <div className="faint small">
               {fmtDate(l.periodStart)} – {fmtDate(l.periodEnd)} · submitted by {nameOf(l.submittedBy)}
             </div>
-            <p className="small" style={{ margin: '8px 0 0' }}>{l.activities}</p>
+            <p className="small m-0 mt-1">{l.activities}</p>
 
             {l.status !== 'Submitted' && (l.signedAt || l.adviserRemarks) && (
-              <div className="small muted" style={{ marginTop: 8 }}>
+              <div className="small muted mt-1">
                 {l.signedAt ? `Signed by ${nameOf(l.signedBy)} on ${fmtDate(l.signedAt)}` : 'Returned by the Adviser'}
                 {l.adviserRemarks && <> — “{l.adviserRemarks}”</>}
               </div>

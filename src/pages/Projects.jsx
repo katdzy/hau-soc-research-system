@@ -29,8 +29,7 @@ export default function Projects() {
   return (
     <div className="page">
       <header className="page-head">
-        <div className="label">Projects</div>
-        <h1>Projects visible to you</h1>
+        <h1>Projects</h1>
         <p className="lede">
           Visibility is resolved per project and per stage: your group membership, the
           project roles you hold on it, and whether its current stage involves your office.
@@ -40,9 +39,9 @@ export default function Projects() {
       {canCreate && (
         <Section title="Create a project group">
           {!creating ? (
-            <button onClick={() => setParams({ new: '1' })}>New project group</button>
+            <button className="primary" onClick={() => setParams({ new: '1' })}>New project group</button>
           ) : (
-            <div className="panel">
+            <div>
               <div className="row">
                 <Field label="Section">
                   <select value={form.sectionId} onChange={e => setForm(f => ({ ...f, sectionId: e.target.value }))}>
@@ -60,7 +59,7 @@ export default function Projects() {
                 </button>
                 <button className="quiet" onClick={() => setParams({})}>Cancel</button>
               </div>
-              <p className="faint small" style={{ marginTop: 12 }}>
+              <p className="faint small mt-2">
                 You become Instructor 1 on the new group. You add its students from the block roster —
                 students do not form their own groups.
               </p>
@@ -74,11 +73,11 @@ export default function Projects() {
         title={`${rows.length} project${rows.length === 1 ? '' : 's'}`}
         aside={
           <span className="inline">
-            <select value={stageFilter} onChange={e => setStageFilter(e.target.value)} aria-label="Stage" style={{ width: 'auto' }}>
+            <select value={stageFilter} onChange={e => setStageFilter(e.target.value)} aria-label="Stage" className="w-auto">
               <option value="">All stages</option>
               {STAGES.map(s => <option key={s.key} value={s.key}>{s.label}</option>)}
             </select>
-            <select value={programFilter} onChange={e => setProgramFilter(e.target.value)} aria-label="Program" style={{ width: 'auto' }}>
+            <select value={programFilter} onChange={e => setProgramFilter(e.target.value)} aria-label="Program" className="w-auto">
               <option value="">All programs</option>
               {PROGRAMS.map(p => <option key={p} value={p}>{p}</option>)}
             </select>

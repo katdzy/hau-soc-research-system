@@ -64,7 +64,7 @@ export default function DocumentsPanel({ b, ctx }) {
                         <strong>{d.title}</strong>
                         <span className="mono faint">v{d.versionNumber}</span>
                       </span>
-                      <span className="inline" style={{ marginTop: 4 }}>
+                      <span className="inline mt-half">
                         <Badge tone={docTone(d.status)}>{d.status}</Badge>
                         {d.milestone && <Badge tone="info">{d.milestone}</Badge>}
                       </span>
@@ -106,7 +106,7 @@ export default function DocumentsPanel({ b, ctx }) {
               </dl>
               {doc.topics && (
                 <>
-                  <div className="label" style={{ margin: '16px 0 4px' }}>Proposed topics</div>
+                  <div className="label m-0 mt-2 mb-half">Proposed topics</div>
                   <ol className="topic-list">
                     {doc.topics.map(t => (
                       <li key={t} className={t === approvedTopic ? 'is-approved' : undefined}>
@@ -118,8 +118,8 @@ export default function DocumentsPanel({ b, ctx }) {
               )}
               {doc.abstract && (
                 <>
-                  <div className="label" style={{ margin: '16px 0 4px' }}>Abstract as submitted</div>
-                  <p className="small muted" style={{ maxWidth: '68ch' }}>{doc.abstract}</p>
+                  <div className="label m-0 mt-2 mb-half">Abstract as submitted</div>
+                  <p className="small muted measure">{doc.abstract}</p>
                 </>
               )}
             </Section>
@@ -137,16 +137,16 @@ export default function DocumentsPanel({ b, ctx }) {
                   </p>
                 ) : (
                   <>
-                    <div className="note ai" style={{ marginBottom: 16 }}>{summary.label}</div>
+                    <div className="note ai mb-2">{summary.label}</div>
                     <dl className="kv">
                       {Object.entries(summary.structured).map(([k, v]) => (
-                        <div key={k} style={{ display: 'contents' }}>
+                        <div key={k} className="contents">
                           <dt>{k.replace(/([A-Z])/g, ' $1').replace(/^./, c => c.toUpperCase())}</dt>
                           <dd className="small">{v}</dd>
                         </div>
                       ))}
                     </dl>
-                    <p className="faint small" style={{ marginTop: 12 }}>
+                    <p className="faint small mt-2">
                       {summary.milestone} · version {summary.documentVersion} · generated {fmtDateTime(summary.generatedAt)} · {summary.model}
                     </p>
                   </>
@@ -158,11 +158,11 @@ export default function DocumentsPanel({ b, ctx }) {
               <Section title="Returned by the URO">
                 <div className="entry">
                   <div className="entry-head">
-                    <strong style={{ fontSize: 13 }}>{nameOf(uroReturn.by)}</strong>
+                    <strong className="text-sm">{nameOf(uroReturn.by)}</strong>
                     <Badge tone="warn">Returned</Badge>
                   </div>
-                  <p className="small" style={{ margin: '4px 0 0' }}>{uroReturn.remarks}</p>
-                  <div className="faint small" style={{ marginTop: 4 }}>University Research Office · {fmtDateTime(uroReturn.at)}</div>
+                  <p className="small m-0 mt-half">{uroReturn.remarks}</p>
+                  <div className="faint small mt-half">University Research Office · {fmtDateTime(uroReturn.at)}</div>
                 </div>
               </Section>
             )}
@@ -173,13 +173,13 @@ export default function DocumentsPanel({ b, ctx }) {
                 {reviews.map(r => (
                   <div className="entry" key={r.id}>
                     <div className="entry-head">
-                      <strong style={{ fontSize: 13 }}>{nameOf(r.reviewerId)}</strong>
+                      <strong className="text-sm">{nameOf(r.reviewerId)}</strong>
                       <Badge tone={r.decision === DECISIONS.REJECT ? 'stop' : r.decision === DECISIONS.MAJOR ? 'warn' : 'ok'}>
                         {r.decision}
                       </Badge>
                     </div>
-                    <p className="small" style={{ margin: '4px 0 0' }}>{r.comment}</p>
-                    <div className="faint small" style={{ marginTop: 4 }}>{r.reviewerRole} · {fmtDateTime(r.createdAt)}</div>
+                    <p className="small m-0 mt-half">{r.comment}</p>
+                    <div className="faint small mt-half">{r.reviewerRole} · {fmtDateTime(r.createdAt)}</div>
                   </div>
                 ))}
                 {(can(ctx, 'review.decide') || can(ctx, 'review.return')) && reviewable &&
@@ -266,7 +266,7 @@ function UploadForm({ types, b, onDone }) {
           {/* R9 — dev builds only: the walkthroughs (Prompt 11) run in a browser
               that cannot open a file picker, so offer the matching dummy PDF. */}
           {FLAGS.DEV_TOOLS && !isLink && (
-            <p className="inline small" style={{ marginTop: -8 }}>
+            <p className="inline small mt-pull">
               <button type="button" className="quiet small" onClick={async () => {
                 const sample = await sampleFileFor({ projectId: b.project.id, docType, versionNumber: next, workflowStage: b.project.currentStage })
                 if (!sample) return setError(`No dummy PDF for ${docType}.`)
@@ -294,10 +294,10 @@ function UploadForm({ types, b, onDone }) {
             }}>
             Submit version {next}
           </button>
-          {touched && problem && <p className="small" role="alert" style={{ color: 'var(--stop)', marginTop: 8 }}>{problem}</p>}
+          {touched && problem && <p className="small error-text mt-1" role="alert">{problem}</p>}
           <ActionError error={error} />
           {current && (
-            <p className="faint small" style={{ marginTop: 12 }}>
+            <p className="faint small mt-2">
               Version {current.versionNumber} is kept and marked superseded. Submitted files cannot be changed.
             </p>
           )}
@@ -335,21 +335,21 @@ function Annotations({ b, ctx, doc, annotations, canAnnotate, nameOf }) {
               <div className="entry-head">
                 <span className="inline">
                   <span className="note-n mono" aria-hidden="true">{a.n}</span>
-                  <strong style={{ fontSize: 13 }}>{nameOf(a.authorId)}</strong>
+                  <strong className="text-sm">{nameOf(a.authorId)}</strong>
                 </span>
                 <span className="inline">
                   <Badge tone="accent">{a.authorRole}</Badge>
                   {a.visibility === 'private' && <Badge tone="warn">{a.releasedAt ? 'released' : 'private'}</Badge>}
                 </span>
               </div>
-              <div className="mono faint small" style={{ margin: '4px 0' }}>
+              <div className="mono faint small m-0 mt-half mb-half">
                 {a.position
                   ? <button className="linkish" onClick={() => setFocus(a.id)}>{a.anchor}</button>
                   : a.anchor}
                 {a.category ? ` · ${a.category}` : ''}
               </div>
-              <p className="small" style={{ margin: 0 }}>{a.text}</p>
-              <div className="faint small" style={{ marginTop: 4 }}>{fmtDateTime(a.createdAt)}</div>
+              <p className="small m-0">{a.text}</p>
+              <div className="faint small mt-half">{fmtDateTime(a.createdAt)}</div>
             </li>
           ))}
         </ol>
@@ -367,8 +367,8 @@ function AnnotationForm({ b, ctx, doc, draft, onClearDraft, hasFile }) {
   const role = why(ctx, 'document.annotate')?.role
 
   return (
-    <div className="subform" style={{ marginTop: 0, marginBottom: 16 }}>
-      <div className="label" style={{ marginBottom: 8 }}>Annotate as {role}</div>
+    <div className="subform mt-0 mb-2">
+      <div className="label mb-1">Annotate as {role}</div>
       {/* Announced, so a screen-reader user hears that the selection became a mark. */}
       <div role="status" className="sr-only">{draft ? `Marked ${anchorOf(draft)}` : ''}</div>
       {draft ? (
@@ -424,7 +424,7 @@ function ReviewForm({ b, ctx, doc }) {
 
   return (
     <div className="subform">
-      <div className="label" style={{ marginBottom: 8 }}>Decide as {role}</div>
+      <div className="label mb-1">Decide as {role}</div>
       <Field label="Decision">
         <select value={decision} onChange={e => setDecision(e.target.value)}>
           {choices.map(d => <option key={d} value={d}>{d}</option>)}

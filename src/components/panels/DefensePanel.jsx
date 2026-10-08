@@ -43,10 +43,10 @@ export default function DefensePanel({ b, ctx }) {
         {[...b.defenses].reverse().map(d => (
           <div className="entry" key={d.id}>
             <div className="entry-head">
-              <strong style={{ fontSize: 13 }}>{d.type} Defense</strong>
+              <strong className="text-sm">{d.type} Defense</strong>
               <Badge tone={verdictTone(d.verdict)}>{d.verdict ?? 'Verdict pending'}</Badge>
             </div>
-            <dl className="kv" style={{ marginTop: 8 }}>
+            <dl className="kv mt-1">
               <dt>Schedule</dt><dd>{fmtDateTime(d.scheduledAt)}</dd>
               <dt>Venue or link</dt><dd>{d.venue}</dd>
               {d.instructions && <><dt>Instructions</dt><dd className="small">{d.instructions}</dd></>}
@@ -103,16 +103,16 @@ export default function DefensePanel({ b, ctx }) {
 
       {upcoming && (
         <Section title={`Publish the ${defenseTypeAt(upcoming.key).toLowerCase()} defense schedule`}>
-          <p className="small muted" style={{ marginTop: 0 }}>
+          <p className="small muted mt-0">
             Opens at {upcoming.label}, after:
           </p>
           <ul className="todo">
             {before.map(g => <li key={g.action}>{g.label} <span className="faint">— {g.actorHint}</span></li>)}
           </ul>
-          <div className="actions" style={{ marginTop: 16 }}>
+          <div className="actions mt-2">
             <button className="primary" disabled aria-describedby="schedule-not-yet">Publish schedule</button>
           </div>
-          <p id="schedule-not-yet" className="small faint" style={{ marginTop: 8 }}>
+          <p id="schedule-not-yet" className="small faint mt-1">
             Not available until the project reaches {upcoming.label}.
           </p>
         </Section>
@@ -134,7 +134,7 @@ export default function DefensePanel({ b, ctx }) {
               onSubmit={({ verdict: v, remarks: r }) => run(() => recordVerdict(me, snap, b.project.id, { verdict: v, remarks: r }))} />
           )}
           {FLAGS.VERDICT_CORRECTION_HOURS > 0 && (
-            <p className="faint small" style={{ marginTop: 8 }}>
+            <p className="faint small mt-1">
               You can correct the verdict once, within {FLAGS.VERDICT_CORRECTION_HOURS} hours, until the group or the Adviser acts on it.
             </p>
           )}

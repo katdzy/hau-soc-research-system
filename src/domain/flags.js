@@ -206,6 +206,14 @@ export const FLAGS = {
    */
   URO_EMAILS: { endorsedToUro: true, certificatesResubmitted: true },
 
+  /**
+   * Revision 2026-10-07 · device notifications on the installed app (PWA).
+   * 'mirror-email' = every email notify() records also shows as a phone/desktop
+   * notification for its recipients (same events, same text, tap opens the
+   * project). Still no in-app notification list. 'off' = email only.
+   */
+  DEVICE_NOTIFICATIONS: 'mirror-email',
+
   // --- R9: dev tools -----------------------------------------------------------
 
   /** Persona switcher, stage controls, reset, outbox, audit viewer. Never in a production build. */
@@ -238,6 +246,7 @@ export const FLAG_NOTES = {
   GROUP_SIZE: { source: 'Team, 2026-09-29', kind: 'Decided 2026-09-29', wired: 'addMember (actions.js), Overview and section desk counts' },
   VERDICT_AFTER_SCHEDULED_TIME: { source: 'NEW-40', kind: 'Decided 2026-09-29', wired: 'stages.js defenseNotHeld → verdict gates, recordVerdict, DefensePanel' },
   REDEFENSE_REVISION_DAYS: { source: 'NEW-41', kind: 'Decided 2026-09-29', wired: 'recordVerdict countdown; stages.js RETURN_TO_*_DEFENSE gates; submitReview' },
+  DEVICE_NOTIFICATIONS: { source: 'Revision 2026-10-07', kind: 'Decided 2026-10-07', wired: 'useOutboxNotifications (notifications.js) in Shell; functions/index.js deliverOutbox + registerPushToken (not deployed); signOut (AppContext) unregisters the device' },
   VERDICT_CORRECTION_HOURS: { source: 'NEW-42', kind: 'Decided 2026-09-29', wired: 'stages.js verdictCorrectionBlocker, guard correctVerdict, correctVerdict (actions.js), DefensePanel' },
   I2_READINESS_CHECK: { source: 'NEW-43', kind: 'Decided 2026-09-29', wired: 'caac.js readiness.confirm policy, stages.js readinessBlocker + FM-2005 gate, confirmReadiness (actions.js)' },
   POST_DEFENSE_REQUIREMENTS_STAGES: { source: 'NEW-44', kind: 'Decided 2026-09-29', wired: 'caac.js requirements.confirm policy, confirmPostDefenseRequirements (actions.js)' },

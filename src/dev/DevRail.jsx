@@ -8,7 +8,7 @@ import './dev.css'
 export default function DevRail() {
   const { snap, me, signIn } = useApp()
   return (
-    <div className="dev-switch" style={{ marginBottom: 16 }}>
+    <div className="dev-switch mb-2">
       <label className="label" htmlFor="dev-persona">Switch persona <span className="dev-flag">dev</span></label>
       <select id="dev-persona" value={me.id} onChange={e => signIn(e.target.value)}>
         {Object.entries(splitPersonas(snap.users ?? [])).map(([group, list]) => (

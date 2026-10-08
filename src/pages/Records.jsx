@@ -43,8 +43,7 @@ export default function Records() {
   return (
     <div className="page">
       <header className="page-head">
-        <div className="label">Records</div>
-        <h1>Records archive</h1>
+        <h1>Archive</h1>
         <p className="lede">
           Projects that cleared URO verification and final approval. Each carries a Pass result —
           the system does not compute or store grades.

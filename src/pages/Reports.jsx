@@ -65,7 +65,6 @@ export default function Reports() {
   return (
     <div className="page">
       <header className="page-head">
-        <div className="label">Reports</div>
         <h1>{scope ? 'Program reports' : 'School of Computing reports'}</h1>
         <p className="lede">
           {scope

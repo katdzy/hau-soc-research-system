@@ -18,14 +18,14 @@ export default function HistoryPanel({ b }) {
       {[...b.history].reverse().map(h => (
         <div className="entry" key={h.id}>
           <div className="entry-head">
-            <strong style={{ fontSize: 13 }}>
+            <strong className="text-sm">
               {h.fromStage === h.toStage
                 ? h.note || h.action
                 : <>{h.fromStage ? `${stageLabel(h.fromStage)} → ` : ''}{stageLabel(h.toStage)}</>}
             </strong>
             <span className="faint small">{fmtDateTime(h.at)}</span>
           </div>
-          <div className="small muted" style={{ marginTop: 4 }}>
+          <div className="small muted mt-half">
             {h.actorId === 'system' ? 'System' : nameOf(h.actorId)}
             {h.hat && <> · {h.hat}</>}
             {h.fromStage !== h.toStage && h.note && <> — {h.note}</>}

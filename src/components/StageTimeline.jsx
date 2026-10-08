@@ -24,7 +24,17 @@ export default function StageTimeline({ current, history = [] }) {
 
   return (
     <nav className="timeline" aria-label="Project life cycle">
-      <ol className="tl-phases">
+      <ol className="sr-only">
+        {STAGES.map((s, i) => {
+          const date = dateOf(s.key)
+          return (
+            <li key={s.key} aria-current={i === at ? 'step' : undefined}>
+              {s.label}{i < at ? ', done' : i === at ? ', current stage' : ''}{date ? `, ${fmt(date)}` : ''}
+            </li>
+          )
+        })}
+      </ol>
+      <ol className="tl-phases" aria-hidden="true">
         {phases.map(ph => {
           const first = ph.steps[0].i
           const lastI = ph.steps.at(-1).i
@@ -39,7 +49,7 @@ export default function StageTimeline({ current, history = [] }) {
                   const text = `${s.label}${date ? ` · ${fmt(date)}` : ''}${state === 'current' ? ' (current)' : state === 'done' ? ' (done)' : ''}`
                   return (
                     <li key={s.key} className={`tl-step ${state}`} aria-current={state === 'current' ? 'step' : undefined}>
-                      <span className="tl-dot" title={text} tabIndex={0} aria-label={text} />
+                      <span className="tl-dot" title={text} />
                     </li>
                   )
                 })}

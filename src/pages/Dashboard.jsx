@@ -3,7 +3,8 @@ import { Link, useLocation, useNavigate } from 'react-router-dom'
 import { useApp } from '../state/AppContext.jsx'
 import { worklist, isActionable, officeQueues } from '../services/worklist.js'
 import { reportScope } from './Reports.jsx'
-import { Badge, Section, Empty, Countdown, fmtDate, fmtDateTime, firstName, verdictTone } from '../components/ui.jsx'
+import { Badge, Section, Empty, Countdown, Avatar, daysLeft, programShort, fmtDate, fmtDateTime, firstName, verdictTone } from '../components/ui.jsx'
+import ProgressTrail from '../components/ProgressTrail.jsx'
 import { can, resolveInstitution, resolveContext, allowedDocTypes } from '../domain/caac.js'
 import { canDo, viewBundle } from '../domain/guard.js'
 import { FLAGS } from '../domain/flags.js'
@@ -69,17 +70,17 @@ export default function Dashboard() {
   const groups = rows.filter(r => r.ctx.isMember)
   const staff = rows.filter(r => !r.ctx.isMember)
   const groupOwes = groups.reduce((n, r) => n + r.tasks.length, 0)
+  const overdue = staff.filter(r => (daysLeft(r.project.revisionDeadline) ?? 0) < 0).length
 
   if (ungrouped) {
     return (
       <div className="page">
         <header className="page-head">
-          <div className="label">Worklist</div>
-          <h1>Good day, {firstName(me.name)}</h1>
-          <p className="lede">You are not in a project group yet.</p>
+          <h1>Dashboard</h1>
+          <p className="lede">Good day, {firstName(me.name)}. You are not in a project group yet.</p>
         </header>
         <Section title="What happens next">
-          <p style={{ maxWidth: '64ch' }}>
+          <p className="measure">
             Students don’t form their own groups. The Instructor 1 of your section
             {me.block ? ` (${me.block})` : ''} creates the groups and adds you to one. Your group’s
             workspace, stage, adviser and deadlines appear here once they do, and you’ll get an
@@ -94,16 +95,16 @@ export default function Dashboard() {
     return (
       <div className="page">
         <header className="page-head">
-          <div className="label">Worklist</div>
-          <h1>Good day, {firstName(me.name)}</h1>
+          <h1>Dashboard</h1>
           <p className="lede">
+            Good day, {firstName(me.name)}.{' '}
             {groupOwes
               ? `Your group has ${groupOwes} thing${groupOwes > 1 ? 's' : ''} to do.`
               : 'Nothing is waiting on your group right now.'}
           </p>
         </header>
         {groups.map(r => <GroupDesk key={r.project.id} r={r} />)}
-        <p className="faint small" style={{ maxWidth: '72ch' }}>
+        <p className="faint small measure">
           Approvals, returned work, schedules, verdicts and deadlines are emailed to {me.email}.
         </p>
       </div>
@@ -113,33 +114,38 @@ export default function Dashboard() {
   return (
     <div className="page">
       <header className="page-head">
-        <div className="label">Worklist</div>
-        <h1>Good day, {firstName(me.name)}</h1>
-        {notice && <p className="note small" role="status" style={{ margin: '8px 0 16px' }}>{notice}</p>}
+        <h1>Dashboard</h1>
         <p className="lede">
+          Good day, {firstName(me.name)}.{' '}
           {owed
             ? `${owed} item${owed > 1 ? 's' : ''} need${owed > 1 ? '' : 's'} something from you.`
             : 'Nothing is waiting on you right now.'}
         </p>
+        {notice && <p className="note small m-0 mt-2" role="status">{notice}</p>}
       </header>
 
+      <div className="stat-row">
+        <div className={`stat${actionable.length ? ' is-accent' : ''}`}><div className="n">{actionable.length}</div><div className="label">Waiting on you</div></div>
+        <div className="stat"><div className="n">{staff.length}</div><div className="label">Projects you can open</div></div>
+        <div className={`stat${overdue ? ' is-stop' : ''}`}><div className={`n${overdue ? ' is-stop' : ''}`}>{overdue}</div><div className="label">Past a revision deadline</div></div>
+        {can(inst, 'admin.accounts') && (
+          <div className={`stat${toActivate.length ? ' is-accent' : ''}`}><div className="n">{toActivate.length}</div><div className="label">Accounts to activate</div></div>
+        )}
+      </div>
+
       {toActivate.length > 0 && (
-        <Section title="Accounts to activate">
-          <article className="gate">
-            <div className="entry-head">
-              <strong>{toActivate.length} verified registration{toActivate.length > 1 ? 's' : ''} waiting for activation</strong>
-            </div>
-            <ul className="todo">
-              {toActivate.slice(0, 5).map(u => (
-                <li key={u.id}>{u.name} <span className="faint">· {accountType(u.email)} · {u.email}</span></li>
-              ))}
-              {toActivate.length > 5 && <li className="faint">and {toActivate.length - 5} more</li>}
-            </ul>
-            <div className="actions" style={{ marginTop: 16 }}>
-              <Link className="btn" to="/admin/accounts">Open Accounts</Link>
-            </div>
-          </article>
-        </Section>
+        <div className="note mb-3" role="status">
+          <div className="entry-head">
+            <strong>{toActivate.length} verified registration{toActivate.length > 1 ? 's' : ''} waiting for activation</strong>
+            <Link className="btn small primary" to="/admin/accounts">Open User Accounts</Link>
+          </div>
+          <ul className="todo">
+            {toActivate.slice(0, 5).map(u => (
+              <li key={u.id}>{u.name} <span className="faint">· {accountType(u.email)} · {u.email}</span></li>
+            ))}
+            {toActivate.length > 5 && <li className="faint">and {toActivate.length - 5} more</li>}
+          </ul>
+        </div>
       )}
 
       {can(inst, 'group.create') && inst.sections.filter(s => s.course === COURSES.C1)
@@ -183,7 +189,7 @@ export default function Dashboard() {
       {can(inst, 'report.generate') && <ProgramSummary />}
 
       {holdsOffice && (
-        <p className="faint small" style={{ maxWidth: '72ch' }}>
+        <p className="faint small measure">
           Progressive visibility: a project opens to your office only while one of its steps is yours.
           Outside those steps you see the counts above and in <Link to="/reports">Reports</Link>.
         </p>
@@ -217,97 +223,120 @@ function GroupDesk({ r }) {
     .filter(d => d && [DOC_STATUS.SUBMITTED, DOC_STATUS.UNDER_REVIEW].includes(d.status)) : []
   const people = PEOPLE.map(role => [role, b.assignments.filter(a => a.roleType === role).map(a => nameOf(a.userId))])
 
+  const deadline = daysLeft(b.project.revisionDeadline)
+  const logsDone = b.weeklyLogs.filter(l => l.status === 'Approved').length
+
   return (
-    <section className="section group-desk" aria-labelledby={`g-${b.project.id}`}>
-      <div className="group-main">
-        <div className="label">
-          {macroStageOf(stage?.key)}
-          {stage && macroStageOf(stage.key) !== stage.label && <> · <span className="mono">{stage.label}</span></>}
-        </div>
-        <h2 id={`g-${b.project.id}`} className="group-title">
-          <Link className="row-link" to={link()}>{b.project.title}</Link>
-        </h2>
-        <p className="small muted">{b.project.program}</p>
-        <p className="small muted">{(({ section, course, term }) => `${section} · ${course} · ${term}`)(sectionNow(b.project))}</p>
-        {b.project.currentStage === 'ARCHIVED' && (
-          <div className="inline" style={{ marginBottom: 16 }}>
-            <Badge tone="ok">Completed</Badge>
+    <div aria-labelledby={`g-${b.project.id}`}>
+      <section className="hero">
+        <div>
+          <h2 id={`g-${b.project.id}`}>{b.project.title}</h2>
+          <div className="hero-pills">
+            <Badge tone="accent">Stage: {macroStageOf(stage?.key)}{stage && macroStageOf(stage.key) !== stage.label ? ` · ${stage.label}` : ''}</Badge>
+            {b.project.currentStage === 'ARCHIVED' && <Badge tone="ok">Completed</Badge>}
             {b.project.archiveResult && <Badge>Result: {b.project.archiveResult}</Badge>}
-          </div>
-        )}
-        {(b.project.revisionDeadline || b.project.revisionStatus === 'Overdue') && (
-          <div className="inline" style={{ marginBottom: 16 }}>
             {b.project.revisionStatus === 'Overdue' && <Badge tone="stop">Overdue</Badge>}
             <Countdown deadline={b.project.revisionDeadline} />
+            {gate && <Badge tone="accent">Next gate: {gate.label}</Badge>}
           </div>
-        )}
-
-        {uroReturnOutstanding(b).length > 0 && (
-          <div className="note small" role="status" style={{ marginBottom: 16, maxWidth: '64ch' }}>
-            <strong>The University Research Office returned your {uroReturnOf(b).docTypes.join(' and ')}.</strong>{' '}
-            {uroReturnOf(b).remarks}
-          </div>
-        )}
-
-        <h3 className="label group-sub">Waiting on your group</h3>
-        {r.tasks.length > 0 ? (
-          <ul className="todo">
-            {r.tasks.map((t, i) => (
-              <li key={i} className={t.urgent ? 'urgent' : undefined}>
-                <Link to={link(t.tab)}>{t.label}</Link>
-              </li>
+          <dl className="hero-people">
+            {people.filter(([role, names]) => names.length || role === P.ADVISER || role === P.INSTRUCTOR_1).map(([role, names]) => (
+              <div key={role}>
+                <dt>{role}</dt>
+                <dd className={names.length ? undefined : 'faint'}>
+                  {names.length ? names.join(', ') : role === P.ADVISER ? 'Awaiting appointment' : 'Not yet'}
+                </dd>
+              </div>
             ))}
-          </ul>
-        ) : withReviewer.length ? (
-          <p className="small muted" style={{ margin: 0 }}>
-            Nothing right now. {withReviewer.map(d => `${d.docType} v${d.versionNumber}`).join(' and ')}
-            {withReviewer.length > 1 ? ' are' : ' is'} waiting for a decision from {deciders.join(' or ')}.
-          </p>
-        ) : (
-          <p className="small muted" style={{ margin: 0 }}>
-            {gate
-              ? <>Nothing right now. Next: {gate.label.charAt(0).toLowerCase() + gate.label.slice(1)} — waiting on {gate.actorHint}.</>
-              : <>Your project is <strong>completed</strong>{b.project.archivedAt && <> and archived on {fmtDate(b.project.archivedAt)}</>}.</>}
-          </p>
-        )}
-
-        {openDefense && (
-          <>
-            <h3 className="label group-sub">{openDefense.type} defense</h3>
-            <dl className="kv">
-              <dt>Schedule</dt><dd>{fmtDateTime(openDefense.scheduledAt)}</dd>
-              <dt>Venue or link</dt><dd>{openDefense.venue}</dd>
-              {openDefense.instructions && <><dt>Instructions</dt><dd className="small">{openDefense.instructions}</dd></>}
-            </dl>
-          </>
-        )}
-
-        {verdict && (
-          <>
-            <h3 className="label group-sub">Latest verdict · {verdict.type} defense</h3>
-            <div className="inline"><Badge tone={verdictTone(verdict.verdict)}>{verdict.verdict}</Badge>
-              <span className="faint small">recorded {fmtDate(verdict.recordedAt)}</span>
-              {verdict.revisionStatus === 'Completed' && <Badge tone="ok">revisions completed</Badge>}
+            <div>
+              <dt>Section</dt>
+              <dd>{(({ section, course, term }) => `${section} · ${course} · ${term}`)(sectionNow(b.project))}</dd>
             </div>
-            {verdict.remarks && <p className="small" style={{ margin: '8px 0 0', maxWidth: '64ch' }}>{verdict.remarks}</p>}
-          </>
-        )}
+          </dl>
+        </div>
+        <div className="hero-actions">
+          <Link className="btn primary" to={link()}>Open project</Link>
+          <Link className="btn" to={link('documents')}>Version history</Link>
+        </div>
+      </section>
+
+      {uroReturnOutstanding(b).length > 0 && (
+        <div className="note stop mb-3" role="status">
+          <strong>The University Research Office returned your {uroReturnOf(b).docTypes.join(' and ')}.</strong>{' '}
+          {uroReturnOf(b).remarks}
+        </div>
+      )}
+
+      <div className="desk-grid">
+        <div>
+          <Section title="Waiting on your group" tone={r.tasks.some(t => t.urgent) ? 'stop' : r.tasks.length ? 'accent' : undefined}>
+            {r.tasks.length > 0 ? (
+              <ul className="todo mt-0">
+                {r.tasks.map((t, i) => (
+                  <li key={i} className={t.urgent ? 'urgent' : undefined}>
+                    <Link to={link(t.tab)}>{t.label}</Link>
+                  </li>
+                ))}
+              </ul>
+            ) : withReviewer.length ? (
+              <p className="small muted m-0">
+                Nothing right now. {withReviewer.map(d => `${d.docType} v${d.versionNumber}`).join(' and ')}
+                {withReviewer.length > 1 ? ' are' : ' is'} waiting for a decision from {deciders.join(' or ')}.
+              </p>
+            ) : (
+              <p className="small muted m-0">
+                {gate
+                  ? <>Nothing right now. Next: {gate.label.charAt(0).toLowerCase() + gate.label.slice(1)} — waiting on {gate.actorHint}.</>
+                  : <>Your project is <strong>completed</strong>{b.project.archivedAt && <> and archived on {fmtDate(b.project.archivedAt)}</>}.</>}
+              </p>
+            )}
+          </Section>
+
+          <div className="stat-row">
+            <div className={`stat${r.tasks.length ? ' is-accent' : ''}`}><div className="n">{r.tasks.length}</div><div className="label">Pending tasks</div></div>
+            {deadline !== null && (
+              <div className={`stat${deadline < 0 ? ' is-stop' : ''}`}>
+                <div className={`n${deadline < 0 ? ' is-stop' : ''}`}>{deadline < 0 ? `−${Math.abs(deadline)}` : deadline}</div>
+                <div className="label">{deadline < 0 ? 'Days past the revision deadline' : 'Days before the revision deadline'}</div>
+              </div>
+            )}
+            <div className="stat"><div className="n">{logsDone} / {b.weeklyLogs.length}</div><div className="label">Weekly logs approved</div></div>
+          </div>
+
+          {openDefense && (
+            <Section title={`${openDefense.type} defense`}>
+              <dl className="kv">
+                <dt>Schedule</dt><dd>{fmtDateTime(openDefense.scheduledAt)}</dd>
+                <dt>Venue or link</dt><dd>{openDefense.venue}</dd>
+                {openDefense.instructions && <><dt>Instructions</dt><dd className="small">{openDefense.instructions}</dd></>}
+              </dl>
+            </Section>
+          )}
+
+          {verdict && (
+            <Section title={`Latest verdict · ${verdict.type} defense`}>
+              <div className="inline"><Badge tone={verdictTone(verdict.verdict)}>{verdict.verdict}</Badge>
+                <span className="faint small">recorded {fmtDate(verdict.recordedAt)}</span>
+                {verdict.revisionStatus === 'Completed' && <Badge tone="ok">revisions completed</Badge>}
+              </div>
+              {verdict.remarks && <p className="small m-0 mt-2 measure">{verdict.remarks}</p>}
+            </Section>
+          )}
+
+          <Section title="Group members">
+            <ul className="people-row">
+              {b.members.map(m => (
+                <li key={m.id}><Avatar name={nameOf(m.userId)} small />{nameOf(m.userId)}</li>
+              ))}
+            </ul>
+          </Section>
+        </div>
+
+        <aside aria-label="Progress trail">
+          <ProgressTrail b={b} history={b.history} />
+        </aside>
       </div>
-
-      <aside className="group-people" aria-label="Your faculty">
-        <h3 className="label group-sub" style={{ marginTop: 0 }}>Your faculty</h3>
-        <dl className="kv kv-tight">
-          {people.map(([role, names]) => (
-            <div key={role} style={{ display: 'contents' }}>
-              <dt>{role}</dt>
-              <dd className={names.length ? undefined : 'faint'}>
-                {names.length ? names.join(', ') : role === P.ADVISER ? 'Awaiting appointment' : 'Not yet'}
-              </dd>
-            </div>
-          ))}
-        </dl>
-      </aside>
-    </section>
+    </div>
   )
 }
 
@@ -330,17 +359,17 @@ function BlockDesk({ section, rows }) {
     .map(d => ({ r, d })))
 
   return (
-    <section className="section block-desk" aria-labelledby={`blk-${section.id}`}>
-      <div className="section-head">
+    <section className="section" aria-labelledby={`blk-${section.id}`}>
+      <div className="section-head mb-half">
         <h2 id={`blk-${section.id}`}>Section {section.block} · {section.course}</h2>
-        <Link className="btn" to="/projects?new=1">Create a project group</Link>
+        <Link className="btn small primary" to="/projects?new=1">Create a project group</Link>
       </div>
-      <p className="small muted">{section.program} · {section.yearLevel} · {section.term}</p>
+      <p className="small muted m-0">{programShort(section.program)} · {section.yearLevel} · {section.term}</p>
 
       <div className="block-grid">
         <div>
           <h3 className="label group-sub">Review queue</h3>
-          {queue.length === 0 && <p className="small faint" style={{ margin: 0 }}>Nothing is waiting for your decision.</p>}
+          {queue.length === 0 && <p className="small faint m-0">Nothing is waiting for your decision.</p>}
           <ul className="todo">
             {queue.map(({ r, d }) => (
               <li key={d.id}>
@@ -351,7 +380,7 @@ function BlockDesk({ section, rows }) {
           </ul>
 
           <h3 className="label group-sub">Groups by stage</h3>
-          {groups.length === 0 && <p className="small faint" style={{ margin: 0 }}>No groups in Capstone 1 for this section.</p>}
+          {groups.length === 0 && <p className="small faint m-0">No groups in Capstone 1 for this section.</p>}
           {groups.length > 0 && (
             <div className="table-scroll"><table>
               <thead><tr><th>Group</th><th>Stage</th><th>Now</th><th className="tight">Students</th></tr></thead>
@@ -381,8 +410,8 @@ function BlockDesk({ section, rows }) {
         </div>
 
         <aside className="group-people" aria-label={`Section ${section.block} roster`}>
-          <h3 className="label group-sub" style={{ marginTop: 0 }}>Section roster</h3>
-          <p className="small" style={{ margin: '0 0 8px' }}>
+          <h3 className="label group-sub mt-0">Section roster</h3>
+          <p className="small m-0 mb-1">
             <span className="mono">{roster.length - ungrouped.length}</span> of <span className="mono">{roster.length}</span> students in a group
           </p>
           {ungrouped.length > 0 && (
@@ -417,7 +446,7 @@ function VerifyList({ r, types }) {
   const b = viewBundle(me, r.bundle)
   const latest = (t) => b.documents.filter(d => d.docType === t).sort((x, y) => y.versionNumber - x.versionNumber)[0]
   return (
-    <ul className="plain-list small muted" style={{ marginTop: 4 }}>
+    <ul className="plain-list small muted mt-half">
       {types.map(t => {
         const d = latest(t)
         return <li key={t}>{t} {d ? <span className="mono">v{d.versionNumber}</span> : <span className="tone-warn">missing</span>}</li>
@@ -431,7 +460,7 @@ function QueueSection({ q, rows }) {
   const items = queueItems(q, rows)
   return (
     <Section title={q.name} aside={<span className="faint small">{q.role}{items.length ? ` · ${items.length}` : ''}</span>}>
-      {items.length === 0 && <p className="small faint" style={{ margin: 0 }}>Nothing is waiting here.</p>}
+      {items.length === 0 && <p className="small faint m-0">Nothing is waiting here.</p>}
       {items.length > 0 && (
         <div className="table-scroll"><table>
           <thead><tr><th>Project</th><th>Section</th><th>Status</th><th className="tight" /></tr></thead>
@@ -487,7 +516,7 @@ function HatSection({ title, roles, kinds, showDefense, showCapstone2, rows }) {
               <div className="entry-head">
                 <div>
                   <Link className="row-link" to={itemLink(r)}>{r.project.title}</Link>
-                  <div className="small muted" style={{ marginTop: 2 }}>
+                  <div className="small muted mt-half">
                     <span title={r.project.program}>{sectionNow(r.project).section}</span> · <span className="mono">{r.stage?.label}</span>
                   </div>
                 </div>
@@ -499,7 +528,7 @@ function HatSection({ title, roles, kinds, showDefense, showCapstone2, rows }) {
               {showDefense && <PanelFacts r={r} me={me} />}
               {showCapstone2 && <Capstone2Facts r={r} me={me} />}
               {gates.length + tasks.length === 0
-                ? <p className="small faint" style={{ margin: '8px 0 0' }}>Nothing due from you as {held.join(' / ')}.</p>
+                ? <p className="small faint m-0 mt-1">Nothing due from you as {held.join(' / ')}.</p>
                 : (
                   <ul className="todo">
                     {gates.map(g => (
@@ -557,7 +586,7 @@ function ProgramSummary() {
           })}
         </tbody>
       </table></div>
-      <p className="faint small" style={{ marginTop: 8 }}>Counts only. A project opens to you while one of its steps is yours.</p>
+      <p className="faint small mt-1">Counts only. A project opens to you while one of its steps is yours.</p>
     </Section>
   )
 }
@@ -575,7 +604,7 @@ function RecordsSearch() {
           placeholder="Search title, research area, adviser or student" />
         <button type="submit">Search</button>
       </form>
-      <p className="faint small" style={{ marginTop: 8 }}>
+      <p className="faint small mt-1">
         {archived} archived project{archived === 1 ? '' : 's'} with a Pass result. Records hold no grades and no manuscript text.
       </p>
     </Section>

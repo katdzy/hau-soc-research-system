@@ -51,7 +51,6 @@ function AdminPage({ cap, deny, label, title, lede, children }) {
   return (
     <div className="page">
       <header className="page-head">
-        <div className="label">Administration · {label}</div>
         <h1>{title}</h1>
         <p className="lede">{lede}</p>
       </header>
@@ -63,7 +62,7 @@ function AdminPage({ cap, deny, label, title, lede, children }) {
 export function AccountsPage() {
   return (
     <AdminPage
-      cap="admin.accounts" label="Accounts" title="Accounts"
+      cap="admin.accounts" label="User accounts" title="User accounts"
       deny="Account administration belongs to the System Administrator."
       lede="Activate verified registrations, grant and remove Global Roles, and set each Program Chair/Coordinator’s programs. The System Administrator cannot open a document, approve a gate, sign a form or assign a project role."
     >
@@ -84,7 +83,7 @@ export function CaacPage() {
   ]
   return (
     <AdminPage
-      cap="admin.caac" label="CAAC configuration" title="CAAC configuration"
+      cap="admin.caac" label="Role configuration" title="Role configuration (CAAC)"
       deny="CAAC configuration belongs to the System Administrator."
       lede="Every permission is a role paired with the context it applies in. Review which tags each account holds and the policies behind them, and revoke a capability from one account where needed. An override can only take a permission away."
     >
@@ -148,7 +147,7 @@ function Accounts() {
                 <tr key={u.id}>
                   <td>
                     <div>{u.name}</div>
-                    <div className="mono faint" style={{ fontSize: 11.5 }}>{u.email}</div>
+                    <div className="mono faint text-xs">{u.email}</div>
                   </td>
                   <td className="small muted">
                     <div className="inline">{accountType(u.email)}{u.block && ` · ${u.block}`} <ProgramPill u={u} /></div>
@@ -170,7 +169,7 @@ function Accounts() {
             </tbody>
           </table></div>
         )}
-        <p className="faint small" style={{ marginTop: 12 }}>
+        <p className="faint small mt-2">
           Activation follows email verification (flag ACCOUNT_ACTIVATION = {FLAGS.ACCOUNT_ACTIVATION}).
           Student addresses start as {caacTag(G.STUDENT)}; faculty addresses start
           as {FLAGS.FACULTY_BASE_IDENTITY ? caacTag(G.FACULTY) : 'no Global Role'}, which grants nothing
@@ -186,7 +185,7 @@ function Accounts() {
               <option value="">Every status</option>
               {Object.values(ACCOUNT_STATUS).map(s => <option key={s}>{s}</option>)}
             </select>
-            <input type="search" value={query} onChange={e => setQuery(e.target.value)} placeholder="Search name or email" aria-label="Search accounts" style={{ width: 220 }} />
+            <input type="search" value={query} onChange={e => setQuery(e.target.value)} placeholder="Search name or email" aria-label="Search accounts" className="w-search" />
           </div>
         }
       >
@@ -211,7 +210,7 @@ function Accounts() {
           </tbody>
         </table></div>
         <ActionError error={error} />
-        <p className="faint small" style={{ marginTop: 12 }}>
+        <p className="faint small mt-2">
           Changing an account’s status never removes its academic records. Project-Based Roles are not
           granted here: Instructor 1 comes from teaching a Capstone 1 section, and the Adviser, panel and
           Instructor 2 are assigned by the Program Chair/Coordinator on each project.
@@ -233,7 +232,7 @@ function AccountRow({ u, busy, run }) {
     <tr>
       <td>
         <div className="inline">{u.name} <ProgramPill u={u} /></div>
-        <div className="mono faint" style={{ fontSize: 11.5 }}>{u.email}</div>
+        <div className="mono faint text-xs">{u.email}</div>
         <div className="faint small">
           {type}{u.block && ` · ${u.block}`}{u.idNumber && ` · ${u.idNumber}`}{!u.emailVerified && ' · email not verified'}
         </div>
@@ -332,7 +331,7 @@ function Overrides() {
   return (
     <>
       <Section title="Revoke a capability">
-        <p className="small muted" style={{ maxWidth: '72ch' }}>
+        <p className="small muted measure">
           An override takes one capability away from one account, on one project or on every
           project, until you lift it. It never adds a permission, so it cannot stand in for an
           assignment or a gate. The guard reports the override as the reason whenever it blocks
@@ -400,7 +399,7 @@ function OverrideTable({ rows, nameOf, titleOf, action }) {
         {rows.map(o => (
           <tr key={o.id}>
             <td className="small">{nameOf(o.userId)}</td>
-            <td><span className="mono" style={{ fontSize: 12 }}>{o.capability}</span></td>
+            <td><span className="mono text-xs">{o.capability}</span></td>
             <td className="small muted">{o.projectId ? titleOf(o.projectId) : 'Every project'}</td>
             <td className="small">{o.reason}</td>
             <td className="tight small faint">{fmtDate(o.createdAt)} · {nameOf(o.createdBy)}</td>
@@ -427,11 +426,11 @@ function Settings() {
 
   return (
     <Section title="Revision countdown">
-      <p className="small muted" style={{ maxWidth: '72ch' }}>
+      <p className="small muted measure">
         When the Panel Chair records a verdict with revisions, the group gets this many days before
         the system flags the revisions overdue (S7.6, S8.2).
       </p>
-      <div className="row" style={{ maxWidth: 480 }}>
+      <div className="row measure-narrow">
         <Field label="Minor revisions (days)">
           <input type="number" min={min} max={max} step="1" value={minor} onChange={e => { setMinor(e.target.value); setSaved('') }} />
         </Field>
@@ -450,12 +449,12 @@ function Settings() {
         {saved && <span className="small signed" role="status">{saved}</span>}
       </div>
       <ActionError error={error} />
-      <p className="note small" style={{ marginTop: 24, maxWidth: '72ch' }}>
+      <p className="note small mt-3 measure">
         A change applies to verdicts recorded after it. Countdowns already running keep the deadline
         they started with. Whether a change should also move running countdowns has not been
         decided yet (NEW-20).
       </p>
-      <p className="faint small" style={{ marginTop: 12 }}>
+      <p className="faint small mt-2">
         {record?.updatedAt
           ? <>Last changed {fmtDateTime(record.updatedAt)} by {nameOf(record.updatedBy)}.</>
           : <>Using the starting values (flag REVISION_DAYS: minor {FLAGS.REVISION_DAYS.Minor}, major {FLAGS.REVISION_DAYS.Major}).</>}
@@ -501,7 +500,7 @@ function TagsAndPolicies() {
     <>
       <Section
         title={`Tag assignments (${shownTags.length})`}
-        aside={<input type="search" value={tagQuery} onChange={e => setTagQuery(e.target.value)} placeholder="Filter by person, tag or context" aria-label="Filter tag assignments" style={{ width: 240 }} />}
+        aside={<input type="search" value={tagQuery} onChange={e => setTagQuery(e.target.value)} placeholder="Filter by person, tag or context" aria-label="Filter tag assignments" className="w-search" />}
       >
         <p className="small muted">
           Who holds which tag, and where it applies. A Project tag means nothing outside its project.
@@ -540,7 +539,7 @@ function TagsAndPolicies() {
                 {pols.map((p, i) => (
                   <tr key={i}>
                     <td>
-                      <div className="mono" style={{ fontSize: 12 }}>{p.cap}</div>
+                      <div className="mono text-xs">{p.cap}</div>
                       <div className="faint small">{CAPABILITIES[p.cap]}</div>
                     </td>
                     <td className="small muted">{p.when.label}</td>

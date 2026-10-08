@@ -1,7 +1,7 @@
 /* Dev tools only (R9) — imported from src/dev, never part of a production build. */
 .dev-flag {
-  display: inline-block; font: 600 10.5px/1.6 var(--mono); letter-spacing: .04em; text-transform: uppercase;
-  color: var(--warn); background: var(--warn-wash); padding: 0 6px; border-radius: 2px;
+  display: inline-block; font: 600 10.5px/1.6 var(--sans); letter-spacing: .04em; text-transform: uppercase;
+  color: var(--ink); background: var(--accent-tint); padding: 0 8px; border-radius: 999px;
 }
 .dev-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap: var(--s3); align-items: start; }
 .dev-scenarios td:first-child { font-family: var(--mono); font-weight: 600; }
@@ -39,20 +39,20 @@
 .demo-search { width: 260px; max-width: 100%; margin-bottom: var(--s1); padding-block: 6px; font-size: 13px; }
 
 /* A project's cast: header with its stage, then who plays what. */
-.casts { display: grid; gap: var(--s5); }
-.cast { padding-top: var(--s3); border-top: 1px solid var(--rule-strong); }
-.casts > .cast:first-child { padding-top: 0; border-top: 0; }
+.casts { display: grid; gap: var(--s2); }
+.cast { padding: var(--s3); border: 1px solid var(--rule-strong); border-radius: var(--radius-box); }
+
 .cast-head { display: grid; grid-template-columns: auto minmax(0, 1fr) auto; gap: var(--s2); align-items: baseline; }
-.cast-id { font: 600 28px/1 var(--mono); color: var(--accent); letter-spacing: -.02em; min-width: 2.2ch; }
+.cast-id { font: 700 28px/1 var(--sans); color: var(--ink); letter-spacing: -.02em; min-width: 2.2ch; }
 .cast-title h3 { font-size: 15px; }
 .cast-title p { margin: 2px 0 0; }
 .cast-stage { color: var(--ink); font-weight: 600; }
 .stage-track { display: grid; justify-items: end; gap: 4px; }
 .stage-track .track { display: block; width: 96px; height: 3px; background: var(--rule); border-radius: 2px; overflow: hidden; }
 .stage-track .track > span { display: block; height: 100%; background: var(--accent); }
-.cast-next { margin: var(--s2) 0; padding-left: 12px; border-left: 2px solid var(--accent); color: var(--ink-muted); }
-.linkish { border: 0; background: none; padding: 0; font: inherit; font-weight: 600; color: var(--accent-ink); text-decoration: underline; text-underline-offset: 2px; }
-.linkish:hover:not(:disabled) { background: none; color: var(--accent); }
+.cast-next { margin: var(--s2) 0; padding: var(--s1) 12px; background: var(--accent-wash); border-radius: var(--radius); color: var(--ink); }
+.linkish { border: 0; background: none; padding: 0; font: inherit; font-weight: 600; color: var(--ink); text-decoration: underline; text-underline-offset: 2px; }
+.linkish:hover:not(:disabled) { background: none; color: var(--accent-ink); }
 
 .cast-cols { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: var(--s1) var(--s4); }
 .cast-col > .label { padding-bottom: 6px; border-bottom: 1px solid var(--rule); margin-bottom: 2px; }
@@ -66,20 +66,20 @@
 .who:hover:not(:disabled) { background: var(--accent-wash); }
 .who-line { display: flex; flex-wrap: wrap; align-items: baseline; gap: 4px 8px; }
 .who-name { font-weight: 600; font-size: 13.5px; }
-.who-hat { font: 500 11px/1.7 var(--mono); color: var(--ink-muted); background: var(--surface-sunk); padding: 0 6px; border-radius: 2px; }
+.who-hat { font: 500 11.5px/1.7 var(--sans); color: var(--ink-muted); background: var(--surface-sunk); padding: 0 8px; border-radius: 999px; }
 .who-turn, .who-wait { font-size: 12px; line-height: 1.4; }
 .who-turn { color: var(--accent-ink); display: flex; gap: 6px; align-items: baseline; }
-.who-turn::before { content: ""; width: 6px; height: 6px; border-radius: 50%; background: var(--accent); flex: none; transform: translateY(-1px); }
+.who-turn::before { content: ""; width: 7px; height: 7px; border-radius: 50%; background: var(--accent); box-shadow: 0 0 0 1px var(--ink); flex: none; transform: translateY(-1px); }
 .who-wait { color: var(--ink-faint); }
 .who-go {
-  position: absolute; right: var(--s1); top: var(--s1); color: var(--accent);
+  position: absolute; right: var(--s1); top: var(--s1); color: var(--accent-ink);
   opacity: 0; transform: translateX(-4px); transition: opacity .15s, transform .15s;
 }
 .who:hover .who-go, .who:focus-visible .who-go { opacity: 1; transform: none; }
-.who.is-due .who-hat { background: var(--accent-wash); color: var(--accent-ink); }
+.who.is-due .who-hat { background: var(--accent-tint); color: var(--ink); }
 .who.is-inactive .who-name { color: var(--ink-faint); }
 
-.cast.is-compact { padding-top: var(--s3); border-top: 1px solid var(--rule); }
+.cast.is-compact { padding: var(--s2) var(--s3); }
 .cast.is-compact .cast-id { font-size: 20px; }
 
 .demo-more { margin-top: var(--s2); }

@@ -30,8 +30,7 @@ export default function Audit() {
   return (
     <div className="page">
       <header className="page-head">
-        <div className="label">Audit</div>
-        <h1>Audit trail</h1>
+        <h1>Audit log</h1>
         <p className="lede">
           Write-once. An entry is added for every state change and is never updated or deleted,
           so every approval, signature and stage change traces back to the account that made it.
@@ -40,7 +39,7 @@ export default function Audit() {
 
       <Section
         title={`${rows.length} entries`}
-        aside={<input type="search" value={query} onChange={e => setQuery(e.target.value)} placeholder="Filter by action or actor" aria-label="Filter audit entries" style={{ width: 240 }} />}
+        aside={<input type="search" value={query} onChange={e => setQuery(e.target.value)} placeholder="Filter by action or actor" aria-label="Filter audit entries" className="w-search" />}
       >
         {rows.length === 0 && <Empty>No audit entries yet.</Empty>}
         {rows.length > 0 && (
@@ -55,12 +54,12 @@ export default function Audit() {
             <tbody>
               {rows.map(l => (
                 <tr key={l.id}>
-                  <td className="tight mono faint" style={{ fontSize: 11.5 }}>{fmtDateTime(l.at)}</td>
+                  <td className="tight mono faint text-xs">{fmtDateTime(l.at)}</td>
                   <td className="tight"><Badge>{l.action}</Badge></td>
                   <td className="tight small">{nameOf(l.actorId)}<div className="faint">{l.hat ?? '—'}</div></td>
                   <td className="tight small muted">{l.projectId ? titleOf(l.projectId) : '—'}</td>
-                  <td className="tight mono faint" style={{ fontSize: 11.5 }}>{l.entityType}/{l.entityId}</td>
-                  <td className="mono faint" style={{ fontSize: 11.5, whiteSpace: 'nowrap' }}>
+                  <td className="tight mono faint text-xs">{l.entityType}/{l.entityId}</td>
+                  <td className="mono faint text-xs nowrap">
                     {show(l.before)} → {show(l.after)}
                     {detail(l.meta) && <div>{detail(l.meta)}</div>}
                   </td>

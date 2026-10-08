@@ -1,10 +1,13 @@
 import { Suspense, lazy, useState } from 'react'
 import { useApp } from '../state/AppContext.jsx'
+import { isLiveBackend } from '../backend/index.js'
 import {
   EMAIL_DOMAINS, PROGRAM_INFO, ACCOUNT_STATUS, COURSES, accountType, normalizeEmail, sectionProblem, courseSchedule,
 } from '../domain/constants.js'
 import { Field } from '../components/ui.jsx'
 import { registerAccount, confirmProviderVerification } from '../services/actions.js'
+import crest from '../assets/soc-crest.webp'
+import { InstallApp } from '../components/Pwa.jsx'
 import { registerWithFirebase, loginWithFirebase } from '../services/authService.js'
 
 // R9: the demo panel (persona switcher) exists only in dev builds; this branch
@@ -120,31 +123,36 @@ export default function SignIn({ seeding = false }) {
   }
 
   return (
-    <div className={`signin${DemoPanel ? ' has-demo' : ''}`}>
+    <div className="signin">
+      <aside className="signin-brand">
+        <img className="crest-img" src={crest} alt="Holy Angel University School of Computing" width="76" height="76" />
+        <div className="inst">Holy Angel University</div>
+        <div className="school">School of Computing</div>
+        <h1>Thesis &amp; Capstone Project Management and Workflow Automation System</h1>
+        <p>For School of Computing students, advisers, panels and offices.</p>
+        <InstallApp className="signin-install" />
+        <p className="foot">Holy Angel University · Angeles City, Pampanga<br />© 2026 School of Computing</p>
+      </aside>
+
+      <div className="signin-main">
       <div className="signin-card">
-        <header className="signin-head">
-          <div className="wordmark" style={{ marginBottom: 14 }}>
-            <span className="crest">HAU</span>
-            <strong>School of Computing</strong>
-          </div>
-          <h1>Thesis &amp; Capstone Workflow System</h1>
-          <p className="lede" style={{ marginTop: 8 }}>
-            Institutional portal for students, faculty and offices.
-            Restricted to <strong>@hau.edu.ph</strong> and <strong>@student.hau.edu.ph</strong> accounts.
+        <div className="panel">
+          <h2>{tab === 'login' ? 'Log in' : 'Create an account'}</h2>
+          <p className="small muted mb-3">
+            Use your institutional HAU account. Access is restricted to <strong>@hau.edu.ph</strong> and{' '}
+            <strong>@student.hau.edu.ph</strong> addresses.
           </p>
-        </header>
 
-        <div className="tabs" role="tablist" aria-label="Account" style={{ marginBottom: 20 }}>
-          <button role="tab" aria-selected={tab === 'login'} onClick={() => { setTab('login'); clear() }}>Sign in</button>
-          <button role="tab" aria-selected={tab === 'register'} onClick={() => { setTab('register'); clear() }}>Register</button>
-        </div>
+          <div className="tabs" role="tablist" aria-label="Account">
+            <button role="tab" aria-selected={tab === 'login'} onClick={() => { setTab('login'); clear() }}>Log in</button>
+            <button role="tab" aria-selected={tab === 'register'} onClick={() => { setTab('register'); clear() }}>Register</button>
+          </div>
 
-        <div className="panel" style={{ marginBottom: 26 }}>
-          {successMsg && <p className="note" role="status" style={{ marginBottom: 16 }}>{successMsg}</p>}
+          {successMsg && <p className="note mb-2" role="status">{successMsg}</p>}
 
           {tab === 'login' ? (
             <form onSubmit={handleSignIn} noValidate>
-              <Field label="Institutional email" hint={`Allowed domains: ${DOMAINS}`}>
+              <Field label="Institutional email address">
                 <input
                   type="email" value={loginEmail} onChange={e => setLoginEmail(e.target.value)}
                   placeholder="name@hau.edu.ph" autoComplete="username" required
@@ -158,14 +166,14 @@ export default function SignIn({ seeding = false }) {
                   />
                 </Field>
               )}
-              {error && <p className="small" role="alert" style={{ color: 'var(--stop)', marginBottom: 12 }}>{error}</p>}
+              {error && <p className="small error-text mb-2" role="alert">{error}</p>}
               {unverified && (
-                <p style={{ marginBottom: 14 }}>
+                <p className="mb-2">
                   <button type="button" className="quiet" disabled={loading} onClick={handleResend}>Resend verification email</button>
                 </p>
               )}
               <button className="primary" type="submit" disabled={loading}>
-                {loading ? 'Signing in…' : 'Sign in'}
+                {loading ? 'Signing in…' : 'Continue'}
               </button>
             </form>
           ) : (
@@ -206,19 +214,24 @@ export default function SignIn({ seeding = false }) {
                   project roles come from assignments on each project.
                 </p>
               )}
-              {error && <p className="small" role="alert" style={{ color: 'var(--stop)', marginBottom: 12 }}>{error}</p>}
+              {error && <p className="small error-text mb-2" role="alert">{error}</p>}
               <button className="primary" type="submit" disabled={loading}>
                 {loading ? 'Registering…' : 'Register'}
               </button>
             </form>
           )}
         </div>
+        <p className="signin-help">Trouble signing in? Contact the School of Computing office.</p>
 
-        {seeding && <p className="note">Setting up demo data… this only happens once. Refresh in a moment.</p>}
+        {/* A live project is never seeded from the browser (AppContext). */}
+        {seeding && (isLiveBackend
+          ? <p className="note mt-2">This Firebase project has no accounts yet. Seed it, or run with VITE_BACKEND=local.</p>
+          : <p className="note mt-2">Setting up demo data… this only happens once. Refresh in a moment.</p>)}
       </div>
       {!seeding && DemoPanel && (
         <Suspense fallback={null}><DemoPanel /></Suspense>
       )}
+      </div>
     </div>
   )
 }

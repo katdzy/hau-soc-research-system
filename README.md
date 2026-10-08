@@ -142,7 +142,8 @@ policy after adviser feedback means editing one file.
 
 | Stubbed | In production |
 |---|---|
-| Email | The only notification channel — there is no in-app notification list (team decision 2026-09-29). The prototype records each email in the dev outbox; the Firebase build sends it through Resend. |
+| Email | The notification channel — there is no in-app notification list (team decision 2026-09-29). The prototype records each email in the dev outbox; the Firebase build sends it through Resend. |
+| Device notifications | Revision 2026-10-07 (flag `DEVICE_NOTIFICATIONS`): each email also shows as a phone/desktop notification for recipients who turned them on in the account menu — the same event and text. In production one Cloud Function, `deliverOutbox` (`functions/`, not deployed — needs the Blaze plan), sends each outbox entry as the email (Resend) and the push (FCM); devices register through `registerPushToken` and are removed on sign-out. Until push is configured, the open app shows them itself. iOS needs the app on the Home Screen (16.4+). |
 | Verification email | Shown on screen. Firebase Authentication sends it; passwords are not stored locally. |
 | File upload | File name and size are recorded, no binary. Firebase Cloud Storage holds the PDF. |
 | AI summary | A labelled placeholder (one seeded summary shows the real structure). The Gemini call is audit-logged. |
@@ -159,7 +160,24 @@ cp .env.example .env          # fill in the web app config
 VITE_BACKEND=firebase npm run dev
 ```
 
-Against the emulator:
+Against the emulator, with Docker (nothing else to install):
+
+```bash
+docker compose up          # app on :5180, Emulator UI on :4000
+```
+
+The app container ignores `.env` for the backend and points at the emulators (project
+`demo-local`), so it never touches the live project. Source is mounted, so edits hot-reload;
+rerun `docker compose up --build -V` only after changing `package.json` or a Dockerfile.
+Emulator data is saved to `.emulator-data/` on a clean stop (`docker compose down` or Ctrl+C)
+and reloaded next time; delete the folder to start from the seed again.
+
+The emulators load the open rules in `emulator/` by default, because `firestore.rules` denies
+every client write (writes belong to Cloud Functions, which do not exist yet). To exercise the
+real rules: `FIREBASE_CONFIG=firebase.json docker compose up`. For the in-memory backend in
+Docker: `APP_BACKEND=local docker compose up`.
+
+Without Docker:
 
 ```bash
 npm i -g firebase-tools

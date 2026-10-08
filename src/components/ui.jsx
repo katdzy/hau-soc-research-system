@@ -36,9 +36,10 @@ export function Restricted({ children = 'None of your roles gives you access to 
   )
 }
 
-export function Section({ title, aside, children }) {
+/** An outlined box with an optional title row (Figma: content boxes). `tone` = 'accent' | 'stop'. */
+export function Section({ title, aside, tone, className, children }) {
   return (
-    <section className="section">
+    <section className={['section', tone && `is-${tone}`, className].filter(Boolean).join(' ')}>
       {(title || aside) && (
         <div className="section-head">
           <h2>{title}</h2>
@@ -62,6 +63,18 @@ export function Field({ label, hint, children }) {
 
 export const Empty = ({ children }) => <p className="empty">{children}</p>
 
+/** Initials for the avatar circle: "Prof. Alpha Reyes" → "AR". */
+export function initials(full = '') {
+  const parts = full.replace(/\(.*?\)/g, '').split(',')[0].trim().split(/\s+/)
+    .filter(p => p && !HONORIFICS.has(p.toLowerCase()) && /^[A-Za-z]/.test(p))
+  const pick = parts.length > 1 ? [parts[0], parts.at(-1)] : parts
+  return pick.map(p => p[0].toUpperCase()).join('') || '?'
+}
+
+export const Avatar = ({ name, small }) => (
+  <span className={`avatar${small ? ' sm' : ''}`} aria-hidden="true">{initials(name)}</span>
+)
+
 const HONORIFICS = new Set(['dr.', 'mr.', 'ms.', 'mrs.', 'engr.', 'asst.', 'assoc.', 'prof.', 'atty.', 'sr.', 'fr.', 'ma.'])
 
 /** Greeting name that survives "Asst. Prof. Kevin Aldrin G. Espinosa, MIT". */
@@ -70,6 +83,10 @@ export function firstName(full = '') {
   const parts = cleaned.split(/\s+/).filter(Boolean)
   return parts.find(p => !HONORIFICS.has(p.toLowerCase())) ?? cleaned
 }
+
+/** "BS Major in IT with area of specialization in Web Development" → "Information Technology — Web Development". */
+export const programShort = (name = '') =>
+  name.replace(/^Bachelor of Science (Major )?in /, '').replace(/ with area of specialization in /, ' — ')
 
 export const fmtDate = (iso) =>
   iso ? new Date(iso).toLocaleDateString(undefined, { day: '2-digit', month: 'short', year: 'numeric' }) : '—'

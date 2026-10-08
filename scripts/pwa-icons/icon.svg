@@ -1,0 +1,11 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512">
+  <!-- Full-bleed SOC orange so the same art works as an Android maskable icon
+       and an opaque iOS home-screen icon. The shield stays inside the 80% safe
+       circle that launchers crop to. -->
+  <rect width="512" height="512" fill="#ffb445"/>
+  <path d="M136 132H376V290C376 348 318 384 256 410C194 384 136 348 136 290Z" fill="#141414"/>
+  <path d="M154 150H358V288C358 336 310 366 256 390C202 366 154 336 154 288Z"
+        fill="none" stroke="#ffb445" stroke-width="4"/>
+  <text x="256" y="284" text-anchor="middle" fill="#ffb445"
+        font-family="Georgia, 'Times New Roman', serif" font-size="84" font-weight="700">SoC</text>
+</svg>

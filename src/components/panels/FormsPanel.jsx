@@ -24,20 +24,20 @@ export default function FormsPanel({ b }) {
           <div className="entry form-entry" key={f.id}>
             <div className="entry-head">
               <div>
-                <strong style={{ fontSize: 13 }}>{f.formType}</strong>
+                <strong className="text-sm">{f.formType}</strong>
                 {f.name !== f.formType && <div className="faint small">{f.name}</div>}
               </div>
               <Badge tone={f.status === 'Signed' ? 'ok' : 'warn'}>{f.status}</Badge>
             </div>
 
             {f.payload?.verdict && (
-              <p className="small muted" style={{ margin: '8px 0 0' }}>
+              <p className="small muted m-0 mt-1">
                 {f.payload.defenseType} defense · {f.payload.verdict}
                 {f.payload.remarks && <> — {f.payload.remarks}</>}
               </p>
             )}
 
-            <table style={{ marginTop: 12 }}>
+            <table className="mt-2">
               <thead><tr><th className="tight">Step</th><th>Role</th><th>Signatory</th><th className="tight">Signed</th></tr></thead>
               <tbody>
                 {[...f.signatories].sort((x, y) => x.order - y.order).map((s, i) => (
@@ -56,7 +56,7 @@ export default function FormsPanel({ b }) {
             </table>
 
             {check.ok && (
-              <div className="actions" style={{ marginTop: 12 }}>
+              <div className="actions mt-2">
                 <button className="primary" disabled={busy}
                   onClick={() => run(() => signForm(me, snap, b.project.id, f.id))}>
                   Sign as {check.line.role}
@@ -65,7 +65,7 @@ export default function FormsPanel({ b }) {
               </div>
             )}
             {!check.ok && myLine && check.reason && (
-              <p className="small faint" style={{ marginTop: 12 }}>{check.reason}</p>
+              <p className="small faint mt-2">{check.reason}</p>
             )}
           </div>
         )

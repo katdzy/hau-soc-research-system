@@ -273,7 +273,7 @@ Public archive/gallery is not in the manuscript **[OQ#6]**.
 Step IDs refer to §3.
 
 ### Student (Global)
-- **Dashboard:** own group only — current stage, what's waiting on them, deadlines/countdown, latest verdict, adviser and panel names. **No in-app notification list: notifications are sent by email only** (team decision 2026-09-29; `NOTIFICATION` is the email log).
+- **Dashboard:** own group only — current stage, what's waiting on them, deadlines/countdown, latest verdict, adviser and panel names. **No in-app notification list: notifications are sent by email** (team decision 2026-09-29; `NOTIFICATION` is the email log)**, and each email also shows as a device notification** on the installed app for whoever turned them on (revision 2026-10-07, flag `DEVICE_NOTIFICATIONS`: same events and text as the email, tap opens the project).
 - **Actions:** S3.1, S3.5, S4.1, S5.3, S5.7, S6.1, S6.3, S6.6, S6.8, S7.4, S8.1, S9.1, S9.2.
 - **Sees:** own documents + version history, reviewer annotations (not private panel notes before the verdict — OQ#3), AI summary only if OQ#2 says so.
 - **Never:** approve any gate, edit/delete a submitted file, see other groups.

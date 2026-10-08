@@ -46,7 +46,7 @@ export default function UroReview({ b, ctx, goTo }) {
         </table></div>
       )}
       {atUro && verifier && (
-        <div className="actions" style={{ marginTop: 16 }}>
+        <div className="actions mt-2">
           <button onClick={() => goTo('documents')}>Open the documents</button>
         </div>
       )}
@@ -57,16 +57,16 @@ export default function UroReview({ b, ctx, goTo }) {
           {[...returns].reverse().map(r => (
             <div className="entry" key={r.at}>
               <div className="entry-head">
-                <strong style={{ fontSize: 13 }}>{r.docTypes.join(' and ')}</strong>
+                <strong className="text-sm">{r.docTypes.join(' and ')}</strong>
                 {r === uroReturnOf(b) && waiting.length
                   ? <Badge tone="warn">Waiting for a new version</Badge>
                   : <Badge tone="ok">Replaced</Badge>}
               </div>
-              <p className="small" style={{ margin: '4px 0 0', maxWidth: '64ch' }}>{r.remarks}</p>
+              <p className="small m-0 mt-half measure">{r.remarks}</p>
               {r.resetsSigning && (
-                <p className="small muted" style={{ margin: '4px 0 0' }}>Sent back to Final Requirements; the Approval Sheet was reissued for new signatures.</p>
+                <p className="small muted m-0 mt-half">Sent back to Final Requirements; the Approval Sheet was reissued for new signatures.</p>
               )}
-              <div className="faint small" style={{ marginTop: 4 }}>{nameOf(r.by)} · {fmtDateTime(r.at)}</div>
+              <div className="faint small mt-half">{nameOf(r.by)} · {fmtDateTime(r.at)}</div>
             </div>
           ))}
         </>

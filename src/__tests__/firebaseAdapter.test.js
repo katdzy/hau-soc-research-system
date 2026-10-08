@@ -46,6 +46,8 @@ const deliver = (name, docs, fromCache = false) => fake.listeners.get(name)({
   metadata: { fromCache },
 })
 const tick = () => new Promise(r => setTimeout(r, 5))
+// The adapter starts asynchronously; wait for its listeners, not a fixed delay.
+const started = () => vi.waitFor(() => expect(fake.listeners.size).toBe(COLLECTIONS.length))
 
 let db
 beforeEach(async () => {
@@ -59,7 +61,7 @@ describe('firebase adapter', () => {
   it('does not report the store until every collection has loaded from the server', async () => {
     const seen = []
     db.subscribe(s => seen.push(s))
-    await tick()
+    await started()
     expect(seen).toHaveLength(0)
 
     // An empty cache is not an empty project.
@@ -76,7 +78,7 @@ describe('firebase adapter', () => {
 
   it('sends a transaction as one batch, and shows its writes to reads inside it', async () => {
     db.subscribe(() => {})
-    await tick()
+    await started()
     COLLECTIONS.forEach(c => deliver(c, c === 'projects' ? [{ id: 'p1', currentStage: 'A' }] : []))
 
     const result = await db.transaction(async () => {
@@ -97,7 +99,7 @@ describe('firebase adapter', () => {
 
   it('keeps nothing when the callback throws or the server rejects the batch', async () => {
     db.subscribe(() => {})
-    await tick()
+    await started()
     COLLECTIONS.forEach(c => deliver(c, []))
 
     await expect(db.transaction(async () => {
@@ -114,7 +116,7 @@ describe('firebase adapter', () => {
 
   it('refuses to update a document that does not exist, like the local adapter', async () => {
     db.subscribe(() => {})
-    await tick()
+    await started()
     COLLECTIONS.forEach(c => deliver(c, []))
     await expect(db.update('projects', 'nope', { x: 1 })).rejects.toThrow('projects/nope not found')
   })

@@ -12,4 +12,4 @@ export function useAction() {
 }
 
 export const ActionError = ({ error }) =>
-  error ? <p className="small" style={{ color: 'var(--stop)', marginTop: 8 }}>{error}</p> : null
+  error ? <p className="small error-text mt-1">{error}</p> : null

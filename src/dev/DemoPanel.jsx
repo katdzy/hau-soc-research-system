@@ -391,7 +391,7 @@ function Scenarios({ snap, replaceStore, navigate, signIn }) {
         Loading a scenario replaces the demo data with a fresh seed plus that setup, then signs in as its persona
         where the scenario says to look. Save a checkpoint first if you want to come back.
       </p>
-      {error && <p className="small" role="alert" style={{ color: 'var(--stop)' }}>{error}</p>}
+      {error && <p className="small error-text" role="alert">{error}</p>}
       {groups.map(on => (
         <section key={on ?? 'none'} className="sc-group">
           <div className="role-block-head">

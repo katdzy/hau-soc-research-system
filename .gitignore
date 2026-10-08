@@ -5,3 +5,9 @@ dist
 .firebase
 *.log
 .DS_Store
+
+# Firebase Emulator Suite data (docker compose)
+.emulator-data
+firebase-debug.log
+firestore-debug.log
+ui-debug.log

@@ -152,6 +152,19 @@ service cloud.firestore {
       allow write: if false;
     }
 
+    // One row per email (R6c). Its recipients read it: the open app mirrors it
+    // as a device notification (DEVICE_NOTIFICATIONS, revision 2026-10-07).
+    match /outbox/{mailId} {
+      allow read: if institutional() && request.auth.uid in resource.data.userIds;
+      allow write: if false;
+    }
+
+    // FCM device tokens. Written by registerPushToken / unregisterPushToken and
+    // read by deliverOutbox (Cloud Functions, Admin SDK); never by a client.
+    match /pushTokens/{tokenId} {
+      allow read, write: if false;
+    }
+
     // Write-once activity log, readable by the System Administrator.
     match /auditLogs/{logId} {
       allow read: if institutional() && holds('System Administrator');

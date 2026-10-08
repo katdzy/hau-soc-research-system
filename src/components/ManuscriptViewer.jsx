@@ -161,7 +161,7 @@ export default function ManuscriptViewer({ doc, marks, draft, onDraft, canMark, 
       {/* Mouse, keyboard (Shift+arrows with caret browsing) and touch selections all end here;
           on touch the selection handles settle just after the finger lifts. */}
       <div className={`viewer-pages${canMark ? ` is-${mode}` : ''}`} ref={scroller}
-        onKeyUp={captureSelection} onTouchEnd={() => setTimeout(captureSelection, 350)}>
+        onMouseDown={selectFromGap} onKeyUp={captureSelection} onTouchEnd={() => setTimeout(captureSelection, 350)}>
         {width > 0 && Array.from({ length: state.pages }, (_, i) => i + 1).map(n => (
           <PdfPage key={n} pdf={state.pdf} n={n} width={pageWidth} ratio={state.ratio}
             marks={marks.filter(m => m.position?.page === n)}
@@ -184,7 +184,12 @@ function PdfPage({ pdf, n, width, ratio, marks, draft, areaMode, onDraft, onFocu
   // Draw only pages near the viewport, and drop the ones scrolled far away:
   // an 80-page manuscript kept drawn at 2× density would hold ~800 MB of canvas.
   useEffect(() => {
-    const io = new IntersectionObserver(([e]) => setVisible(e.isIntersecting), { rootMargin: '1200px 0px' })
+    // Rooted on the viewer's own scroll box: against the window, the margin
+    // never applies (the box clips the pages first), so a page only started
+    // drawing once it was already on screen.
+    const io = new IntersectionObserver(([e]) => setVisible(e.isIntersecting), {
+      root: holder.current.closest('.viewer-pages'), rootMargin: '1200px 0px',
+    })
     io.observe(holder.current)
     return () => io.disconnect()
   }, [])
@@ -296,4 +301,62 @@ function mergeLines(rects) {
     line.w = x2 - line.x; line.h = y2 - line.y
   }
   return lines.map(l => ({ x: clamp(l.x), y: clamp(l.y), w: Math.min(l.w, 1 - clamp(l.x)), h: Math.min(l.h, 1 - clamp(l.y)) }))
+}
+
+// A drag that starts on a word is the browser's own selection. One that starts
+// in blank space — the margin, the gap between columns or lines — lands on the
+// text layer itself; pdf.js then spreads its non-selectable `endOfContent`
+// across the page and the drag selects nothing. So for those, anchor the
+// selection at the nearest word and extend it with the pointer ourselves.
+function selectFromGap(e) {
+  if (e.button !== 0 || e.shiftKey || e.detail > 1) return
+  const layer = e.target.closest?.('.textLayer')
+  if (!layer || textSpan(e.target)) return
+  // Rotated text (a diagonal watermark) has a box as big as the page; leave it out.
+  const words = [...layer.querySelectorAll('span')].filter(el => textSpan(el) && !el.style.getPropertyValue('--rotate'))
+  if (!words.length) return
+  e.preventDefault()
+  const sel = window.getSelection()
+  const anchor = nearestCaret(words, e.clientX, e.clientY)
+  sel.setBaseAndExtent(anchor.node, anchor.offset, anchor.node, anchor.offset)
+  const move = (m) => {
+    const focus = caretAt(words, m.clientX, m.clientY)
+    sel.setBaseAndExtent(anchor.node, anchor.offset, focus.node, focus.offset)
+  }
+  const up = () => {
+    document.removeEventListener('mousemove', move)
+    document.removeEventListener('mouseup', up)
+  }
+  document.addEventListener('mousemove', move)
+  document.addEventListener('mouseup', up)
+}
+
+/** A text-layer span holding words (not a markedContent wrapper, not a blank). */
+function textSpan(el) {
+  return el?.tagName === 'SPAN' && el.firstChild?.nodeType === 3 && el.textContent.trim() !== ''
+}
+
+/** Caret under the pointer when it is over a word, else the nearest word's edge. */
+function caretAt(words, x, y) {
+  const pos = document.caretPositionFromPoint?.(x, y)
+  const range = pos ? null : document.caretRangeFromPoint?.(x, y) // Safari before 18.4
+  const node = pos ? pos.offsetNode : range?.startContainer
+  const offset = pos ? pos.offset : range?.startOffset
+  if (node?.nodeType === 3 && words.includes(node.parentElement)) return { node, offset }
+  return nearestCaret(words, x, y)
+}
+
+/** The start or end of the closest word: on the pointer's line if there is one, else the nearest line. */
+function nearestCaret(words, x, y) {
+  let best = null
+  for (const el of words) {
+    const r = el.getBoundingClientRect()
+    const dy = y < r.top ? r.top - y : y > r.bottom ? y - r.bottom : 0
+    const dx = x < r.left ? r.left - x : x > r.right ? x - r.right : 0
+    // Vertical distance first: a word on the same line beats a closer one above or below.
+    const score = dy * 1e4 + dx
+    if (!best || score < best.score) best = { score, el, after: x > r.left + r.width / 2 }
+  }
+  const node = best.el.firstChild
+  return { node, offset: best.after ? node.length : 0 }
 }

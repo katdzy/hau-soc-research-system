@@ -25,7 +25,7 @@ export default function CaacInspector({ ctx, project }) {
   return (
     <section className="panel inspector" aria-labelledby="caac-h">
       <h2 id="caac-h" className="inspector-title">CAAC Inspector</h2>
-      <p className="faint small" style={{ margin: '4px 0 16px' }}>
+      <p className="faint small m-0 mt-half mb-2">
         Why you can — or cannot — act on this project right now.
       </p>
 
@@ -41,7 +41,7 @@ export default function CaacInspector({ ctx, project }) {
       </dl>
 
       {byRole.length === 0 && (
-        <p className="small muted" style={{ marginTop: 16 }}>
+        <p className="small muted mt-2">
           You hold no role that applies to this project.
         </p>
       )}
