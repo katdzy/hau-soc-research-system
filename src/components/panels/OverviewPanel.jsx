@@ -14,6 +14,7 @@ import { FLAGS } from '../../domain/flags.js'
 import GatePanel from './GatePanel.jsx'
 import Capstone2Checks from './Capstone2Checks.jsx'
 import UroReview from './UroReview.jsx'
+import { Act } from '../ViewOnly.jsx'
 
 export default function OverviewPanel({ b, ctx, goTo }) {
   const { snap, me } = useApp()
@@ -79,7 +80,7 @@ export default function OverviewPanel({ b, ctx, goTo }) {
       >
         {b.members.length === 0 && <Empty>No students added yet.</Empty>}
         {b.members.length > 0 && (
-          <table>
+          <table className="cards">
             <thead><tr><th>Student</th><th>Student number</th><th>Year and section</th><th className="tight" /></tr></thead>
             <tbody>
               {b.members.map(m => {
@@ -87,15 +88,15 @@ export default function OverviewPanel({ b, ctx, goTo }) {
                 return (
                   <tr key={m.id}>
                     <td>{u?.name ?? m.userId}</td>
-                    <td className="mono muted">{u?.idNumber || '—'}</td>
-                    <td className="small muted">{u?.yearLevel} · {u?.block}</td>
+                    <td className="mono muted" data-label="Student number">{u?.idNumber || '—'}</td>
+                    <td className="small muted" data-label="Year and section">{u?.yearLevel} · {u?.block}</td>
                     <td className="tight">
-                      {can(ctx, 'roster.manage') && (
+                      {can(ctx, 'roster.manage') && <Act>
                         <button className="quiet small danger" disabled={busy}
                           onClick={() => run(() => removeMember(me, snap, b.project.id, m.id, m.userId))}>
                           Remove
                         </button>
-                      )}
+                      </Act>}
                     </td>
                   </tr>
                 )
@@ -104,7 +105,7 @@ export default function OverviewPanel({ b, ctx, goTo }) {
           </table>
         )}
 
-        {can(ctx, 'roster.manage') && b.members.length < FLAGS.GROUP_SIZE && (
+        {can(ctx, 'roster.manage') && b.members.length < FLAGS.GROUP_SIZE && <Act>
           <div className="row inline-form">
             <Field label={`Add a student from ${b.project.block}`}>
               <select value={pickMember} onChange={e => setPickMember(e.target.value)}>
@@ -119,27 +120,27 @@ export default function OverviewPanel({ b, ctx, goTo }) {
               </button>
             </div>
           </div>
-        )}
+        </Act>}
       </Section>
 
       <Section title="Faculty assignments">
         {b.assignments.length === 0 && <Empty>Nobody has been assigned yet.</Empty>}
         {b.assignments.length > 0 && (
-          <table>
+          <table className="cards">
             <thead><tr><th>Project role</th><th>Faculty</th><th className="tight">Assigned</th><th className="tight" /></tr></thead>
             <tbody>
               {b.assignments.map(a => (
                 <tr key={a.id}>
-                  <td><Badge tone="accent">{a.roleType}</Badge></td>
-                  <td>{nameOf(a.userId)}</td>
-                  <td className="tight small faint">{fmtDate(a.assignedAt)}</td>
+                  <td className="card-status"><Badge tone="accent">{a.roleType}</Badge></td>
+                  <td className="card-title">{nameOf(a.userId)}</td>
+                  <td className="tight small faint" data-label="Assigned">{fmtDate(a.assignedAt)}</td>
                   <td className="tight">
-                    {assignable.includes(a.roleType) && (
+                    {assignable.includes(a.roleType) && <Act>
                       <button className="quiet small danger" disabled={busy}
                         onClick={() => run(() => unassignRole(me, snap, b.project.id, a))}>
                         Unassign
                       </button>
-                    )}
+                    </Act>}
                   </td>
                 </tr>
               ))}
@@ -147,7 +148,7 @@ export default function OverviewPanel({ b, ctx, goTo }) {
           </table>
         )}
 
-        {assignable.length > 0 && (
+        {assignable.length > 0 && <Act>
           <div className="row inline-form">
             <Field label="Project role">
               <select value={pickRole} onChange={e => { setPickRole(e.target.value); setPickUser('') }}>
@@ -178,7 +179,7 @@ export default function OverviewPanel({ b, ctx, goTo }) {
               </button>
             </div>
           </div>
-        )}
+        </Act>}
         <ActionError error={error} />
       </Section>
     </>

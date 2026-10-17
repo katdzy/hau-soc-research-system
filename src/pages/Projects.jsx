@@ -8,6 +8,7 @@ import { Section, Badge, Empty, Field, fmtDate } from '../components/ui.jsx'
 import { STAGES, sectionNow } from '../domain/stages.js'
 import { PROGRAMS, programCode, COURSES } from '../domain/constants.js'
 import { can, resolveInstitution } from '../domain/caac.js'
+import { Act } from '../components/ViewOnly.jsx'
 
 export default function Projects() {
   const { snap, me } = useApp()
@@ -36,7 +37,7 @@ export default function Projects() {
         </p>
       </header>
 
-      {canCreate && (
+      {canCreate && <Act>
         <Section title="Create a project group">
           {!creating ? (
             <button className="primary" onClick={() => setParams({ new: '1' })}>New project group</button>
@@ -67,7 +68,7 @@ export default function Projects() {
             </div>
           )}
         </Section>
-      )}
+      </Act>}
 
       <Section
         title={`${rows.length} project${rows.length === 1 ? '' : 's'}`}
@@ -86,7 +87,7 @@ export default function Projects() {
       >
         {rows.length === 0 && <Empty>No projects match.</Empty>}
         {rows.length > 0 && (
-          <div className="table-scroll"><table>
+          <div className="table-scroll"><table className="cards">
             <thead>
               <tr><th>Project</th><th>Stage</th><th>Access through</th><th className="tight">Updated</th></tr>
             </thead>
@@ -97,9 +98,9 @@ export default function Projects() {
                     <Link className="row-link" to={`/projects/${r.project.id}`}>{r.project.title}</Link>
                     <div className="faint small" title={r.project.program}>{programCode(r.project.program)} · {sectionNow(r.project).section}</div>
                   </td>
-                  <td><Badge tone={r.project.currentStage === 'ARCHIVED' ? 'ok' : 'neutral'}>{r.stage?.label}</Badge></td>
-                  <td className="small muted" title={r.access.reason}>{r.access.via}</td>
-                  <td className="tight small faint">{fmtDate(r.bundle.history.at(-1)?.at ?? r.project.createdAt)}</td>
+                  <td className="card-status"><Badge tone={r.project.currentStage === 'ARCHIVED' ? 'ok' : 'neutral'}>{r.stage?.label}</Badge></td>
+                  <td className="small muted" data-label="Access through" title={r.access.reason}>{r.access.via}</td>
+                  <td className="tight small faint" data-label="Updated">{fmtDate(r.bundle.history.at(-1)?.at ?? r.project.createdAt)}</td>
                 </tr>
               ))}
             </tbody>

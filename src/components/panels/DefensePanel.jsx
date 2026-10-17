@@ -8,6 +8,7 @@ import { Section, Empty, Badge, Field, Countdown, verdictTone, fmtDateTime } fro
 import { VERDICTS, FORMS } from '../../domain/constants.js'
 import { FLAGS } from '../../domain/flags.js'
 import { revisionDaysOf } from '../../domain/settings.js'
+import { Act } from '../ViewOnly.jsx'
 
 export default function DefensePanel({ b, ctx }) {
   const { snap, me } = useApp()
@@ -72,7 +73,7 @@ export default function DefensePanel({ b, ctx }) {
         ))}
       </Section>
 
-      {scheduling && can(ctx, 'defense.schedule') && (
+      {scheduling && can(ctx, 'defense.schedule') && <Act>
         <Section title={`Publish the ${type.toLowerCase()} defense schedule`}>
           <div className="row">
             <Field label="Date and time">
@@ -99,9 +100,9 @@ export default function DefensePanel({ b, ctx }) {
           {gate?.requires(b, me) && <p className="blocker">{gate.requires(b, me)}</p>}
           <ActionError error={error} />
         </Section>
-      )}
+      </Act>}
 
-      {upcoming && (
+      {upcoming && <Act>
         <Section title={`Publish the ${defenseTypeAt(upcoming.key).toLowerCase()} defense schedule`}>
           <p className="small muted mt-0">
             Opens at {upcoming.label}, after:
@@ -116,9 +117,9 @@ export default function DefensePanel({ b, ctx }) {
             Not available until the project reaches {upcoming.label}.
           </p>
         </Section>
-      )}
+      </Act>}
 
-      {open && can(ctx, 'verdict.record') && (
+      {open && can(ctx, 'verdict.record') && <Act>
         <Section title="Record the official verdict">
           <p className="small muted">
             Recorded on {FORMS.F2004.code}. Minor revisions are due in {days.Minor} days
@@ -140,9 +141,9 @@ export default function DefensePanel({ b, ctx }) {
           )}
           <ActionError error={error} />
         </Section>
-      )}
+      </Act>}
 
-      {corrigible && (
+      {corrigible && <Act>
         <Section title="Correct the verdict">
           <p className="small muted">
             Recorded {fmtDateTime(corrigible.recordedAt)}. You can correct it once, until{' '}
@@ -153,7 +154,7 @@ export default function DefensePanel({ b, ctx }) {
             onSubmit={(input) => run(() => correctVerdict(me, snap, b.project.id, { ...input, defenseId: corrigible.id }))} />
           <ActionError error={error} />
         </Section>
-      )}
+      </Act>}
 
       {open && !can(ctx, 'verdict.record') && (
         <p className="small muted">Only this project’s Panel Chair can record the verdict.</p>

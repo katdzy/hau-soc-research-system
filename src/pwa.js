@@ -7,7 +7,7 @@
  *     `beforeinstallprompt`, iOS has no prompt (Share → Add to Home Screen).
  */
 import { useSyncExternalStore } from 'react'
-import { currentEnv, installHint } from './browserSupport.js'
+import { currentEnv, installHint, isMobile } from './browserSupport.js'
 
 let state = { needRefresh: false, installEvent: null }
 let updateSW = null
@@ -38,11 +38,13 @@ export function usePwa() {
     reload: () => updateSW?.(true),
     dismissUpdate: () => set({ needRefresh: false }),
     /**
-     * 'prompt' (the browser's own install sheet: Chrome, Edge, Samsung Internet),
+     * On a phone or tablet: 'prompt' (the browser's own install sheet: Chrome, Edge, Samsung Internet),
      * else a hint from browserSupport.installHint — 'ios-safari' | 'ios-other' |
      * 'android-menu' | 'in-app' — or null (installed, or nothing to say).
      */
-    install: s.installEvent && !currentEnv().standalone ? 'prompt' : installHint(currentEnv()),
+    // Phones and tablets only: desktop works in the browser and gets email.
+    install: !isMobile(currentEnv()) ? null
+      : s.installEvent && !currentEnv().standalone ? 'prompt' : installHint(currentEnv()),
     promptInstall: async () => {
       const e = state.installEvent
       if (!e) return

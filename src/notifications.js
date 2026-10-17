@@ -14,25 +14,39 @@
  *      path 1 stands down on devices with permission (push covers open, closed
  *      and away), so nothing is shown twice.
  *
- * iOS shows web notifications only for an app added to the Home Screen
- * (16.4+), and every platform asks permission from a tap, never on load.
+ * A notification shows only a general line (deviceNotice.js), never the
+ * email's text: the details are behind sign-in.
+ *
+ * Only the installed app on a phone or tablet shows them (Figma F04); desktop
+ * and browser tabs get email alone. iOS needs 16.4 or later, and every
+ * platform asks permission from a tap, never on load.
+ * The account menu's switch can also turn them off for one account on one
+ * device while the browser permission stays granted.
  */
 import { useEffect, useRef, useState } from 'react'
 import { FLAGS } from './domain/flags.js'
 import { currentEnv, notificationSupport } from './browserSupport.js'
-import { pushAvailable, pushRegisteredFor, registerDevice } from './services/push.js'
+import { pushAvailable, pushRegisteredFor, registerDevice, unregisterDevice } from './services/push.js'
+import { lockScreenText } from './deviceNotice.js'
 
 const enabled = FLAGS.DEVICE_NOTIFICATIONS !== 'off'
 
 /**
  * 'granted' | 'denied' | 'default' — the browser can notify, and this is its permission;
- * otherwise why it cannot (browserSupport.notificationSupport): 'needs-install' (iOS in
- * a browser tab) | 'ios-too-old' | 'in-app' | 'unsupported'; or 'off' (the flag).
+ * otherwise why it cannot (browserSupport.notificationSupport): 'desktop' | 'needs-install'
+ * (a browser tab) | 'ios-too-old' | 'in-app' | 'unsupported'; or 'off' (the flag).
  */
 export function notificationStatus() {
   if (!enabled) return 'off'
   const support = notificationSupport(currentEnv())
   return support === 'ready' ? Notification.permission : support
+}
+
+// Turned off with the account menu's switch: this account, this device.
+const OFF_KEY = (userId) => `hausoc.notify.off.${userId}`
+export const turnedOff = (userId) => { try { return localStorage.getItem(OFF_KEY(userId)) === '1' } catch { return false } }
+const setTurnedOff = (userId, off) => {
+  try { off ? localStorage.setItem(OFF_KEY(userId), '1') : localStorage.removeItem(OFF_KEY(userId)) } catch { /* private mode */ }
 }
 
 // Real push covers this account on this device: configured, allowed and registered.
@@ -60,11 +74,11 @@ const askPermission = () => new Promise(done => {
 const urlFor = (mail) => (mail.projectId ? `/projects/${mail.projectId}` : '/')
 
 /** Show one outbox entry. Through the service worker where there is one (Android requires it). */
-export async function showMailNotification(mail) {
+export async function showMailNotification(mail, text = lockScreenText(mail)) {
   if (notificationStatus() !== 'granted') return
-  const title = mail.subject ?? 'HAU-SOC Capstone'
+  const { title } = text
   const options = {
-    body: mail.body ?? '',
+    body: text.body,
     tag: mail.id,
     icon: '/pwa-192.png',
     // Android's status bar draws this as a monochrome mark instead of the browser's icon.
@@ -83,12 +97,10 @@ export async function showMailNotification(mail) {
  * A local check that this device can show notifications at all. Not an email,
  * so it never touches the outbox and nobody else sees it.
  */
-export const sendTestNotification = () => showMailNotification({
-  id: 'test-notification',
-  subject: 'Notifications are working',
-  body: 'This device will show the same updates as your HAU email.',
-  projectId: null,
-})
+export const sendTestNotification = () => showMailNotification(
+  { id: 'test-notification', projectId: null },
+  { title: 'Notifications are working', body: 'This device will show a notice for every HAU email the system sends you.' },
+)
 
 // The newest outbox entry this device has accounted for, per account.
 const MARK_KEY = (userId) => `hausoc.notified.${userId}`
@@ -113,7 +125,7 @@ export function useOutboxNotifications(me, outbox) {
     const all = outbox ?? []
     const mine = (mail) => mail.userIds?.includes(me.id)
     // Push delivers these itself where it is configured and allowed.
-    const show = (mail) => (pushHandles(me.id) ? null : showMailNotification(mail).catch(() => {}))
+    const show = (mail) => (pushHandles(me.id) || turnedOff(me.id) ? null : showMailNotification(mail).catch(() => {}))
     if (seen.current === null) {
       seen.current = new Set(all.map(m => m.id))
       const mark = readMark(me.id)
@@ -133,25 +145,43 @@ export function useOutboxNotifications(me, outbox) {
     writeMark(me.id, newestAt(all))
   }, [outbox, me?.id])
 
-  // Keep this device's push registration current once permission is granted.
+  // Keep this device's push registration current once permission is granted;
+  // a device that no longer qualifies (a tab registered before, or switched
+  // off) is dropped so push stops reaching it.
   useEffect(() => {
-    if (me && notificationStatus() === 'granted') registerDevice(me).catch(() => {})
+    if (!me) return
+    if (notificationStatus() === 'granted' && !turnedOff(me.id)) registerDevice(me).catch(() => {})
+    else if (pushRegisteredFor(me.id)) unregisterDevice().catch(() => {})
   }, [me?.id])
 }
 
-/** Permission state plus the tap that asks for it. */
+/**
+ * The account menu's switch: permission state, whether notifications are on
+ * for this account here, and the taps that change it. Turning on asks for
+ * permission the first time; turning off keeps the permission and stops this
+ * device (push token dropped, the open app stays quiet).
+ */
 export function useNotificationPermission(me) {
   const [status, setStatus] = useState(notificationStatus)
+  const [off, setOff] = useState(() => turnedOff(me.id))
   // Permission can change in the phone's settings while the app is away.
   useEffect(() => {
     const recheck = () => { if (document.visibilityState === 'visible') setStatus(notificationStatus()) }
     document.addEventListener('visibilitychange', recheck)
     return () => document.removeEventListener('visibilitychange', recheck)
   }, [])
-  const request = async () => {
-    const result = await askPermission()
+  const turnOn = async () => {
+    const result = status === 'granted' ? 'granted' : await askPermission()
     setStatus(result)
-    if (result === 'granted') registerDevice(me).catch(() => {})
+    if (result !== 'granted') return
+    setTurnedOff(me.id, false)
+    setOff(false)
+    registerDevice(me).catch(() => {})
   }
-  return { status, request }
+  const turnOff = async () => {
+    setTurnedOff(me.id, true)
+    setOff(true)
+    await unregisterDevice().catch(() => {})
+  }
+  return { status, on: status === 'granted' && !off, turnOn, turnOff }
 }

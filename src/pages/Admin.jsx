@@ -4,7 +4,7 @@ import {
   setGlobalRoles, setAccountStatus, setProgramScope, revokeCapability, liftOverride, updateRevisionDays,
 } from '../services/actions.js'
 import { useAction, ActionError } from '../components/useAction.jsx'
-import { Section, Restricted, Empty, Field, fmtDate, fmtDateTime } from '../components/ui.jsx'
+import { Section, Restricted, Empty, Field, Badge, fmtDate, fmtDateTime } from '../components/ui.jsx'
 import {
   GLOBAL_ROLES as G, PROJECT_ROLES, ACCOUNT_STATUS, PROGRAMS, PROGRAM_INFO, accountType, programCode, parseSection,
 } from '../domain/constants.js'
@@ -13,6 +13,7 @@ import {
 } from '../domain/caac.js'
 import { FLAGS } from '../domain/flags.js'
 import { revisionDaysOf, settingsOf, REVISION_DAYS_LIMITS } from '../domain/settings.js'
+import { Act, useViewOnly } from '../components/ViewOnly.jsx'
 
 const OFFICE_ROLES = Object.values(G).filter(r => r !== G.STUDENT)
 const STATUS_TONE = { Active: 'ok', Inactive: 'neutral', Suspended: 'stop' }
@@ -138,7 +139,7 @@ function Accounts() {
       <Section title={`Awaiting activation (${pending.length})`}>
         {pending.length === 0 && <Empty>No registrations are waiting. New accounts appear here after they register.</Empty>}
         {pending.length > 0 && (
-          <div className="table-scroll"><table>
+          <div className="table-scroll"><table className="cards">
             <thead>
               <tr><th>Account</th><th>Type</th><th className="tight">Registered</th><th>Email</th><th className="tight" /></tr>
             </thead>
@@ -149,20 +150,22 @@ function Accounts() {
                     <div>{u.name}</div>
                     <div className="mono faint text-xs">{u.email}</div>
                   </td>
-                  <td className="small muted">
+                  <td className="small muted" data-label="Type">
                     <div className="inline">{accountType(u.email)}{u.block && ` · ${u.block}`} <ProgramPill u={u} /></div>
                   </td>
-                  <td className="tight small faint">{fmtDate(u.createdAt)}</td>
-                  <td className="small">
+                  <td className="tight small faint" data-label="Registered">{fmtDate(u.createdAt)}</td>
+                  <td className="small" data-label="Email">
                     {u.emailVerified
                       ? <span className="signed">Verified</span>
                       : <span className="faint">Not verified yet — the owner has to use the link in the email</span>}
                   </td>
                   <td className="tight">
-                    <button className="small" disabled={busy || !u.emailVerified}
-                      onClick={() => run(() => setAccountStatus(me, snap, u.id, ACCOUNT_STATUS.ACTIVE))}>
-                      Activate
-                    </button>
+                    <Act>
+                      <button className="small" disabled={busy || !u.emailVerified}
+                        onClick={() => run(() => setAccountStatus(me, snap, u.id, ACCOUNT_STATUS.ACTIVE))}>
+                        Activate
+                      </button>
+                    </Act>
                   </td>
                 </tr>
               ))}
@@ -201,7 +204,7 @@ function Accounts() {
           ))}
         </div>
         {shown.length === 0 && <Empty>No account matches these filters.</Empty>}
-        <div className="table-scroll"><table>
+        <div className="table-scroll"><table className="cards">
           <thead>
             <tr><th>Account</th><th>Global Roles</th><th className="tight">Status</th></tr>
           </thead>
@@ -227,6 +230,7 @@ function AccountRow({ u, busy, run }) {
   const roles = u.globalRoles ?? []
   const scope = u.programScope ?? []
   const coordinator = roles.includes(G.COORDINATOR)
+  const viewOnly = useViewOnly()
 
   return (
     <tr>
@@ -237,17 +241,19 @@ function AccountRow({ u, busy, run }) {
           {type}{u.block && ` · ${u.block}`}{u.idNumber && ` · ${u.idNumber}`}{!u.emailVerified && ' · email not verified'}
         </div>
       </td>
-      <td>
+      <td data-label="Global Roles">
         <div className="inline">
           {roles.map(r => (
             <span key={r} className="tag tag-removable">
               {caacTag(r)}
-              <button className="tag-x" disabled={busy} aria-label={`Remove ${r} from ${u.name}`}
-                onClick={() => run(() => setGlobalRoles(me, snap, u.id, roles.filter(x => x !== r)))}>×</button>
+              <Act>
+                <button className="tag-x" disabled={busy} aria-label={`Remove ${r} from ${u.name}`}
+                  onClick={() => run(() => setGlobalRoles(me, snap, u.id, roles.filter(x => x !== r)))}>×</button>
+              </Act>
             </span>
           ))}
           {roles.length === 0 && <span className="faint small">none — project roles only</span>}
-          {options.some(r => !roles.includes(r)) && (
+          {options.some(r => !roles.includes(r)) && !viewOnly && (
             <select value="" disabled={busy} aria-label={`Grant a Global Role to ${u.name}`}
               onChange={e => e.target.value && run(() => setGlobalRoles(me, snap, u.id, [...roles, e.target.value]))}
               className="select-quiet">
@@ -263,14 +269,16 @@ function AccountRow({ u, busy, run }) {
               {scope.map(p => (
                 <span key={p} className="tag tag-removable" title={p}>
                   {programCode(p)}
-                  <button className="tag-x" disabled={busy} aria-label={`Remove ${p} from ${u.name}’s programs`}
-                    onClick={() => run(() => setProgramScope(me, snap, u.id, scope.filter(x => x !== p)))}>×</button>
+                  <Act>
+                    <button className="tag-x" disabled={busy} aria-label={`Remove ${p} from ${u.name}’s programs`}
+                      onClick={() => run(() => setProgramScope(me, snap, u.id, scope.filter(x => x !== p)))}>×</button>
+                  </Act>
                 </span>
               ))}
               {scope.length === 0 && (
                 <span className="small tone-warn">None yet — this Program Chair/Coordinator sees no project until a program is added</span>
               )}
-              {PROGRAMS.some(p => !scope.includes(p)) && (
+              {PROGRAMS.some(p => !scope.includes(p)) && !viewOnly && (
                 <select value="" disabled={busy} aria-label={`Add a program for ${u.name}`}
                   onChange={e => e.target.value && run(() => setProgramScope(me, snap, u.id, [...scope, e.target.value]))}
                   className="select-quiet">
@@ -282,12 +290,16 @@ function AccountRow({ u, busy, run }) {
           </div>
         )}
       </td>
-      <td className="tight">
-        <select value={u.status} disabled={busy || u.id === me.id} aria-label={`Status of ${u.name}`}
-          onChange={e => run(() => setAccountStatus(me, snap, u.id, e.target.value))}
-          className={`select-quiet tone-${STATUS_TONE[u.status]}`}>
-          {Object.values(ACCOUNT_STATUS).map(s => <option key={s}>{s}</option>)}
-        </select>
+      <td className="tight card-status">
+        {viewOnly
+          ? <Badge tone={STATUS_TONE[u.status]}>{u.status}</Badge>
+          : (
+            <select value={u.status} disabled={busy || u.id === me.id} aria-label={`Status of ${u.name}`}
+              onChange={e => run(() => setAccountStatus(me, snap, u.id, e.target.value))}
+              className={`select-quiet tone-${STATUS_TONE[u.status]}`}>
+              {Object.values(ACCOUNT_STATUS).map(s => <option key={s}>{s}</option>)}
+            </select>
+          )}
       </td>
     </tr>
   )
@@ -330,7 +342,7 @@ function Overrides() {
 
   return (
     <>
-      <Section title="Revoke a capability">
+      <Act><Section title="Revoke a capability">
         <p className="small muted measure">
           An override takes one capability away from one account, on one project or on every
           project, until you lift it. It never adds a permission, so it cannot stand in for an
@@ -368,13 +380,13 @@ function Overrides() {
           </button>
         </div>
         <ActionError error={error} />
-      </Section>
+      </Section></Act>
 
       <Section title={`In force (${active.length})`}>
         {active.length === 0 && <Empty>No overrides are in force. Every account has what its policies grant.</Empty>}
         {active.length > 0 && <OverrideTable rows={active} nameOf={nameOf} titleOf={titleOf}
           action={(o) => (
-            <button className="quiet small" disabled={busy} onClick={() => run(() => liftOverride(me, snap, o.id))}>Lift</button>
+            <Act><button className="quiet small" disabled={busy} onClick={() => run(() => liftOverride(me, snap, o.id))}>Lift</button></Act>
           )} />}
       </Section>
 
@@ -391,7 +403,7 @@ function Overrides() {
 
 function OverrideTable({ rows, nameOf, titleOf, action }) {
   return (
-    <div className="table-scroll"><table>
+    <div className="table-scroll"><table className="cards">
       <thead>
         <tr><th>Account</th><th>Revoked capability</th><th>Where</th><th>Reason</th><th className="tight">Applied</th><th className="tight" /></tr>
       </thead>
@@ -399,10 +411,10 @@ function OverrideTable({ rows, nameOf, titleOf, action }) {
         {rows.map(o => (
           <tr key={o.id}>
             <td className="small">{nameOf(o.userId)}</td>
-            <td><span className="mono text-xs">{o.capability}</span></td>
-            <td className="small muted">{o.projectId ? titleOf(o.projectId) : 'Every project'}</td>
-            <td className="small">{o.reason}</td>
-            <td className="tight small faint">{fmtDate(o.createdAt)} · {nameOf(o.createdBy)}</td>
+            <td data-label="Revoked capability"><span className="mono text-xs">{o.capability}</span></td>
+            <td className="small muted" data-label="Where">{o.projectId ? titleOf(o.projectId) : 'Every project'}</td>
+            <td className="small" data-label="Reason">{o.reason}</td>
+            <td className="tight small faint" data-label="Applied">{fmtDate(o.createdAt)} · {nameOf(o.createdBy)}</td>
             <td className="tight">{action(o)}</td>
           </tr>
         ))}
@@ -423,6 +435,7 @@ function Settings() {
   const record = settingsOf(snap)
   const nameOf = (id) => (snap.users ?? []).find(u => u.id === id)?.name ?? id
   const { min, max } = REVISION_DAYS_LIMITS
+  const viewOnly = useViewOnly()
 
   return (
     <Section title="Revision countdown">
@@ -432,13 +445,13 @@ function Settings() {
       </p>
       <div className="row measure-narrow">
         <Field label="Minor revisions (days)">
-          <input type="number" min={min} max={max} step="1" value={minor} onChange={e => { setMinor(e.target.value); setSaved('') }} />
+          <input type="number" min={min} max={max} step="1" value={minor} readOnly={viewOnly} onChange={e => { setMinor(e.target.value); setSaved('') }} />
         </Field>
         <Field label="Major revisions (days)">
-          <input type="number" min={min} max={max} step="1" value={major} onChange={e => { setMajor(e.target.value); setSaved('') }} />
+          <input type="number" min={min} max={max} step="1" value={major} readOnly={viewOnly} onChange={e => { setMajor(e.target.value); setSaved('') }} />
         </Field>
       </div>
-      <div className="actions">
+      <Act><div className="actions">
         <button className="primary" disabled={busy}
           onClick={() => run(async () => {
             await updateRevisionDays(me, snap, { Minor: Number(minor), Major: Number(major) })
@@ -447,7 +460,7 @@ function Settings() {
           Save
         </button>
         {saved && <span className="small signed" role="status">{saved}</span>}
-      </div>
+      </div></Act>
       <ActionError error={error} />
       <p className="note small mt-3 measure">
         A change applies to verdicts recorded after it. Countdowns already running keep the deadline
@@ -505,16 +518,16 @@ function TagsAndPolicies() {
         <p className="small muted">
           Who holds which tag, and where it applies. A Project tag means nothing outside its project.
         </p>
-        <div className="table-scroll"><table>
+        <div className="table-scroll"><table className="cards">
           <thead><tr><th>Person</th><th>Tag</th><th>Dimension</th><th>Applies to</th><th className="tight">Since</th></tr></thead>
           <tbody>
             {shownTags.map((t, i) => (
               <tr key={i}>
                 <td className="small">{t.user.name}</td>
-                <td><span className="tag">{caacTag(t.role)}</span></td>
-                <td className="small muted">{t.dimension}</td>
-                <td className="small muted">{t.context}</td>
-                <td className="tight small faint">{t.since ? fmtDate(t.since) : '—'}</td>
+                <td className="card-status"><span className="tag">{caacTag(t.role)}</span></td>
+                <td className="small muted" data-label="Dimension">{t.dimension}</td>
+                <td className="small muted" data-label="Applies to">{t.context}</td>
+                <td className="tight small faint" data-label="Since">{t.since ? fmtDate(t.since) : '—'}</td>
               </tr>
             ))}
           </tbody>

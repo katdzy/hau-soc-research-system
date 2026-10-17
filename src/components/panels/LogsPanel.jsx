@@ -5,6 +5,7 @@ import { submitWeeklyLog, decideWeeklyLog } from '../../services/actions.js'
 import { useAction, ActionError } from '../useAction.jsx'
 import { Section, Empty, Badge, Field, fmtDate } from '../ui.jsx'
 import { FORMS } from '../../domain/constants.js'
+import { Act } from '../ViewOnly.jsx'
 
 const LOG_TONE = { Approved: 'ok', Submitted: 'warn', Returned: 'stop' }
 
@@ -62,7 +63,7 @@ export default function LogsPanel({ b, ctx }) {
               </div>
             )}
 
-            {l.status === 'Submitted' && can(ctx, 'weeklylog.sign') && (
+            {l.status === 'Submitted' && can(ctx, 'weeklylog.sign') && <Act>
               <div className="subform">
                 <Field label="Adviser remarks">
                   <input value={remarks[l.id] ?? ''} onChange={e => setRemarks(r => ({ ...r, [l.id]: e.target.value }))} />
@@ -78,13 +79,13 @@ export default function LogsPanel({ b, ctx }) {
                   </button>
                 </div>
               </div>
-            )}
+            </Act>}
           </div>
         ))}
         <ActionError error={error} />
       </Section>
 
-      {can(ctx, 'weeklylog.submit') && (
+      {can(ctx, 'weeklylog.submit') && <Act>
         <Section title="Submit this week’s log">
           <Field label="Accomplishments">
             <textarea value={activities} onChange={e => setActivities(e.target.value)}
@@ -98,7 +99,7 @@ export default function LogsPanel({ b, ctx }) {
             Submit to the Adviser
           </button>
         </Section>
-      )}
+      </Act>}
     </>
   )
 }

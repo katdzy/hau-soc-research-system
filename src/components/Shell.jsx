@@ -6,8 +6,9 @@ import { can, resolveInstitution } from '../domain/caac.js'
 import { ACCOUNT_STATUS, GLOBAL_ROLES as G, accountType } from '../domain/constants.js'
 import { sectionNow } from '../domain/stages.js'
 import { Avatar } from './ui.jsx'
-import { InstallApp, NotificationSetting } from './Pwa.jsx'
+import { InstallApp, InstallBanner, NotificationSetting } from './Pwa.jsx'
 import { useOutboxNotifications } from '../notifications.js'
+import { ViewOnlyBanner } from './ViewOnly.jsx'
 import crest from '../assets/soc-crest.webp'
 
 const link = ({ isActive }) => (isActive ? 'active' : undefined)
@@ -75,7 +76,7 @@ export default function Shell() {
     )
   }
 
-  // Below 860px the rail collapses to a nav strip; its foot moves into the account menu.
+  // Below 860px (phones, tablets upright) the rail moves behind ☰ (Figma R-00p).
   const compact = useMediaQuery('(max-width: 860px)')
   const here = location.pathname + location.search
   const railFoot = (
@@ -98,10 +99,49 @@ export default function Shell() {
     </div>
   )
 
+  const navBody = (
+    <>
+      <div className="rail-role label">{office}</div>
+      <div className="nav">
+        <NavLink to="/" end className={link}>
+          <span>Dashboard</span>{todo > 0 && <span className="count">{todo}</span>}
+        </NavLink>
+        {myProject ? (
+          <>
+            {projectLink(null, 'My Project')}
+            {projectLink('documents', 'Version History')}
+            {projectLink('logs', 'Weekly Logs')}
+            {projectLink('defense', 'Defense')}
+            {projectLink('forms', 'Forms')}
+          </>
+        ) : (
+          <NavLink to="/projects" className={link}>Projects</NavLink>
+        )}
+
+        {institutional && <div className="nav-group label">Institutional</div>}
+        {can(inst, 'report.generate') && <NavLink to="/reports" className={link}>Reports</NavLink>}
+        {(can(inst, 'records.search') || can(inst, 'records.manage')) &&
+          <NavLink to="/records" className={link}>Archive</NavLink>}
+        {can(inst, 'audit.view') && <NavLink to="/audit" className={link}>Audit Log</NavLink>}
+
+        {administration && <div className="nav-group label">Administration</div>}
+        {can(inst, 'admin.accounts') && (
+          <NavLink to="/admin/accounts" className={link}>
+            <span>User Accounts</span>{toActivate > 0 && <span className="count">{toActivate}</span>}
+          </NavLink>
+        )}
+        {can(inst, 'admin.caac') && <NavLink to="/admin/caac" className={link}>Role Configuration</NavLink>}
+        {can(inst, 'settings.manage') && <NavLink to="/admin/settings" className={link}>Global Settings</NavLink>}
+      </div>
+      {railFoot}
+    </>
+  )
+
   return (
     <div className="app">
       <a className="skip" href="#main">Skip to content</a>
       <header className="topbar">
+        {compact && <MenuButton pathname={here} label={`Menu — ${office}`}>{navBody}</MenuButton>}
         <Link to="/" className="brand" aria-label="HAU-SOC Thesis and Capstone — Dashboard">
           <img className="crest-img" src={crest} alt="" width="32" height="32" />
           <span className="brand-name">HAU-SOC Thesis and Capstone Project Management and Workflow Automation System</span>
@@ -110,51 +150,19 @@ export default function Shell() {
         <div className="topbar-end">
           <ActingAs acting={acting} office={office} held={held} memberOf={memberOf}
             projectOf={projectOf} openId={openId} pathname={here} />
-          <AccountMenu me={me} pathname={here} onSignOut={() => { signOut(); navigate('/') }}>
-            {compact && railFoot}
-          </AccountMenu>
+          <AccountMenu me={me} pathname={here} onSignOut={() => { signOut(); navigate('/') }} />
         </div>
       </header>
 
       <div className="app-body">
-        <nav className="rail" aria-label="Main">
-          <div className="rail-role label">{office}</div>
-          <div className="nav">
-            <NavLink to="/" end className={link}>
-              <span>Dashboard</span>{todo > 0 && <span className="count">{todo}</span>}
-            </NavLink>
-            {myProject ? (
-              <>
-                {projectLink(null, 'My Project')}
-                {projectLink('documents', 'Version History')}
-                {projectLink('logs', 'Weekly Logs')}
-                {projectLink('defense', 'Defense')}
-                {projectLink('forms', 'Forms')}
-              </>
-            ) : (
-              <NavLink to="/projects" className={link}>Projects</NavLink>
-            )}
+        {!compact && <nav className="rail" aria-label="Main">{navBody}</nav>}
 
-            {institutional && <div className="nav-group label">Institutional</div>}
-            {can(inst, 'report.generate') && <NavLink to="/reports" className={link}>Reports</NavLink>}
-            {(can(inst, 'records.search') || can(inst, 'records.manage')) &&
-              <NavLink to="/records" className={link}>Archive</NavLink>}
-            {can(inst, 'audit.view') && <NavLink to="/audit" className={link}>Audit Log</NavLink>}
-
-            {administration && <div className="nav-group label">Administration</div>}
-            {can(inst, 'admin.accounts') && (
-              <NavLink to="/admin/accounts" className={link}>
-                <span>User Accounts</span>{toActivate > 0 && <span className="count">{toActivate}</span>}
-              </NavLink>
-            )}
-            {can(inst, 'admin.caac') && <NavLink to="/admin/caac" className={link}>Role Configuration</NavLink>}
-            {can(inst, 'settings.manage') && <NavLink to="/admin/settings" className={link}>Global Settings</NavLink>}
-          </div>
-
-          {!compact && railFoot}
-        </nav>
-
-        <main className="main" id="main" tabIndex={-1}><Outlet /></main>
+        <main className="main" id="main" tabIndex={-1}>
+          <ViewOnlyBanner />
+          <Outlet />
+          {/* Phones and tablets, first screen after login (Figma PWA-01). */}
+          {compact && location.pathname === '/' && <InstallBanner />}
+        </main>
       </div>
     </div>
   )
@@ -204,8 +212,41 @@ function ActingAs({ acting, office, held, memberOf, projectOf, openId, pathname 
   )
 }
 
-/** The avatar opens the account menu: who you are, Sign out, and on narrow screens the rail foot. */
-function AccountMenu({ me, pathname, onSignOut, children }) {
+/**
+ * ☰ on phones and upright tablets (Figma R-00p): the same modules as the
+ * desktop rail, in a panel from the left. A modal <dialog>, so focus moves in,
+ * Escape closes it and the page behind is inert; it closes on navigation.
+ */
+function MenuButton({ pathname, label, children }) {
+  const ref = useRef(null)
+  useEffect(() => { if (ref.current?.open) ref.current.close() }, [pathname])
+  return (
+    <>
+      <button className="quiet menu-button" aria-label={label} aria-haspopup="dialog"
+        onClick={() => ref.current.showModal()}>
+        <svg viewBox="0 0 20 20" width="20" height="20" aria-hidden="true" focusable="false">
+          <path d="M3 5.5h14M3 10h14M3 14.5h14" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" />
+        </svg>
+      </button>
+      <dialog ref={ref} className="nav-drawer" aria-label="Main menu"
+        // The backdrop, or any link (even to the page already open), closes it.
+        onClick={(e) => { if (e.target === e.currentTarget || e.target.closest('a')) e.currentTarget.close() }}>
+        <button className="quiet sheet-x drawer-x" onClick={() => ref.current.close()} aria-label="Close menu">
+          <svg viewBox="0 0 16 16" width="14" height="14" aria-hidden="true" focusable="false">
+            <path d="M3.5 3.5l9 9M12.5 3.5l-9 9" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" />
+          </svg>
+        </button>
+        <nav className="rail" aria-label="Main">{children}</nav>
+      </dialog>
+    </>
+  )
+}
+
+/**
+ * The avatar opens the account menu (Figma PWA-09): who you are, device
+ * notifications, Install app until installed, and Sign out.
+ */
+function AccountMenu({ me, pathname, onSignOut }) {
   const ref = useDisclosure(pathname)
   return (
     <details className="me-menu" ref={ref}>
@@ -221,9 +262,8 @@ function AccountMenu({ me, pathname, onSignOut, children }) {
           <strong>{me.name}</strong>
           <span>{me.email}</span>
         </div>
-        {children}
+        <NotificationSetting me={me} />
         <InstallApp className="acting-note" />
-        <NotificationSetting me={me} className="acting-note" />
         <div className="acting-note">
           <button className="small" onClick={onSignOut}>Sign out</button>
         </div>

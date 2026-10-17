@@ -43,7 +43,7 @@ export default function Audit() {
       >
         {rows.length === 0 && <Empty>No audit entries yet.</Empty>}
         {rows.length > 0 && (
-          <div className="table-scroll"><table>
+          <div className="table-scroll"><table className="cards">
             <thead>
               <tr>
                 <th className="tight">When</th><th className="tight">Action</th>
@@ -55,11 +55,11 @@ export default function Audit() {
               {rows.map(l => (
                 <tr key={l.id}>
                   <td className="tight mono faint text-xs">{fmtDateTime(l.at)}</td>
-                  <td className="tight"><Badge>{l.action}</Badge></td>
-                  <td className="tight small">{nameOf(l.actorId)}<div className="faint">{l.hat ?? '—'}</div></td>
-                  <td className="tight small muted">{l.projectId ? titleOf(l.projectId) : '—'}</td>
-                  <td className="tight mono faint text-xs">{l.entityType}/{l.entityId}</td>
-                  <td className="mono faint text-xs nowrap">
+                  <td className="tight card-status"><Badge>{l.action}</Badge></td>
+                  <td className="tight small" data-label="Actor · role hat">{nameOf(l.actorId)}<div className="faint">{l.hat ?? '—'}</div></td>
+                  <td className="tight small muted" data-label="Project">{l.projectId ? titleOf(l.projectId) : '—'}</td>
+                  <td className="tight mono faint text-xs" data-label="Entity">{l.entityType}/{l.entityId}</td>
+                  <td className="mono faint text-xs nowrap" data-label="Before → after">
                     {show(l.before)} → {show(l.after)}
                     {detail(l.meta) && <div>{detail(l.meta)}</div>}
                   </td>

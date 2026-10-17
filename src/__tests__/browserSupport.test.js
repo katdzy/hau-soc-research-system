@@ -1,7 +1,7 @@
 // Device notifications and install guidance per mobile browser (revision
 // 2026-10-07). Real user-agent strings, one per browser the team is likely to meet.
 import { describe, it, expect } from 'vitest'
-import { browserInfo, installHint, notificationSupport } from '../browserSupport.js'
+import { browserInfo, installHint, isMobile, notificationSupport } from '../browserSupport.js'
 
 const UA = {
   iosSafari: 'Mozilla/5.0 (iPhone; CPU iPhone OS 18_5 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/18.5 Mobile/15E148 Safari/604.1',
@@ -62,15 +62,15 @@ describe('notifications per browser', () => {
     expect(browserInfo(iosTab(UA.iosUnknownWebView)).inApp).toBe(true)
   })
 
-  it('Android browsers notify from a tab', () => {
+  it('Android: only the installed app notifies, never a browser tab (Figma F04)', () => {
     for (const ua of [UA.androidChrome, UA.androidSamsung, UA.androidFirefox, UA.androidEdge, UA.androidOpera]) {
-      expect(notificationSupport(env(ua))).toBe('ready')
+      expect(notificationSupport(env(ua))).toBe('needs-install')
+      expect(notificationSupport(env(ua, { standalone: true }))).toBe('ready')
     }
   })
 
-  it('a browser without the APIs says so instead of showing nothing', () => {
-    expect(notificationSupport(env(UA.androidChrome, { hasServiceWorker: false }))).toBe('unsupported')
-    expect(notificationSupport(env(UA.desktopChrome, { hasNotification: false }))).toBe('unsupported')
+  it('an installed app without the APIs says so instead of showing nothing', () => {
+    expect(notificationSupport(env(UA.androidChrome, { standalone: true, hasServiceWorker: false }))).toBe('unsupported')
   })
 })
 
@@ -107,8 +107,10 @@ describe('install guidance per browser', () => {
     expect(browserInfo(iosTab(UA.iosSafari)).browser).toBe('safari')
   })
 
-  it('desktop gets no mobile hint', () => {
+  it('desktop gets no install hint and no device notifications (email only)', () => {
     expect(installHint(env(UA.desktopChrome))).toBe(null)
-    expect(notificationSupport(env(UA.desktopChrome))).toBe('ready')
+    expect(isMobile(env(UA.desktopChrome))).toBe(false)
+    expect(notificationSupport(env(UA.desktopChrome))).toBe('desktop')
+    expect(notificationSupport(env(UA.desktopChrome, { standalone: true }))).toBe('desktop')
   })
 })

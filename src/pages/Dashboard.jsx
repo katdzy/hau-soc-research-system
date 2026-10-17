@@ -167,7 +167,7 @@ export default function Dashboard() {
 
       {others.length > 0 && (
         <Section title="Other projects you can open">
-          <div className="table-scroll"><table>
+          <div className="table-scroll"><table className="cards">
             <thead>
               <tr><th>Project</th><th>Access through</th><th>Stage</th><th className="tight">Updated</th></tr>
             </thead>
@@ -175,9 +175,9 @@ export default function Dashboard() {
               {others.map(r => (
                 <tr key={r.project.id}>
                   <td><Link className="row-link" to={`/projects/${r.project.id}`}>{r.project.title}</Link></td>
-                  <td className="small muted" title={r.access.reason}>{r.access.via}</td>
-                  <td><Badge>{r.stage?.label}</Badge></td>
-                  <td className="tight small faint">{fmtDate(r.bundle.history.at(-1)?.at ?? r.project.createdAt)}</td>
+                  <td className="small muted" data-label="Access through" title={r.access.reason}>{r.access.via}</td>
+                  <td className="card-status"><Badge>{r.stage?.label}</Badge></td>
+                  <td className="tight small faint" data-label="Updated">{fmtDate(r.bundle.history.at(-1)?.at ?? r.project.createdAt)}</td>
                 </tr>
               ))}
             </tbody>
@@ -382,7 +382,7 @@ function BlockDesk({ section, rows }) {
           <h3 className="label group-sub">Groups by stage</h3>
           {groups.length === 0 && <p className="small faint m-0">No groups in Capstone 1 for this section.</p>}
           {groups.length > 0 && (
-            <div className="table-scroll"><table>
+            <div className="table-scroll"><table className="cards">
               <thead><tr><th>Group</th><th>Stage</th><th>Now</th><th className="tight">Students</th></tr></thead>
               <tbody>
                 {[...groups].sort((x, y) => stageOrder(x) - stageOrder(y)).map(r => {
@@ -392,13 +392,13 @@ function BlockDesk({ section, rows }) {
                   return (
                     <tr key={r.project.id}>
                       <td><Link className="row-link" to={`/projects/${r.project.id}`}>{r.project.title}</Link></td>
-                      <td><Badge>{r.stage?.label}</Badge></td>
-                      <td className="small">
+                      <td className="card-status"><Badge>{r.stage?.label}</Badge></td>
+                      <td className="small" data-label="Now">
                         {ready ? <span className="ok-inline">Your step: {ready.gate.label}</span>
                           : mine ? <span className="muted">{mine.blocker}</span>
                             : next ? <span className="muted">Waiting on {next.actorHint}</span> : '—'}
                       </td>
-                      <td className={`tight mono${r.bundle.members.length < FLAGS.GROUP_SIZE ? ' tone-warn' : ''}`}>
+                      <td className={`tight mono${r.bundle.members.length < FLAGS.GROUP_SIZE ? ' tone-warn' : ''}`} data-label="Students">
                         {r.bundle.members.length}/{FLAGS.GROUP_SIZE}
                       </td>
                     </tr>
@@ -462,7 +462,7 @@ function QueueSection({ q, rows }) {
     <Section title={q.name} aside={<span className="faint small">{q.role}{items.length ? ` · ${items.length}` : ''}</span>}>
       {items.length === 0 && <p className="small faint m-0">Nothing is waiting here.</p>}
       {items.length > 0 && (
-        <div className="table-scroll"><table>
+        <div className="table-scroll"><table className="cards">
           <thead><tr><th>Project</th><th>Section</th><th>Status</th><th className="tight" /></tr></thead>
           <tbody>
             {items.map(({ r, label, blocker, tab, steps, verifies }, i) => (
@@ -471,8 +471,8 @@ function QueueSection({ q, rows }) {
                   <Link className="row-link" to={itemLink(r)}>{r.project.title}</Link>
                   <div className="faint small">{r.stage?.label}</div>
                 </td>
-                <td className="small muted mono" title={r.project.program}>{sectionNow(r.project).section}</td>
-                <td className="small">
+                <td className="small muted mono" data-label="Section" title={r.project.program}>{sectionNow(r.project).section}</td>
+                <td className="small" data-label="Status">
                   {blocker ? <span className="muted">{blocker}</span> : <span className="ok-inline">Ready: {label}</span>}
                   {steps?.length > 1 && (
                     <div className="faint small">{steps.filter(x => x.done).length} of {steps.length} {steps.length === 2 ? 'approvals' : 'steps'} done</div>
@@ -566,7 +566,7 @@ function ProgramSummary() {
   const overdue = (list) => list.filter(p => p.revisionDeadline && new Date(p.revisionDeadline) < Date.now()).length
   return (
     <Section title={scope ? 'Your programs at a glance' : 'School at a glance'} aside={<Link className="small" to="/reports">Reports</Link>}>
-      <div className="table-scroll"><table>
+      <div className="table-scroll"><table className="cards">
         <thead>
           <tr><th>Program</th><th className="tight">Groups</th><th className="tight">Capstone 1</th><th className="tight">Capstone 2</th><th className="tight">Archived</th><th className="tight">Overdue</th></tr>
         </thead>
@@ -576,11 +576,11 @@ function ProgramSummary() {
             return (
               <tr key={name}>
                 <td title={name}><strong>{programCode(name)}</strong> <span className="faint small prog-long">{name.replace(/^Bachelor of Science Major in /, '')}</span></td>
-                <td className="tight mono">{list.length}</td>
-                <td className="tight mono">{count(list, 'c1')}</td>
-                <td className="tight mono">{count(list, 'c2')}</td>
-                <td className="tight mono">{count(list, 'archived')}</td>
-                <td className={`tight mono${overdue(list) ? ' tone-warn' : ''}`}>{overdue(list)}</td>
+                <td className="tight mono" data-label="Groups">{list.length}</td>
+                <td className="tight mono" data-label="Capstone 1">{count(list, 'c1')}</td>
+                <td className="tight mono" data-label="Capstone 2">{count(list, 'c2')}</td>
+                <td className="tight mono" data-label="Archived">{count(list, 'archived')}</td>
+                <td className={`tight mono${overdue(list) ? ' tone-warn' : ''}`} data-label="Overdue">{overdue(list)}</td>
               </tr>
             )
           })}

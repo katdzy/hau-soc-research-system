@@ -2,12 +2,13 @@
    Device notifications: see src/notifications.js. */
 
 // Real push from the deliverOutbox Cloud Function: an FCM data message carrying
-// one outbox entry. iOS requires every push to show a notification.
+// one outbox entry's general notice (never the email's text — see
+// src/deviceNotice.js). iOS requires every push to show a notification.
 self.addEventListener('push', (event) => {
   let data = {}
   try { data = event.data?.json()?.data ?? {} } catch { /* not JSON: show the fallback */ }
   event.waitUntil(self.registration.showNotification(data.title || 'HAU-SOC Capstone', {
-    body: data.body || '',
+    body: data.body || 'Update on your capstone project',
     tag: data.tag || undefined, // the outbox id: the same email never shows twice
     icon: '/pwa-192.png',
     badge: '/pwa-badge.png',

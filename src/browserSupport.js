@@ -9,7 +9,11 @@
  *     WebViews) can neither install nor notify: the page must be opened in
  *     Safari or Chrome first.
  *   - Android: Chrome, Edge and Samsung Internet offer an install prompt;
- *     Firefox and others install from their menu. All of them notify from a tab.
+ *     Firefox and others install from their menu.
+ *
+ * Device notifications come only from the installed app on a phone or tablet
+ * (Figma F04): desktop and browser tabs rely on email alone, and the install
+ * steps are offered only on phones and tablets.
  *
  * The functions here are pure (they read an `env`, never `window`) so each
  * browser can be tested from its user-agent string.
@@ -56,17 +60,21 @@ export function browserInfo(env) {
   return { ios, android, iosVersion, browser, inApp, standalone: !!env.standalone }
 }
 
+/** A phone or tablet: the devices the app is installed on. */
+export const isMobile = (env) => { const b = browserInfo(env); return b.ios || b.android }
+
 /**
  * Whether notifications can be offered here, before permission is asked:
- * 'ready' | 'in-app' | 'ios-too-old' | 'needs-install' | 'unsupported'.
+ * 'ready' | 'desktop' | 'in-app' | 'ios-too-old' | 'needs-install' | 'unsupported'.
  */
 export function notificationSupport(env) {
   const b = browserInfo(env)
   const v = b.iosVersion
   if (b.inApp) return 'in-app'
+  if (!b.ios && !b.android) return 'desktop'
   // Apple added web notifications for Home Screen apps in iOS 16.4.
   if (v && (v.major < 16 || (v.major === 16 && v.minor < 4))) return 'ios-too-old'
-  if (b.ios && !b.standalone) return 'needs-install'
+  if (!b.standalone) return 'needs-install'
   return env.hasNotification && env.hasServiceWorker ? 'ready' : 'unsupported'
 }
 

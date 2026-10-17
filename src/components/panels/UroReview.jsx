@@ -7,6 +7,7 @@ import {
 import { returnToGroup } from '../../services/actions.js'
 import { useAction, ActionError } from '../useAction.jsx'
 import { Section, Badge, Field, docTone, fmtDate, fmtDateTime } from '../ui.jsx'
+import { Act } from '../ViewOnly.jsx'
 
 /**
  * S9.4 — what the URO verifies (both certificates and the manuscript) and the
@@ -28,7 +29,7 @@ export default function UroReview({ b, ctx, goTo }) {
   return (
     <Section title="Clearance verification" aside={<span className="faint small">University Research Office</span>}>
       {atUro && (
-        <div className="table-scroll"><table>
+        <div className="table-scroll"><table className="cards">
           <thead><tr><th>Document</th><th>Version</th><th>Submitted</th><th className="tight">Status</th></tr></thead>
           <tbody>
             {items.map(t => {
@@ -36,9 +37,9 @@ export default function UroReview({ b, ctx, goTo }) {
               return (
                 <tr key={t}>
                   <td>{t}</td>
-                  <td className="mono small">{d ? `v${d.versionNumber}` : '—'}</td>
-                  <td className="small muted">{d ? `${fmtDate(d.submittedAt)} · ${nameOf(d.submittedBy)}` : 'Not submitted'}</td>
-                  <td className="tight">{d && <Badge tone={docTone(d.status)}>{d.status}</Badge>}</td>
+                  <td className="mono small" data-label="Version">{d ? `v${d.versionNumber}` : '—'}</td>
+                  <td className="small muted" data-label="Submitted">{d ? `${fmtDate(d.submittedAt)} · ${nameOf(d.submittedBy)}` : 'Not submitted'}</td>
+                  <td className="tight card-status">{d && <Badge tone={docTone(d.status)}>{d.status}</Badge>}</td>
                 </tr>
               )
             })}
@@ -72,7 +73,7 @@ export default function UroReview({ b, ctx, goTo }) {
         </>
       )}
 
-      {atUro && can(ctx, 'uro.return') && !waiting.length && <ReturnForm b={b} />}
+      {atUro && can(ctx, 'uro.return') && !waiting.length && <Act><ReturnForm b={b} /></Act>}
     </Section>
   )
 }

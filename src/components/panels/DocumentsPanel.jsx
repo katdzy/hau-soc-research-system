@@ -4,6 +4,7 @@ import { can, why, allowedDocTypes, uploadBlocker } from '../../domain/caac.js'
 import { submitDocument, addAnnotation, submitReview } from '../../services/actions.js'
 import { useAction, ActionError } from '../useAction.jsx'
 import ManuscriptViewer from '../ManuscriptViewer.jsx'
+import { Act, useViewOnly } from '../ViewOnly.jsx'
 import { anchorOf } from '../../domain/annotations.js'
 import { FLAGS } from '../../domain/flags.js'
 import { sampleFileFor } from '../../backend/sampleFiles.js'
@@ -17,6 +18,7 @@ const SUMMARISED = [DOC_TYPES.PROPOSAL_MANUSCRIPT, DOC_TYPES.FINAL_MANUSCRIPT]
 
 export default function DocumentsPanel({ b, ctx }) {
   const { snap } = useApp()
+  const viewOnly = useViewOnly()
   const nameOf = (id) => (snap.users ?? []).find(u => u.id === id)?.name ?? id
 
   // `b` is the guard-filtered bundle (viewBundle): without `document.history`
@@ -77,13 +79,13 @@ export default function DocumentsPanel({ b, ctx }) {
           ))}
         </Section>
 
-        {can(ctx, 'document.submit') && (
+        {can(ctx, 'document.submit') && <Act>
           <Section title="New submission">
             <UploadForm
               key={`${b.project.currentStage}:${uploadable.filter(t => !t.blocker).map(t => t.type).join()}`}
               types={uploadable} b={b} onDone={setSelected} />
           </Section>
-        )}
+        </Act>}
       </div>
 
       <div>
@@ -126,7 +128,7 @@ export default function DocumentsPanel({ b, ctx }) {
 
             {/* Keyed by version: a draft mark never carries over to another file. */}
             <Annotations key={doc.id} b={b} ctx={ctx} doc={doc} annotations={visibleAnnotations}
-              canAnnotate={can(ctx, 'document.annotate') && reviewable} nameOf={nameOf} />
+              canAnnotate={can(ctx, 'document.annotate') && reviewable && !viewOnly} nameOf={nameOf} />
 
             {can(ctx, 'ai.view') && SUMMARISED.includes(doc.docType) && (
               <Section title="AI summary">
@@ -184,7 +186,7 @@ export default function DocumentsPanel({ b, ctx }) {
                 ))}
                 {(can(ctx, 'review.decide') || can(ctx, 'review.return')) && reviewable &&
                   [DOC_STATUS.SUBMITTED, DOC_STATUS.UNDER_REVIEW].includes(doc.status) &&
-                  <ReviewForm key={doc.id} b={b} ctx={ctx} doc={doc} />}
+                  <Act><ReviewForm key={doc.id} b={b} ctx={ctx} doc={doc} /></Act>}
               </Section>
             )}
           </>

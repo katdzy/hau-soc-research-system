@@ -4,6 +4,7 @@ import { runGate } from '../../services/actions.js'
 import { useAction, ActionError } from '../useAction.jsx'
 import { stageByKey, resolveNext, openGates, staysAtStage } from '../../domain/stages.js'
 import { GLOBAL_ROLES as G, PROJECT_ROLES as P } from '../../domain/constants.js'
+import { Act } from '../ViewOnly.jsx'
 
 const TAB_LABEL = { defense: 'Defense', documents: 'Documents', logs: 'Weekly logs', forms: 'Forms & signatures', overview: 'Overview' }
 
@@ -60,7 +61,7 @@ export default function GatePanel({ b, ctx, goTo }) {
             {gate.steps
               ? <StepList steps={gate.steps(b)} b={b} ctx={ctx} goTo={goTo} />
               : blocker && <p className="blocker">{blocker}</p>}
-            {!blocker && (
+            {!blocker && <Act>
               <div className="actions mt-2">
                 {gate.handledIn
                   ? <button className="primary" onClick={() => goTo(gate.handledIn)}>
@@ -71,7 +72,7 @@ export default function GatePanel({ b, ctx, goTo }) {
                       {gate.label}
                     </button>}
               </div>
-            )}
+            </Act>}
             <ActionError error={error} />
           </div>
         )
@@ -114,7 +115,7 @@ function StepList({ steps, b, ctx, goTo }) {
             <span className="step-mark" aria-hidden="true">{st.done ? '✓' : i + 1}</span>
             <div className="step-body">
               <div>
-                <span className="visually-hidden">{state === 'done' ? 'Done: ' : state === 'now' ? 'Now: ' : 'Later: '}</span>
+                <span className="sr-only">{state === 'done' ? 'Done: ' : state === 'now' ? 'Now: ' : 'Later: '}</span>
                 <strong>{st.role === 'Group' ? 'Students' : st.role}</strong>
                 <span className="muted"> · {who}{mine && st.role !== 'Group' && ' (you)'}</span>
                 {state === 'now' && <span className="step-now">Now</span>}

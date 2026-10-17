@@ -53,12 +53,14 @@ async function sendPush(db, mail, mailId) {
   }
   if (!tokens.length) return { status: 'skipped', reason: 'no device' }
 
-  // Data-only message: public/sw-notify.js shows it. FCM caps a payload at 4 KB.
+  // Data-only message: public/sw-notify.js shows it. Only a general line, so a
+  // verdict or a return is not readable on a locked phone (copy of
+  // src/deviceNotice.js lockScreenText); the email carries the details.
   const res = await getMessaging().sendEachForMulticast({
     tokens: tokens.map(t => t.token),
     data: {
-      title: String(mail.subject ?? 'HAU-SOC Capstone').slice(0, 200),
-      body: String(mail.body ?? '').slice(0, 1000),
+      title: 'HAU-SOC Capstone',
+      body: mail.projectId ? 'Update on your capstone project' : 'Update on your account',
       url: mail.projectId ? `/projects/${mail.projectId}` : '/',
       tag: mailId, // the open app uses the same tag, so a device shows it once
     },
@@ -79,7 +81,7 @@ const outcome = (r) => (r.status === 'fulfilled' ? r.value : { status: 'failed',
 /**
  * Notification delivery (R6c + DEVICE_NOTIFICATIONS, revision 2026-10-07). Every
  * email notify() records in `outbox` goes out once, from here: the email through
- * Resend and the same subject and body as a push through FCM. One channel
+ * Resend and a general notice for the same event as a push through FCM. One channel
  * failing never stops the other; the result of each is kept on the entry.
  */
 export const deliverOutbox = onDocumentCreated({ document: 'outbox/{mailId}', secrets: [RESEND_API_KEY] }, async (event) => {
