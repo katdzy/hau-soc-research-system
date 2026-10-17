@@ -7,6 +7,7 @@ import {
 import { returnToGroup } from '../../services/actions.js'
 import { useAction, ActionError } from '../useAction.jsx'
 import { Section, Badge, Field, docTone, fmtDate, fmtDateTime } from '../ui.jsx'
+import { Act } from '../ViewOnly.jsx'
 
 /**
  * S9.4 — what the URO verifies (both certificates and the manuscript) and the
@@ -28,7 +29,7 @@ export default function UroReview({ b, ctx, goTo }) {
   return (
     <Section title="Clearance verification" aside={<span className="faint small">University Research Office</span>}>
       {atUro && (
-        <div className="table-scroll"><table>
+        <div className="table-scroll"><table className="cards">
           <thead><tr><th>Document</th><th>Version</th><th>Submitted</th><th className="tight">Status</th></tr></thead>
           <tbody>
             {items.map(t => {
@@ -36,9 +37,9 @@ export default function UroReview({ b, ctx, goTo }) {
               return (
                 <tr key={t}>
                   <td>{t}</td>
-                  <td className="mono small">{d ? `v${d.versionNumber}` : '—'}</td>
-                  <td className="small muted">{d ? `${fmtDate(d.submittedAt)} · ${nameOf(d.submittedBy)}` : 'Not submitted'}</td>
-                  <td className="tight">{d && <Badge tone={docTone(d.status)}>{d.status}</Badge>}</td>
+                  <td className="mono small" data-label="Version">{d ? `v${d.versionNumber}` : '—'}</td>
+                  <td className="small muted" data-label="Submitted">{d ? `${fmtDate(d.submittedAt)} · ${nameOf(d.submittedBy)}` : 'Not submitted'}</td>
+                  <td className="tight card-status">{d && <Badge tone={docTone(d.status)}>{d.status}</Badge>}</td>
                 </tr>
               )
             })}
@@ -46,7 +47,7 @@ export default function UroReview({ b, ctx, goTo }) {
         </table></div>
       )}
       {atUro && verifier && (
-        <div className="actions" style={{ marginTop: 16 }}>
+        <div className="actions mt-2">
           <button onClick={() => goTo('documents')}>Open the documents</button>
         </div>
       )}
@@ -57,22 +58,22 @@ export default function UroReview({ b, ctx, goTo }) {
           {[...returns].reverse().map(r => (
             <div className="entry" key={r.at}>
               <div className="entry-head">
-                <strong style={{ fontSize: 13 }}>{r.docTypes.join(' and ')}</strong>
+                <strong className="text-sm">{r.docTypes.join(' and ')}</strong>
                 {r === uroReturnOf(b) && waiting.length
                   ? <Badge tone="warn">Waiting for a new version</Badge>
                   : <Badge tone="ok">Replaced</Badge>}
               </div>
-              <p className="small" style={{ margin: '4px 0 0', maxWidth: '64ch' }}>{r.remarks}</p>
+              <p className="small m-0 mt-half measure">{r.remarks}</p>
               {r.resetsSigning && (
-                <p className="small muted" style={{ margin: '4px 0 0' }}>Sent back to Final Requirements; the Approval Sheet was reissued for new signatures.</p>
+                <p className="small muted m-0 mt-half">Sent back to Final Requirements; the Approval Sheet was reissued for new signatures.</p>
               )}
-              <div className="faint small" style={{ marginTop: 4 }}>{nameOf(r.by)} · {fmtDateTime(r.at)}</div>
+              <div className="faint small mt-half">{nameOf(r.by)} · {fmtDateTime(r.at)}</div>
             </div>
           ))}
         </>
       )}
 
-      {atUro && can(ctx, 'uro.return') && !waiting.length && <ReturnForm b={b} />}
+      {atUro && can(ctx, 'uro.return') && !waiting.length && <Act><ReturnForm b={b} /></Act>}
     </Section>
   )
 }

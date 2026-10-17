@@ -57,6 +57,18 @@
         "--strictPort"
       ],
       "port": 5184
+    },
+    {
+      "name": "capstone-pwa-preview",
+      "runtimeExecutable": "npx",
+      "runtimeArgs": [
+        "vite",
+        "preview",
+        "--port",
+        "4173",
+        "--strictPort"
+      ],
+      "port": 4173
     }
   ]
 }

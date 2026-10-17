@@ -1,12 +1,11 @@
-import { useEffect, useRef, useState } from 'react'
+import { useEffect, useRef } from 'react'
 import { Link, useNavigate, useParams, useSearchParams } from 'react-router-dom'
 import { useApp } from '../state/AppContext.jsx'
 import { bundle } from '../services/core.js'
 import { resolveContext, can } from '../domain/caac.js'
 import { viewBundle } from '../domain/guard.js'
 import { stageByKey, sectionNow } from '../domain/stages.js'
-import { programCode } from '../domain/constants.js'
-import { Badge, Countdown } from '../components/ui.jsx'
+import { Badge, Countdown, programShort } from '../components/ui.jsx'
 import StageTimeline from '../components/StageTimeline.jsx'
 import CaacInspector from '../components/CaacInspector.jsx'
 import OverviewPanel from '../components/panels/OverviewPanel.jsx'
@@ -28,9 +27,10 @@ const TABS = [
 export default function ProjectWorkspace() {
   const { id } = useParams()
   const { snap, me } = useApp()
-  const [params] = useSearchParams()
-  // `?tab=` lets a worklist item open the tab where its work is done.
-  const [tab, setTab] = useState(() => (TABS.some(t => t.key === params.get('tab')) ? params.get('tab') : 'overview'))
+  const [params, setParams] = useSearchParams()
+  // `?tab=` lets a worklist item (or the rail) open the tab where its work is done.
+  const tab = TABS.some(t => t.key === params.get('tab')) ? params.get('tab') : 'overview'
+  const setTab = (key) => setParams(key === 'overview' ? {} : { tab: key }, { replace: true })
 
   const raw = bundle(snap, id)
   // Everything below renders from the guard-filtered bundle, never the raw one.
@@ -82,15 +82,16 @@ export default function ProjectWorkspace() {
   return (
     <div className="page">
       <header className="page-head">
-        <Link className="small muted back" to="/projects">← All projects</Link>
+        {!ctx.isMember && <Link className="small muted back" to="/projects">← All projects</Link>}
         <h1>{b.project.title}</h1>
-        <div className="inline" style={{ marginTop: 8 }}>
-          <Badge tone="accent">{stage?.label}</Badge>
-          <span title={b.project.program}><Badge>{programCode(b.project.program)}</Badge></span>
-          <span className="faint small">{(({ section, course, term }) => `${section} · ${course} · ${term}`)(sectionNow(b.project))}</span>
+        <p className="lede">
+          {(({ section, course, term }) => `${section} · ${programShort(b.project.program)} · ${course} · ${term}`)(sectionNow(b.project))}
+        </p>
+        <div className="inline mt-2">
+          <Badge tone="accent">Stage: {stage?.label}</Badge>
           <Countdown deadline={b.project.revisionDeadline} />
         </div>
-        {stage && <p className="lede" style={{ marginTop: 16 }}>{stage.blurb}</p>}
+        {stage && <p className="small muted mt-2 measure mb-0">{stage.blurb}</p>}
       </header>
 
       <StageTimeline current={b.project.currentStage} history={b.history} />

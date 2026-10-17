@@ -123,10 +123,12 @@ export async function logHistory({ projectId, fromStage, toStage, actorId, hat =
 }
 
 /**
- * Notify by email (R6c). Notifications are email only — there is no in-app
- * inbox (team decision 2026-09-29). In the Firebase build a Cloud Function
- * sends each one through Resend in the same event; the prototype only records
- * it in `outbox`, which the dev tools show. Nothing here is ever sent.
+ * Notify by email (R6c). There is no in-app inbox (team decision 2026-09-29).
+ * In the Firebase build the deliverOutbox Cloud Function (functions/) sends
+ * each one through Resend; the prototype only records it in `outbox`, which
+ * the dev tools show. Each entry also becomes a device notification for its recipients
+ * (DEVICE_NOTIFICATIONS, revision 2026-10-07; see src/notifications.js) — the
+ * same event and text as the email, so the two channels never disagree.
  */
 export async function notify(userIds, { projectId = null, type, title, body, event = type }) {
   const unique = [...new Set(userIds.filter(Boolean))]

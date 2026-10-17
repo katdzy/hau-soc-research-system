@@ -39,8 +39,9 @@ export const COLLECTIONS = [
   'auditLogs',
   'permissionOverrides',
   'settings',
-  // Notifications are email only (team decision 2026-09-29): one row per email
-  // (R6c). The prototype never sends them; the dev tools show them as the outbox.
+  // One row per email (R6c). The prototype never sends them; the dev tools show
+  // them as the outbox. Each row also shows as a device notification for its
+  // recipients (DEVICE_NOTIFICATIONS, revision 2026-10-07) — no in-app list.
   'outbox',
 ]
 

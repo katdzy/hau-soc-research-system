@@ -7,6 +7,7 @@ import { useAction, ActionError } from '../useAction.jsx'
 import { Section, Badge, Field, fmtDateTime } from '../ui.jsx'
 import { CAPSTONE2_MILESTONES, FORMS, PROJECT_ROLES as P } from '../../domain/constants.js'
 import { FLAGS } from '../../domain/flags.js'
+import { Act } from '../ViewOnly.jsx'
 
 /**
  * Instructor 2's Capstone 2 checks, as the group, the Adviser and Instructor 2
@@ -66,17 +67,17 @@ function CheckRow({ r, busy, run, nameOf }) {
   return (
     <div className="entry">
       <div className="entry-head">
-        <span><span className="mono faint small">{r.id}</span> <strong style={{ fontSize: 13 }}>{r.label}</strong></span>
+        <span><span className="mono faint small">{r.id}</span> <strong className="text-sm">{r.label}</strong></span>
         <Badge tone={r.done ? 'ok' : 'neutral'}>{r.done ? 'Confirmed' : 'Not yet'}</Badge>
       </div>
       {r.done && (
-        <p className="small muted" style={{ margin: '4px 0 0' }}>
+        <p className="small muted m-0 mt-half">
           {nameOf(r.done.by)} · {fmtDateTime(r.done.at)}{r.done.note && <> — “{r.done.note}”</>}
         </p>
       )}
-      {!r.done && r.hint && <p className="small faint" style={{ margin: '4px 0 0' }}>{r.hint}</p>}
-      {r.waiting && <p className="small faint" style={{ margin: '4px 0 0' }}>{r.waiting}</p>}
-      {r.canAct && (
+      {!r.done && r.hint && <p className="small faint m-0 mt-half">{r.hint}</p>}
+      {r.waiting && <p className="small faint m-0 mt-half">{r.waiting}</p>}
+      {r.canAct && <Act>
         <div className="row inline-form">
           <Field label="Note (optional)">
             <input value={note} onChange={e => setNote(e.target.value)} aria-label={`Note on ${r.label.toLowerCase()} (optional)`} />
@@ -86,7 +87,7 @@ function CheckRow({ r, busy, run, nameOf }) {
               onClick={() => run(() => r.act(note))}>Confirm</button>
           </div>
         </div>
-      )}
+      </Act>}
     </div>
   )
 }

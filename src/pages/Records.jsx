@@ -3,7 +3,7 @@ import { Link, useSearchParams } from 'react-router-dom'
 import { useApp } from '../state/AppContext.jsx'
 import { resolveInstitution, can } from '../domain/caac.js'
 import { Section, Empty, Badge, Restricted, fmtDate, downloadCsv } from '../components/ui.jsx'
-import { PROGRAMS, PROJECT_ROLES as P } from '../domain/constants.js'
+import { PROGRAMS, programCode, PROJECT_ROLES as P } from '../domain/constants.js'
 
 // The records-table archive: cleared projects, searchable and filterable by
 // the Dean and Associate Dean, managed by the System Administrator. It holds a
@@ -43,8 +43,7 @@ export default function Records() {
   return (
     <div className="page">
       <header className="page-head">
-        <div className="label">Records</div>
-        <h1>Records archive</h1>
+        <h1>Archive</h1>
         <p className="lede">
           Projects that cleared URO verification and final approval. Each carries a Pass result —
           the system does not compute or store grades.
@@ -70,7 +69,7 @@ export default function Records() {
       >
         {rows.length === 0 && <Empty>No archived projects match.</Empty>}
         {rows.length > 0 && (
-          <div className="table-scroll"><table>
+          <div className="table-scroll"><table className="cards">
             <thead>
               <tr>
                 <th>Project</th><th>Program</th><th>Adviser</th><th>Term</th>
@@ -84,11 +83,13 @@ export default function Records() {
                     <Link className="row-link" to={`/projects/${p.id}`}>{p.title}</Link>
                     <div className="faint small">{p.researchArea} · {membersOf(p).join(', ')}</div>
                   </td>
-                  <td className="small muted">{p.program}</td>
-                  <td className="small">{adviserOf(p)}</td>
-                  <td className="small muted">{p.term}</td>
-                  <td className="tight small faint">{fmtDate(p.archivedAt)}</td>
-                  <td className="tight"><Badge tone="ok">{p.archiveResult}</Badge></td>
+                  <td className="small muted" data-label="Program" title={p.program}>
+                    <span className="card-long">{p.program}</span><span className="card-short">{programCode(p.program)}</span>
+                  </td>
+                  <td className="small" data-label="Adviser">{adviserOf(p)}</td>
+                  <td className="small muted" data-label="Term">{p.term}</td>
+                  <td className="tight small faint" data-label="Archived">{fmtDate(p.archivedAt)}</td>
+                  <td className="tight card-status"><Badge tone="ok">{p.archiveResult}</Badge></td>
                 </tr>
               ))}
             </tbody>

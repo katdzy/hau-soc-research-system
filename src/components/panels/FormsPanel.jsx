@@ -3,6 +3,7 @@ import { signForm } from '../../services/actions.js'
 import { canSign } from '../../domain/forms.js'
 import { useAction, ActionError } from '../useAction.jsx'
 import { Section, Empty, Badge, fmtDateTime } from '../ui.jsx'
+import { Act } from '../ViewOnly.jsx'
 
 // Forms are issued by workflow events, never by hand: FM-AAC-SOC-2004 when the
 // Panel Chair records a verdict, FM-AAC-SOC-2005 when the Adviser recommends
@@ -24,28 +25,28 @@ export default function FormsPanel({ b }) {
           <div className="entry form-entry" key={f.id}>
             <div className="entry-head">
               <div>
-                <strong style={{ fontSize: 13 }}>{f.formType}</strong>
+                <strong className="text-sm">{f.formType}</strong>
                 {f.name !== f.formType && <div className="faint small">{f.name}</div>}
               </div>
               <Badge tone={f.status === 'Signed' ? 'ok' : 'warn'}>{f.status}</Badge>
             </div>
 
             {f.payload?.verdict && (
-              <p className="small muted" style={{ margin: '8px 0 0' }}>
+              <p className="small muted m-0 mt-1">
                 {f.payload.defenseType} defense · {f.payload.verdict}
                 {f.payload.remarks && <> — {f.payload.remarks}</>}
               </p>
             )}
 
-            <table style={{ marginTop: 12 }}>
+            <table className="mt-2 cards">
               <thead><tr><th className="tight">Step</th><th>Role</th><th>Signatory</th><th className="tight">Signed</th></tr></thead>
               <tbody>
                 {[...f.signatories].sort((x, y) => x.order - y.order).map((s, i) => (
                   <tr key={i}>
-                    <td className="tight mono faint">{s.order}</td>
-                    <td className="small">{s.role}</td>
-                    <td className="small muted">{s.name ?? nameOf(s.userId)}</td>
-                    <td className="tight small">
+                    <td className="tight mono faint" data-label="Step">{s.order}</td>
+                    <td className="small card-title">{s.role}</td>
+                    <td className="small muted" data-label="Signatory">{s.name ?? nameOf(s.userId)}</td>
+                    <td className="tight small card-status">
                       {s.signedAt
                         ? <span className="mono signed">{fmtDateTime(s.signedAt)}</span>
                         : <span className="faint">pending</span>}
@@ -55,17 +56,17 @@ export default function FormsPanel({ b }) {
               </tbody>
             </table>
 
-            {check.ok && (
-              <div className="actions" style={{ marginTop: 12 }}>
+            {check.ok && <Act>
+              <div className="actions mt-2">
                 <button className="primary" disabled={busy}
                   onClick={() => run(() => signForm(me, snap, b.project.id, f.id))}>
                   Sign as {check.line.role}
                 </button>
                 <span className="faint small">Records your name, role and the time against this form.</span>
               </div>
-            )}
+            </Act>}
             {!check.ok && myLine && check.reason && (
-              <p className="small faint" style={{ marginTop: 12 }}>{check.reason}</p>
+              <p className="small faint mt-2">{check.reason}</p>
             )}
           </div>
         )

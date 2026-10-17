@@ -1,17 +1,22 @@
-# Base: Node 22 on Alpine with OpenJDK 17 (required by Firebase Emulator Suite)
+# Firebase Emulator Suite: Node 22 + Java 21 (Firestore/Storage emulators run on the JVM).
 FROM node:22-alpine
 
-# Install Java (OpenJDK 17 is the smallest LTS available on Alpine)
-RUN apk add --no-cache openjdk21-jre-headless
+RUN apk add --no-cache openjdk21-jre-headless bash
 
-WORKDIR /app
-
-# Install firebase-tools globally
 RUN npm install -g firebase-tools
 
-# Copy project files (firebase.json, firestore rules/indexes, etc.)
-COPY . .
+# Bake the emulator binaries into the image so a fresh container does not
+# download them on every start.
+RUN firebase setup:emulators:firestore \
+ && firebase setup:emulators:storage \
+ && firebase setup:emulators:ui
 
-EXPOSE 4000 5001 8080 9099 9199
+# The project is bind-mounted here by docker-compose.yml.
+WORKDIR /app
 
-CMD ["firebase", "emulators:start", "--project", "demo-local"]
+EXPOSE 4000 4400 4500 8080 9099 9199
+
+# FIREBASE_CONFIG picks the rules: emulator/firebase.json (open, the default)
+# or firebase.json (the real rules). Data is imported from and saved back to
+# .emulator-data so it survives restarts.
+CMD ["sh", "-c", "D=/app/.emulator-data; [ -f $D/firebase-export-metadata.json ] && IMPORT=\"--import $D\"; exec firebase emulators:start --project demo-local --config \"${FIREBASE_CONFIG:-emulator/firebase.json}\" $IMPORT --export-on-exit $D"]

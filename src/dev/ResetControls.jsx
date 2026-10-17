@@ -56,7 +56,7 @@ export default function ResetControls({ compact = false }) {
           Restore checkpoint
         </button>
       </div>
-      <p className="faint small" role="status" aria-live="polite" style={{ margin: 0 }}>
+      <p className="faint small m-0" role="status" aria-live="polite">
         {status || (checkpoint ? `Checkpoint: ${fmtDateTime(checkpoint.savedAt)}` : 'No checkpoint saved.')}
       </p>
     </div>

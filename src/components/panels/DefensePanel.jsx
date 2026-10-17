@@ -8,6 +8,7 @@ import { Section, Empty, Badge, Field, Countdown, verdictTone, fmtDateTime } fro
 import { VERDICTS, FORMS } from '../../domain/constants.js'
 import { FLAGS } from '../../domain/flags.js'
 import { revisionDaysOf } from '../../domain/settings.js'
+import { Act } from '../ViewOnly.jsx'
 
 export default function DefensePanel({ b, ctx }) {
   const { snap, me } = useApp()
@@ -43,10 +44,10 @@ export default function DefensePanel({ b, ctx }) {
         {[...b.defenses].reverse().map(d => (
           <div className="entry" key={d.id}>
             <div className="entry-head">
-              <strong style={{ fontSize: 13 }}>{d.type} Defense</strong>
+              <strong className="text-sm">{d.type} Defense</strong>
               <Badge tone={verdictTone(d.verdict)}>{d.verdict ?? 'Verdict pending'}</Badge>
             </div>
-            <dl className="kv" style={{ marginTop: 8 }}>
+            <dl className="kv mt-1">
               <dt>Schedule</dt><dd>{fmtDateTime(d.scheduledAt)}</dd>
               <dt>Venue or link</dt><dd>{d.venue}</dd>
               {d.instructions && <><dt>Instructions</dt><dd className="small">{d.instructions}</dd></>}
@@ -72,7 +73,7 @@ export default function DefensePanel({ b, ctx }) {
         ))}
       </Section>
 
-      {scheduling && can(ctx, 'defense.schedule') && (
+      {scheduling && can(ctx, 'defense.schedule') && <Act>
         <Section title={`Publish the ${type.toLowerCase()} defense schedule`}>
           <div className="row">
             <Field label="Date and time">
@@ -99,26 +100,26 @@ export default function DefensePanel({ b, ctx }) {
           {gate?.requires(b, me) && <p className="blocker">{gate.requires(b, me)}</p>}
           <ActionError error={error} />
         </Section>
-      )}
+      </Act>}
 
-      {upcoming && (
+      {upcoming && <Act>
         <Section title={`Publish the ${defenseTypeAt(upcoming.key).toLowerCase()} defense schedule`}>
-          <p className="small muted" style={{ marginTop: 0 }}>
+          <p className="small muted mt-0">
             Opens at {upcoming.label}, after:
           </p>
           <ul className="todo">
             {before.map(g => <li key={g.action}>{g.label} <span className="faint">— {g.actorHint}</span></li>)}
           </ul>
-          <div className="actions" style={{ marginTop: 16 }}>
+          <div className="actions mt-2">
             <button className="primary" disabled aria-describedby="schedule-not-yet">Publish schedule</button>
           </div>
-          <p id="schedule-not-yet" className="small faint" style={{ marginTop: 8 }}>
+          <p id="schedule-not-yet" className="small faint mt-1">
             Not available until the project reaches {upcoming.label}.
           </p>
         </Section>
-      )}
+      </Act>}
 
-      {open && can(ctx, 'verdict.record') && (
+      {open && can(ctx, 'verdict.record') && <Act>
         <Section title="Record the official verdict">
           <p className="small muted">
             Recorded on {FORMS.F2004.code}. Minor revisions are due in {days.Minor} days
@@ -134,15 +135,15 @@ export default function DefensePanel({ b, ctx }) {
               onSubmit={({ verdict: v, remarks: r }) => run(() => recordVerdict(me, snap, b.project.id, { verdict: v, remarks: r }))} />
           )}
           {FLAGS.VERDICT_CORRECTION_HOURS > 0 && (
-            <p className="faint small" style={{ marginTop: 8 }}>
+            <p className="faint small mt-1">
               You can correct the verdict once, within {FLAGS.VERDICT_CORRECTION_HOURS} hours, until the group or the Adviser acts on it.
             </p>
           )}
           <ActionError error={error} />
         </Section>
-      )}
+      </Act>}
 
-      {corrigible && (
+      {corrigible && <Act>
         <Section title="Correct the verdict">
           <p className="small muted">
             Recorded {fmtDateTime(corrigible.recordedAt)}. You can correct it once, until{' '}
@@ -153,7 +154,7 @@ export default function DefensePanel({ b, ctx }) {
             onSubmit={(input) => run(() => correctVerdict(me, snap, b.project.id, { ...input, defenseId: corrigible.id }))} />
           <ActionError error={error} />
         </Section>
-      )}
+      </Act>}
 
       {open && !can(ctx, 'verdict.record') && (
         <p className="small muted">Only this project’s Panel Chair can record the verdict.</p>

@@ -4,6 +4,7 @@ import { buildSeed } from '../backend/seed.js'
 import { emptyStore, COLLECTIONS } from '../backend/schema.js'
 import { getSessionUserId, setSessionUserId } from './session.js'
 import { flagOverdueRevisions } from '../services/actions.js'
+import { unregisterDevice } from '../services/push.js'
 
 const AppCtx = createContext(null)
 
@@ -54,7 +55,12 @@ export function AppProvider({ children }) {
   const value = useMemo(() => ({
     snap, ready, me, backendName,
     signIn: (id) => { setSessionUserId(id); setUserId(id) },
-    signOut: () => { setSessionUserId(null); setUserId(null) },
+    // A shared device stops receiving this account's push notifications first,
+    // while the session can still prove whose token it is.
+    signOut: async () => {
+      await unregisterDevice().catch(() => {})
+      setSessionUserId(null); setUserId(null)
+    },
     // Dev tools only (R9) — the production UI never calls these. They replace
     // the whole store, so they refuse to run against a real Firebase project.
     replaceStore: async (store) => { refuseLive(); await db.replaceAll(store) },

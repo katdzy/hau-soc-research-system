@@ -4,6 +4,7 @@ import { runGate } from '../../services/actions.js'
 import { useAction, ActionError } from '../useAction.jsx'
 import { stageByKey, resolveNext, openGates, staysAtStage } from '../../domain/stages.js'
 import { GLOBAL_ROLES as G, PROJECT_ROLES as P } from '../../domain/constants.js'
+import { Act } from '../ViewOnly.jsx'
 
 const TAB_LABEL = { defense: 'Defense', documents: 'Documents', logs: 'Weekly logs', forms: 'Forms & signatures', overview: 'Overview' }
 
@@ -30,7 +31,7 @@ export default function GatePanel({ b, ctx, goTo }) {
     return (
       <div className="gate blocked">
         <h3>Waiting on {who}</h3>
-        <p className="small muted" style={{ margin: '4px 0 0' }}>{gates[0].label}.</p>
+        <p className="small muted m-0 mt-half">{gates[0].label}.</p>
         {ruledOut && (
           <p className="blocker">
             Your {ruledOut.role} role can take this step only if {ruledOut.unmet.join('; ')} — not the case here.
@@ -38,7 +39,7 @@ export default function GatePanel({ b, ctx, goTo }) {
         )}
         {gates[0].steps
           ? <StepList steps={gates[0].steps(b)} b={b} ctx={ctx} goTo={goTo} />
-          : blocker && <p className="small faint" style={{ margin: '6px 0 0' }}>Still needed: {blocker}</p>}
+          : blocker && <p className="small faint m-0 mt-1">Still needed: {blocker}</p>}
       </div>
     )
   }
@@ -51,7 +52,7 @@ export default function GatePanel({ b, ctx, goTo }) {
         return (
           <div className={`gate ${blocker ? 'blocked' : ''}`} key={gate.action}>
             <h3>{gate.label}</h3>
-            <div className="small faint" style={{ marginTop: 4 }}>
+            <div className="small faint mt-half">
               {staysAtStage(gate)
                 ? 'Stays at this stage'
                 : <>Advances to <span className="mono">{stageByKey(next)?.label ?? next}</span></>}
@@ -60,8 +61,8 @@ export default function GatePanel({ b, ctx, goTo }) {
             {gate.steps
               ? <StepList steps={gate.steps(b)} b={b} ctx={ctx} goTo={goTo} />
               : blocker && <p className="blocker">{blocker}</p>}
-            {!blocker && (
-              <div className="actions" style={{ marginTop: 16 }}>
+            {!blocker && <Act>
+              <div className="actions mt-2">
                 {gate.handledIn
                   ? <button className="primary" onClick={() => goTo(gate.handledIn)}>
                       Continue in the {TAB_LABEL[gate.handledIn]} tab
@@ -71,7 +72,7 @@ export default function GatePanel({ b, ctx, goTo }) {
                       {gate.label}
                     </button>}
               </div>
-            )}
+            </Act>}
             <ActionError error={error} />
           </div>
         )
@@ -114,7 +115,7 @@ function StepList({ steps, b, ctx, goTo }) {
             <span className="step-mark" aria-hidden="true">{st.done ? '✓' : i + 1}</span>
             <div className="step-body">
               <div>
-                <span className="visually-hidden">{state === 'done' ? 'Done: ' : state === 'now' ? 'Now: ' : 'Later: '}</span>
+                <span className="sr-only">{state === 'done' ? 'Done: ' : state === 'now' ? 'Now: ' : 'Later: '}</span>
                 <strong>{st.role === 'Group' ? 'Students' : st.role}</strong>
                 <span className="muted"> · {who}{mine && st.role !== 'Group' && ' (you)'}</span>
                 {state === 'now' && <span className="step-now">Now</span>}
@@ -125,7 +126,7 @@ function StepList({ steps, b, ctx, goTo }) {
                 {!st.done && st.tab && <span className="faint"> · {TAB_LABEL[st.tab]} tab</span>}
               </div>
               {state === 'now' && mine && st.tab && st.tab !== 'overview' && !st.gate && (
-                <button className="small" style={{ marginTop: 8 }} onClick={() => goTo(st.tab)}>Open {TAB_LABEL[st.tab]}</button>
+                <button className="small mt-1" onClick={() => goTo(st.tab)}>Open {TAB_LABEL[st.tab]}</button>
               )}
             </div>
           </li>

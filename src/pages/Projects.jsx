@@ -8,6 +8,7 @@ import { Section, Badge, Empty, Field, fmtDate } from '../components/ui.jsx'
 import { STAGES, sectionNow } from '../domain/stages.js'
 import { PROGRAMS, programCode, COURSES } from '../domain/constants.js'
 import { can, resolveInstitution } from '../domain/caac.js'
+import { Act } from '../components/ViewOnly.jsx'
 
 export default function Projects() {
   const { snap, me } = useApp()
@@ -29,20 +30,19 @@ export default function Projects() {
   return (
     <div className="page">
       <header className="page-head">
-        <div className="label">Projects</div>
-        <h1>Projects visible to you</h1>
+        <h1>Projects</h1>
         <p className="lede">
           Visibility is resolved per project and per stage: your group membership, the
           project roles you hold on it, and whether its current stage involves your office.
         </p>
       </header>
 
-      {canCreate && (
+      {canCreate && <Act>
         <Section title="Create a project group">
           {!creating ? (
-            <button onClick={() => setParams({ new: '1' })}>New project group</button>
+            <button className="primary" onClick={() => setParams({ new: '1' })}>New project group</button>
           ) : (
-            <div className="panel">
+            <div>
               <div className="row">
                 <Field label="Section">
                   <select value={form.sectionId} onChange={e => setForm(f => ({ ...f, sectionId: e.target.value }))}>
@@ -60,7 +60,7 @@ export default function Projects() {
                 </button>
                 <button className="quiet" onClick={() => setParams({})}>Cancel</button>
               </div>
-              <p className="faint small" style={{ marginTop: 12 }}>
+              <p className="faint small mt-2">
                 You become Instructor 1 on the new group. You add its students from the block roster —
                 students do not form their own groups.
               </p>
@@ -68,17 +68,17 @@ export default function Projects() {
             </div>
           )}
         </Section>
-      )}
+      </Act>}
 
       <Section
         title={`${rows.length} project${rows.length === 1 ? '' : 's'}`}
         aside={
           <span className="inline">
-            <select value={stageFilter} onChange={e => setStageFilter(e.target.value)} aria-label="Stage" style={{ width: 'auto' }}>
+            <select value={stageFilter} onChange={e => setStageFilter(e.target.value)} aria-label="Stage" className="w-auto">
               <option value="">All stages</option>
               {STAGES.map(s => <option key={s.key} value={s.key}>{s.label}</option>)}
             </select>
-            <select value={programFilter} onChange={e => setProgramFilter(e.target.value)} aria-label="Program" style={{ width: 'auto' }}>
+            <select value={programFilter} onChange={e => setProgramFilter(e.target.value)} aria-label="Program" className="w-auto">
               <option value="">All programs</option>
               {PROGRAMS.map(p => <option key={p} value={p}>{p}</option>)}
             </select>
@@ -87,7 +87,7 @@ export default function Projects() {
       >
         {rows.length === 0 && <Empty>No projects match.</Empty>}
         {rows.length > 0 && (
-          <div className="table-scroll"><table>
+          <div className="table-scroll"><table className="cards">
             <thead>
               <tr><th>Project</th><th>Stage</th><th>Access through</th><th className="tight">Updated</th></tr>
             </thead>
@@ -98,9 +98,9 @@ export default function Projects() {
                     <Link className="row-link" to={`/projects/${r.project.id}`}>{r.project.title}</Link>
                     <div className="faint small" title={r.project.program}>{programCode(r.project.program)} · {sectionNow(r.project).section}</div>
                   </td>
-                  <td><Badge tone={r.project.currentStage === 'ARCHIVED' ? 'ok' : 'neutral'}>{r.stage?.label}</Badge></td>
-                  <td className="small muted" title={r.access.reason}>{r.access.via}</td>
-                  <td className="tight small faint">{fmtDate(r.bundle.history.at(-1)?.at ?? r.project.createdAt)}</td>
+                  <td className="card-status"><Badge tone={r.project.currentStage === 'ARCHIVED' ? 'ok' : 'neutral'}>{r.stage?.label}</Badge></td>
+                  <td className="small muted" data-label="Access through" title={r.access.reason}>{r.access.via}</td>
+                  <td className="tight small faint" data-label="Updated">{fmtDate(r.bundle.history.at(-1)?.at ?? r.project.createdAt)}</td>
                 </tr>
               ))}
             </tbody>

@@ -77,7 +77,7 @@ export default function DevTools() {
         </p>
       </header>
 
-      {notice && <p className="note" role="status" style={{ marginBottom: 24 }}>{notice}</p>}
+      {notice && <p className="note mb-3" role="status">{notice}</p>}
       <ActionError error={error} />
 
       <Section title="Demo data">
@@ -114,7 +114,7 @@ export default function DevTools() {
             </select>
           </div>
           <button className="primary" disabled={busy || !projectId} onClick={() => run(setProjectStage)}>Apply</button>
-          <p className="faint small" style={{ marginTop: 12 }}>
+          <p className="faint small mt-2">
             Rebuilds the project’s documents, reviews, defenses, forms, logs and history so every
             earlier gate is satisfied and this stage’s own work is still open.
           </p>
@@ -127,7 +127,7 @@ export default function DevTools() {
           })}>
             Run overdue check (S8.2)
           </button>
-          <p className="faint small" style={{ marginTop: 12 }}>Also runs on load and every minute.</p>
+          <p className="faint small mt-2">Also runs on load and every minute.</p>
         </Section>
       </div>
 
@@ -136,13 +136,13 @@ export default function DevTools() {
         {outbox.slice(0, 60).map(m => (
           <div className="outbox-entry" key={m.id}>
             <div className="entry-head">
-              <strong style={{ fontSize: 13 }}>{m.subject}</strong>
+              <strong className="text-sm">{m.subject}</strong>
               <span className="inline"><Badge tone="info">{m.event}</Badge><span className="faint small">{fmtDateTime(m.at)}</span></span>
             </div>
-            <div className="mono faint" style={{ margin: '3px 0 5px' }}>To: {(m.to ?? []).join(', ') || '—'}</div>
-            <p className="small muted" style={{ margin: 0 }}>{m.body}</p>
+            <div className="mono faint m-0 mt-half mb-1">To: {(m.to ?? []).join(', ') || '—'}</div>
+            <p className="small muted m-0">{m.body}</p>
             {m.link?.kind === 'verify' && (
-              <button className="small" style={{ marginTop: 8 }} disabled={busy}
+              <button className="small mt-1" disabled={busy}
                 onClick={() => run(async () => { await verifyEmail(m.link.token); setNotice(`Verified ${m.to?.[0]}.`) })}>
                 {m.link.label}
               </button>
@@ -152,7 +152,7 @@ export default function DevTools() {
       </Section>
 
       <Section title={`Audit log and workflow history (${trail.length})`} aside={
-        <select value={logProject} onChange={e => setLogProject(e.target.value)} aria-label="Filter by project" style={{ width: 'auto' }}>
+        <select value={logProject} onChange={e => setLogProject(e.target.value)} aria-label="Filter by project" className="w-auto">
           <option value="">All projects and accounts</option>
           {projects.map(p => <option key={p.id} value={p.id}>{projectLabel(p)}</option>)}
         </select>
@@ -167,7 +167,7 @@ export default function DevTools() {
             <tbody>
               {trail.slice(0, 200).map(r => (
                 <tr key={`${r.kind}-${r.id}`}>
-                  <td className="tight mono faint" style={{ fontSize: 11.5 }}>{fmtDateTime(r.at)}</td>
+                  <td className="tight mono faint text-xs">{fmtDateTime(r.at)}</td>
                   <td className="tight small">{r.kind}</td>
                   <td className="tight"><Badge>{r.action}</Badge></td>
                   <td className="tight small">{nameOf(r.actorId)}<div className="faint">{r.hat ?? '—'}</div></td>

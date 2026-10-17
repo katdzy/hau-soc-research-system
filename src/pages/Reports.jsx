@@ -65,7 +65,6 @@ export default function Reports() {
   return (
     <div className="page">
       <header className="page-head">
-        <div className="label">Reports</div>
         <h1>{scope ? 'Program reports' : 'School of Computing reports'}</h1>
         <p className="lede">
           {scope
@@ -101,15 +100,15 @@ export default function Reports() {
 
       <Section title="Current stage by project">
         {projects.length === 0 && <Empty>No projects in scope.</Empty>}
-        <div className="table-scroll"><table>
+        <div className="table-scroll"><table className="cards">
           <thead><tr><th>Project</th><th>Program</th><th>Stage</th><th className="tight">Result</th></tr></thead>
           <tbody>
             {[...projects].sort((a, b) => stageIndex(a.currentStage) - stageIndex(b.currentStage)).map(p => (
               <tr key={p.id}>
                 <td>{p.title}</td>
-                <td className="small muted" title={p.program}>{programCode(p.program)}</td>
-                <td><Badge>{stageByKey(p.currentStage)?.label}</Badge></td>
-                <td className="tight">{p.archiveResult ? <Badge tone="ok">{p.archiveResult}</Badge> : <span className="faint small">—</span>}</td>
+                <td className="small muted" data-label="Program" title={p.program}>{programCode(p.program)}</td>
+                <td className="card-status"><Badge>{stageByKey(p.currentStage)?.label}</Badge></td>
+                <td className="tight" data-label="Result">{p.archiveResult ? <Badge tone="ok">{p.archiveResult}</Badge> : <span className="faint small">—</span>}</td>
               </tr>
             ))}
           </tbody>
@@ -119,7 +118,7 @@ export default function Reports() {
       <Section title="Faculty workload">
         {load.length === 0 && <Empty>No assignments recorded.</Empty>}
         {load.length > 0 && (
-          <div className="table-scroll"><table>
+          <div className="table-scroll"><table className="cards">
             <thead>
               <tr>
                 <th>Faculty</th><th>Global Roles</th>
@@ -130,10 +129,10 @@ export default function Reports() {
               {load.map(r => (
                 <tr key={r.user.id}>
                   <td>{r.user.name}</td>
-                  <td className="small muted">{(r.user.globalRoles ?? []).join(', ') || '—'}</td>
-                  <td className="tight mono">{r.advisees}</td>
-                  <td className="tight mono">{r.panels}</td>
-                  <td className="tight mono">{r.instructing}</td>
+                  <td className="small muted" data-label="Global Roles">{(r.user.globalRoles ?? []).join(', ') || '—'}</td>
+                  <td className="tight mono" data-label="Advisees">{r.advisees}</td>
+                  <td className="tight mono" data-label="Panel seats">{r.panels}</td>
+                  <td className="tight mono" data-label="Instructing">{r.instructing}</td>
                 </tr>
               ))}
             </tbody>

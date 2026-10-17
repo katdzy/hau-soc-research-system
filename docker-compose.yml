@@ -1,5 +1,15 @@
+# Local stack: Vite dev server + Firebase Emulator Suite.
+#
+#   docker compose up            start both (Ctrl+C stops; add -d to run in the background)
+#   http://localhost:5180        the app (hot reload: just save a file)
+#   http://localhost:4000        Emulator UI (Firestore, Auth, Storage)
+#
+# The app talks to the emulators, never to the live project: the environment
+# below overrides whatever .env says, and "demo-local" is a demo- project ID,
+# which the Firebase SDKs refuse to send to production.
+
 services:
-  # --- React / Vite Dev Server ------------------------------------------------
+  # --- React / Vite dev server ------------------------------------------------
   app:
     build:
       context: .
@@ -7,17 +17,28 @@ services:
     ports:
       - "5180:5180"
     volumes:
-      # Mount source so hot-reload works without rebuilding the image
+      # Source is mounted, so edits hot-reload without rebuilding the image.
       - .:/app
-      # Keep node_modules inside the container (avoids host/container conflicts)
+      # node_modules stays in the container (Linux builds, not the Mac's).
       - /app/node_modules
-    env_file:
-      - path: .env
-        required: false   # won't error if .env is missing; copy .env.example to create one
     environment:
-      - NODE_ENV=development
+      NODE_ENV: development
+      # Docker Desktop on macOS does not always forward file events into the
+      # container; polling makes hot reload reliable.
+      CHOKIDAR_USEPOLLING: "true"
+      # APP_BACKEND=local docker compose up  → in-memory backend, emulators unused.
+      VITE_BACKEND: ${APP_BACKEND:-firebase}
+      VITE_USE_EMULATORS: "true"
+      VITE_FIREBASE_PROJECT_ID: demo-local
+      VITE_FIREBASE_API_KEY: demo-api-key
+      VITE_FIREBASE_AUTH_DOMAIN: demo-local.firebaseapp.com
+      VITE_FIREBASE_STORAGE_BUCKET: demo-local.appspot.com
+      VITE_FIREBASE_APP_ID: demo-app-id
+      VITE_FIREBASE_MESSAGING_SENDER_ID: ""
+      VITE_FIREBASE_MEASUREMENT_ID: ""
     depends_on:
-      - emulators
+      emulators:
+        condition: service_healthy
 
   # --- Firebase Emulator Suite -------------------------------------------------
   emulators:
@@ -26,17 +47,24 @@ services:
       dockerfile: Dockerfile.emulators
     ports:
       - "4000:4000"   # Emulator UI
-      - "5001:5001"   # Functions
+      - "4400:4400"   # Emulator hub
+      - "4500:4500"   # UI log stream
       - "8080:8080"   # Firestore
+      - "9150:9150"   # Firestore websocket (Emulator UI requests tab)
       - "9099:9099"   # Auth
       - "9199:9199"   # Storage
     volumes:
       - .:/app
     environment:
-      - FIREBASE_TOKEN=${FIREBASE_TOKEN:-}
+      # FIREBASE_CONFIG=firebase.json docker compose up  → load the real
+      # firestore.rules / storage.rules (client writes are then denied).
+      FIREBASE_CONFIG: ${FIREBASE_CONFIG:-emulator/firebase.json}
+    # Forward Ctrl+C / docker stop to the CLI so --export-on-exit saves data.
+    init: true
+    stop_grace_period: 30s
     healthcheck:
-      test: ["CMD", "wget", "-qO-", "http://localhost:4000"]
-      interval: 15s
-      timeout: 10s
-      retries: 5
-      start_period: 60s
+      test: ["CMD", "wget", "-qO-", "http://127.0.0.1:4400/emulators"]
+      interval: 5s
+      timeout: 5s
+      retries: 30
+      start_period: 20s
