@@ -106,3 +106,15 @@ export async function sendFirebaseEmailVerification(user) {
   const { sendEmailVerification } = await getAuthInstance()
   await sendEmailVerification(user)
 }
+
+/**
+ * Sends a password reset email using Firebase Authentication.
+ */
+export async function resetPasswordWithFirebase(email) {
+  const check = validateInstitutionalEmail(email)
+  if (!check.valid) {
+    throw new Error(check.error)
+  }
+  const { auth, sendPasswordResetEmail } = await getAuthInstance()
+  await sendPasswordResetEmail(auth, email.trim().toLowerCase())
+}

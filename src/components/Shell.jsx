@@ -148,6 +148,7 @@ export default function Shell() {
           <span className="brand-short">HAU-SOC Capstone</span>
         </Link>
         <div className="topbar-end">
+          <NotificationCenter me={me} snap={snap} pathname={here} />
           <ActingAs acting={acting} office={office} held={held} memberOf={memberOf}
             projectOf={projectOf} openId={openId} pathname={here} />
           <AccountMenu me={me} pathname={here} onSignOut={() => { signOut(); navigate('/') }} />
@@ -240,6 +241,146 @@ function MenuButton({ pathname, label, children }) {
       </dialog>
     </>
   )
+}
+
+/**
+ * In-App Notification Center:
+ * Displays notifications addressed to the current user (from snap.outbox).
+ * Persists read/unread states per user in localStorage.
+ */
+function NotificationCenter({ me, snap, pathname }) {
+  const ref = useDisclosure(pathname)
+  const navigate = useNavigate()
+
+  const storageKey = `hausoc.read_notifications.${me.id}`
+  const [readIds, setReadIds] = useState(() => {
+    try {
+      const stored = localStorage.getItem(storageKey)
+      return new Set(stored ? JSON.parse(stored) : [])
+    } catch {
+      return new Set()
+    }
+  })
+
+  // Filter notifications addressed to this user or their institutional email
+  const allNotifs = (snap.outbox ?? [])
+    .filter(o => {
+      const byUser = (o.userIds ?? []).includes(me.id)
+      const byEmail = me.email && (o.to === me.email || (Array.isArray(o.to) && o.to.includes(me.email)))
+      return byUser || byEmail
+    })
+    .sort((a, b) => new Date(b.at || 0) - new Date(a.at || 0))
+
+  const unreadCount = allNotifs.filter(n => !readIds.has(n.id)).length
+
+  function markAsRead(id) {
+    setReadIds(prev => {
+      if (prev.has(id)) return prev
+      const next = new Set(prev)
+      next.add(id)
+      try {
+        localStorage.setItem(storageKey, JSON.stringify([...next]))
+      } catch {}
+      return next
+    })
+  }
+
+  function markAllAsRead() {
+    const next = new Set([...readIds, ...allNotifs.map(n => n.id)])
+    setReadIds(next)
+    try {
+      localStorage.setItem(storageKey, JSON.stringify([...next]))
+    } catch {}
+  }
+
+  function handleItemClick(notif) {
+    markAsRead(notif.id)
+    if (ref.current) ref.current.open = false
+    if (notif.projectId) {
+      navigate(`/projects/${notif.projectId}`)
+    }
+  }
+
+  const projectMap = new Map((snap.projects ?? []).map(p => [p.id, p]))
+
+  return (
+    <details className="notif-center" ref={ref}>
+      <summary className="notif-bell-btn" aria-label={`Notifications: ${unreadCount} unread`}>
+        <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+          <path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9" />
+          <path d="M13.73 21a2 2 0 0 1-3.46 0" />
+        </svg>
+        {unreadCount > 0 && (
+          <span className="notif-badge">{unreadCount > 9 ? '9+' : unreadCount}</span>
+        )}
+      </summary>
+
+      <div className="notif-panel">
+        <div className="notif-header">
+          <div className="notif-header-title">
+            <strong>Notifications</strong>
+            {unreadCount > 0 && <span className="notif-unread-pill">{unreadCount} new</span>}
+          </div>
+          {unreadCount > 0 && (
+            <button type="button" className="notif-action-btn" onClick={markAllAsRead}>
+              Mark all read
+            </button>
+          )}
+        </div>
+
+        <div className="notif-list">
+          {allNotifs.length === 0 ? (
+            <div className="notif-empty">
+              <div className="notif-empty-icon" aria-hidden="true">🔔</div>
+              <strong>No notifications yet</strong>
+              <p>You are completely up to date with all your research &amp; capstone activities.</p>
+            </div>
+          ) : (
+            allNotifs.map(n => {
+              const isUnread = !readIds.has(n.id)
+              const project = n.projectId ? projectMap.get(n.projectId) : null
+              return (
+                <div
+                  key={n.id}
+                  className={`notif-item ${isUnread ? 'is-unread' : ''} ${n.projectId ? 'is-clickable' : ''}`}
+                  onClick={() => handleItemClick(n)}
+                  role={n.projectId ? 'button' : undefined}
+                  tabIndex={n.projectId ? 0 : undefined}
+                  onKeyDown={e => { if (e.key === 'Enter' || e.key === ' ') handleItemClick(n) }}
+                >
+                  <div className="notif-item-top">
+                    {isUnread && <span className="notif-dot" aria-label="Unread" />}
+                    <span className="notif-item-subject">{n.subject || 'Workflow notification'}</span>
+                    <span className="notif-item-time">{formatRelativeTime(n.at)}</span>
+                  </div>
+                  {n.body && <p className="notif-item-body">{n.body}</p>}
+                  {project && (
+                    <div className="notif-item-meta">
+                      <span className="notif-project-tag">{project.title}</span>
+                    </div>
+                  )}
+                </div>
+              )
+            })
+          )}
+        </div>
+      </div>
+    </details>
+  )
+}
+
+function formatRelativeTime(iso) {
+  if (!iso) return ''
+  try {
+    const diff = (Date.now() - new Date(iso).getTime()) / 1000
+    if (diff < 60) return 'just now'
+    if (diff < 3600) return `${Math.floor(diff / 60)}m ago`
+    if (diff < 86400) return `${Math.floor(diff / 3600)}h ago`
+    if (diff < 604800) return `${Math.floor(diff / 86400)}d ago`
+    return new Date(iso).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })
+  } catch {
+    return ''
+  }
 }
 
 /**
