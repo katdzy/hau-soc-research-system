@@ -24,7 +24,8 @@ export const pushAvailable = () =>
   db.name === 'firebase' && !!VAPID_KEY && typeof navigator !== 'undefined' && 'serviceWorker' in navigator
 
 let functions = null
-async function call(name, data) {
+/** A callable Cloud Function (functions/index.js), on the emulator when VITE_USE_EMULATORS is set. */
+export async function call(name, data) {
   const app = await firebaseApp()
   const { getFunctions, httpsCallable, connectFunctionsEmulator } = await import('firebase/functions')
   if (!functions) {

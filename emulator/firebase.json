@@ -5,6 +5,17 @@
   "storage": {
     "rules": "storage.open.rules"
   },
+  "functions": [
+    {
+      "source": "../functions",
+      "codebase": "default",
+      "ignore": [
+        "node_modules",
+        ".git",
+        "*.log"
+      ]
+    }
+  ],
   "emulators": {
     "auth": {
       "host": "0.0.0.0",
@@ -32,6 +43,10 @@
       "host": "0.0.0.0",
       "port": 4500
     },
-    "singleProjectMode": true
+    "singleProjectMode": true,
+    "functions": {
+      "host": "0.0.0.0",
+      "port": 5001
+    }
   }
 }

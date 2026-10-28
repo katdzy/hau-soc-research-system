@@ -5,7 +5,7 @@ import {
   EMAIL_DOMAINS, PROGRAM_INFO, ACCOUNT_STATUS, COURSES, accountType, normalizeEmail, sectionProblem, courseSchedule,
 } from '../domain/constants.js'
 import { Field } from '../components/ui.jsx'
-import { registerAccount, confirmProviderVerification, requestPasswordReset } from '../services/actions.js'
+import { registerAccount, confirmProviderVerification, requestPasswordReset } from '../services/api.js'
 import crest from '../assets/soc-crest.webp'
 import { InstallApp } from '../components/Pwa.jsx'
 import { registerWithFirebase, loginWithFirebase, resetPasswordWithFirebase } from '../services/authService.js'

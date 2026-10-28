@@ -1,6 +1,6 @@
 import { useApp } from '../../state/AppContext.jsx'
 import { can } from '../../domain/caac.js'
-import { runGate } from '../../services/actions.js'
+import { runGate } from '../../services/api.js'
 import { useAction, ActionError } from '../useAction.jsx'
 import { stageByKey, resolveNext, openGates, staysAtStage } from '../../domain/stages.js'
 import { GLOBAL_ROLES as G, PROJECT_ROLES as P } from '../../domain/constants.js'

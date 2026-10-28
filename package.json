@@ -7,8 +7,12 @@
   "scripts": {
     "dev": "vite",
     "build": "vite build",
+    "build:functions": "node scripts/functions/build.mjs",
     "preview": "vite preview",
-    "test": "vitest run"
+    "test": "vitest run",
+    "test:rules": "vitest run --config rules-tests/vitest.config.js",
+    "test:act": "node scripts/functions/build.mjs && docker compose run --rm -T emulators firebase emulators:exec --project demo-local --config firebase.json --only auth,firestore,storage,functions \"node rules-tests/act.smoke.mjs\"",
+    "test:triggers": "docker compose run --rm -T emulators firebase emulators:exec --project demo-local --config firebase.json --only auth,firestore,functions \"node rules-tests/triggers.smoke.mjs\""
   },
   "dependencies": {
     "@google/genai": "^2.24.0",
@@ -19,7 +23,9 @@
     "react-router-dom": "^6.26.2"
   },
   "devDependencies": {
+    "@firebase/rules-unit-testing": "^5.0.2",
     "@vitejs/plugin-react": "^4.3.1",
+    "esbuild": "^0.21.5",
     "vite": "^5.4.8",
     "vite-plugin-pwa": "^2.0.0",
     "vitest": "^2.1.9",

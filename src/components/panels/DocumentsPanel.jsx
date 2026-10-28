@@ -1,7 +1,7 @@
-import { useState } from 'react'
+import { useRef, useState } from 'react'
 import { useApp } from '../../state/AppContext.jsx'
 import { can, why, allowedDocTypes, uploadBlocker } from '../../domain/caac.js'
-import { submitDocument, addAnnotation, submitReview } from '../../services/actions.js'
+import { submitDocument, addAnnotation, submitReview } from '../../services/api.js'
 import { useAction, ActionError } from '../useAction.jsx'
 import ManuscriptViewer from '../ManuscriptViewer.jsx'
 import { Act, useViewOnly } from '../ViewOnly.jsx'
@@ -11,8 +11,9 @@ import { sampleFileFor } from '../../backend/sampleFiles.js'
 import { Section, Empty, Badge, Field, docTone, fmtDateTime, fmtSize } from '../ui.jsx'
 import {
   DECISIONS, DOC_STATUS, DOC_TYPES, ANNOTATION_CATEGORIES, REVIEWABLE_TYPES, LINK_TYPES,
-  TOPIC_COUNT, MAX_PDF_MB, isPdfFile, isVideoLink, topicsProblem,
+  TOPIC_COUNT, MAX_PDF_MB, isVideoLink, topicsProblem,
 } from '../../domain/constants.js'
+import { pdfProblem } from '../../domain/uploads.js'
 
 const SUMMARISED = [DOC_TYPES.PROPOSAL_MANUSCRIPT, DOC_TYPES.FINAL_MANUSCRIPT]
 
@@ -206,6 +207,9 @@ function UploadForm({ types, b, onDone }) {
   const [link, setLink] = useState('')
   const [topics, setTopics] = useState(() => Array(TOPIC_COUNT).fill(''))
   const [touched, setTouched] = useState(false)
+  // While submitting a file: null = checking it, 0–1 = share uploaded.
+  const [sent, setSent] = useState(null)
+  const cancel = useRef(null)
   // The file input is uncontrolled; a new key clears the chosen file after a submission.
   const [fileKey, setFileKey] = useState(0)
   const isLink = LINK_TYPES.includes(docType)
@@ -217,10 +221,8 @@ function UploadForm({ types, b, onDone }) {
   const problem = !docType ? 'Nothing can be submitted right now.'
     : isTopics && topicsProblem(topics) ? topicsProblem(topics)
       : isLink && !isVideoLink(link) ? 'Enter the full link to the hosted video, starting with https://.'
-        : !isLink && !file ? 'Attach the PDF file.'
-          : !isLink && !isPdfFile(file.name, file.type) ? 'Only PDF files can be submitted.'
-            : !isLink && file.size > MAX_PDF_MB * 1024 * 1024 ? `The file is larger than ${MAX_PDF_MB} MB.`
-              : null
+        : !isLink ? pdfProblem(file)
+          : null
 
   const reset = () => {
     setTitle(''); setFile(null); setLink(''); setTopics(Array(TOPIC_COUNT).fill('')); setTouched(false)
@@ -286,16 +288,38 @@ function UploadForm({ types, b, onDone }) {
               setTouched(true)
               if (problem) return
               run(async () => {
-                const created = await submitDocument(me, snap, b.project.id, {
-                  docType, title, link, topics: isTopics ? topics : undefined,
-                  file: isLink ? undefined : file, fileName: file?.name, fileSize: file?.size, fileType: file?.type,
-                })
-                reset()
-                onDone(created.id)
+                const controller = new AbortController()
+                cancel.current = controller
+                setSent(null)
+                try {
+                  const created = await submitDocument(me, snap, b.project.id, {
+                    docType, title, link, topics: isTopics ? topics : undefined,
+                    file: isLink ? undefined : file,
+                    onProgress: setSent, signal: controller.signal,
+                  })
+                  reset()
+                  onDone(created.id)
+                } finally {
+                  cancel.current = null
+                }
               })
             }}>
             Submit version {next}
           </button>
+          {busy && !isLink && (
+            <div className="upload-progress">
+              <progress max={1} value={sent ?? undefined} aria-label="Upload progress" />
+              {/* The percent is for the eye (and the progress bar); a screen
+                  reader hears each phase once, not every percent. */}
+              <span className="small muted" aria-hidden="true">
+                {sent === null ? 'Checking the file…' : sent < 1 ? `Uploading… ${Math.round(sent * 100)}%` : 'Recording the version…'}
+              </span>
+              <span className="sr-only" role="status">
+                {sent === null ? 'Checking the file' : sent < 1 ? 'Uploading the file' : 'Recording the version'}
+              </span>
+              {sent !== 1 && <button type="button" className="quiet small" onClick={() => cancel.current?.abort()}>Cancel</button>}
+            </div>
+          )}
           {touched && problem && <p className="small error-text mt-1" role="alert">{problem}</p>}
           <ActionError error={error} />
           {current && (

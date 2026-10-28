@@ -3,6 +3,7 @@
 // the §4 "Never" list, and the student side of T4, T13, T14, T18.
 
 import { describe, it, expect, beforeAll, beforeEach } from 'vitest'
+import { pdfFile, otherFile } from './pdfFixture.js'
 import { db } from '../backend/index.js'
 import { buildSeed, SEED_ROLES } from '../backend/seed.js'
 import { applyStage } from '../backend/stageBuilder.js'
@@ -26,7 +27,7 @@ const as = (id) => { setSessionUserId(id); return user(id) }
 const load = async (store) => { await db.replaceAll(store); setSessionUserId(null) }
 const b = (pid) => bundle(snap(), pid)
 const at = (pid, stage, opts = {}) => load(applyStage(buildSeed(), pid, stage, { roles: SEED_ROLES[pid], ...opts }))
-const pdf = (name = 'upload.pdf') => ({ fileName: name, fileSize: 120000, fileType: 'application/pdf' })
+const pdf = (name = 'upload.pdf') => ({ file: pdfFile(name, 120000) })
 const TOPICS = ['Smart Parking Finder', 'Canteen Pre-Order App', 'Org Event Attendance via QR', 'Lab Borrowing Log', 'Alumni Job Board']
 const lastMail = () => [...snap().outbox].sort((x, y) => (x.at < y.at ? 1 : -1))[0]
 const mailTo = (event) => snap().outbox.filter(m => m.event === event).flatMap(m => m.userIds).sort()
@@ -45,9 +46,9 @@ describe('S3 — topics and concept paper', () => {
       .rejects.toThrow(/different/)
     await expect(submitDocument(me, null, 'p_g1', { docType: T.TOPIC_PROPOSAL, topics: TOPICS }))
       .rejects.toThrow(/Attach the PDF/)
-    await expect(submitDocument(me, null, 'p_g1', { docType: T.TOPIC_PROPOSAL, topics: TOPICS, fileName: 'topics.docx' }))
+    await expect(submitDocument(me, null, 'p_g1', { docType: T.TOPIC_PROPOSAL, topics: TOPICS, file: otherFile('topics.docx', 'application/vnd.openxmlformats-officedocument.wordprocessingml.document') }))
       .rejects.toThrow(/Only PDF/)
-    await expect(submitDocument(me, null, 'p_g1', { docType: T.TOPIC_PROPOSAL, topics: TOPICS, fileName: 'fake.pdf', fileType: 'image/png' }))
+    await expect(submitDocument(me, null, 'p_g1', { docType: T.TOPIC_PROPOSAL, topics: TOPICS, file: otherFile('fake.pdf', 'image/png') }))
       .rejects.toThrow(/Only PDF/)
 
     const v2 = await submitDocument(me, null, 'p_g1', { docType: T.TOPIC_PROPOSAL, topics: TOPICS, ...pdf('topics.pdf') })
@@ -177,7 +178,7 @@ describe('S4–S9 — uploads at each stage', () => {
   it('S9.1 / S9.2 — certificates at clearance, PDF only; no email in §3', async () => {
     await at('p_g3', 'CLEARANCE')
     const before = snap().outbox.length
-    await expect(submitDocument(as('s_quebec'), null, 'p_g3', { docType: T.EDITORS_CERTIFICATE, fileName: 'cert.jpg' })).rejects.toThrow(/Only PDF/)
+    await expect(submitDocument(as('s_quebec'), null, 'p_g3', { docType: T.EDITORS_CERTIFICATE, file: otherFile('cert.jpg', 'image/jpeg') })).rejects.toThrow(/Only PDF/)
     await submitDocument(as('s_quebec'), null, 'p_g3', { docType: T.EDITORS_CERTIFICATE, ...pdf('editor.pdf') })
     await submitDocument(as('s_romeo'), null, 'p_g3', { docType: T.PLAGIARISM_CERTIFICATE, ...pdf('plagiarism.pdf') })
     expect(snap().outbox.length).toBe(before)

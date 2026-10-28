@@ -621,6 +621,18 @@ button.linkish:hover:not(:disabled) { background: none; color: var(--accent-ink)
 .empty { padding: var(--s1) 0; color: var(--ink-faint); font-size: 13px; margin: 0; }
 .stack { display: flex; flex-direction: column; gap: var(--s2); }
 .inline { display: flex; align-items: center; gap: var(--s1); flex-wrap: wrap; }
+/* A file on its way to the store (DocumentsPanel UploadForm). The fill is the
+   darker orange (--focus, 4:1 on the track; WCAG 1.4.11) and the track has a
+   hairline edge, so both how far it has come and where it ends are visible. */
+.upload-progress { display: flex; align-items: center; gap: var(--s2); margin-top: var(--s2); max-width: 480px; }
+.upload-progress progress {
+  flex: 1; min-width: 96px; height: 8px; border: 0; border-radius: 4px;
+  appearance: none; background: var(--surface-sunk); color: var(--focus); overflow: hidden;
+  box-shadow: inset 0 0 0 1px var(--rule-strong);
+}
+.upload-progress progress::-webkit-progress-bar { background: var(--surface-sunk); box-shadow: inset 0 0 0 1px var(--rule-strong); }
+.upload-progress progress::-webkit-progress-value { background: var(--focus); }
+.upload-progress progress::-moz-progress-bar { background: var(--focus); }
 /* Banners (Figma: "6 new accounts need a role", "returned — resubmission needed"). */
 .note {
   background: var(--accent-wash); color: var(--ink); border: 1px solid var(--accent-tint);

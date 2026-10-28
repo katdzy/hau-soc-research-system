@@ -2,7 +2,7 @@ import { useState } from 'react'
 import { useApp } from '../state/AppContext.jsx'
 import {
   setGlobalRoles, setAccountStatus, setProgramScope, revokeCapability, liftOverride, updateRevisionDays,
-} from '../services/actions.js'
+} from '../services/api.js'
 import { useAction, ActionError } from '../components/useAction.jsx'
 import { Section, Restricted, Empty, Field, Badge, fmtDate, fmtDateTime } from '../components/ui.jsx'
 import {

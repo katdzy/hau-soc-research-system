@@ -71,12 +71,18 @@ export function authorizeInstitution(actor, capability) {
 // twice (R7, T17).
 const inflight = new Set()
 
-/** Run `fn` once per key at a time, as one all-or-nothing write. */
-export async function perform(key, fn) {
+/**
+ * Run `fn` once per key at a time, as one all-or-nothing write. `prepare`, if
+ * given, runs first under the same key but outside the transaction — work
+ * that cannot be rolled back, such as a file upload — and its result is
+ * passed to `fn`. A double-click therefore never uploads twice.
+ */
+export async function perform(key, fn, prepare) {
   if (inflight.has(key)) throw new Error('That request is already being processed.')
   inflight.add(key)
   try {
-    return await db.transaction(fn)
+    const prepared = prepare ? await prepare() : undefined
+    return await db.transaction(() => fn(prepared))
   } finally {
     inflight.delete(key)
   }

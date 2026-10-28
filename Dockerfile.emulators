@@ -14,7 +14,7 @@ RUN firebase setup:emulators:firestore \
 # The project is bind-mounted here by docker-compose.yml.
 WORKDIR /app
 
-EXPOSE 4000 4400 4500 8080 9099 9199
+EXPOSE 4000 4400 4500 5001 8080 9099 9199
 
 # FIREBASE_CONFIG picks the rules: emulator/firebase.json (open, the default)
 # or firebase.json (the real rules). Data is imported from and saved back to

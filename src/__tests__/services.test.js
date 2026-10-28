@@ -2,6 +2,7 @@
 // all-or-nothing write → audit → history → notification/outbox).
 
 import { describe, it, expect, beforeAll, beforeEach } from 'vitest'
+import { pdfFile } from './pdfFixture.js'
 import { db } from '../backend/index.js'
 import { buildSeed } from '../backend/seed.js'
 import { scenarioStore } from '../dev/scenarios.js'
@@ -31,7 +32,7 @@ describe('write path', () => {
     const me = as('s_kilo')
     const before = snap().documents.find(d => d.id === 'd_g1_topic')
     const topics = ['A', 'B', 'C', 'D', 'E'].map(x => `Topic ${x}`)
-    const v2 = await submitDocument(me, null, 'p_g1', { docType: DOC_TYPES.TOPIC_PROPOSAL, topics, fileName: 't.pdf' })
+    const v2 = await submitDocument(me, null, 'p_g1', { docType: DOC_TYPES.TOPIC_PROPOSAL, topics, file: pdfFile('t.pdf') })
     expect(v2.versionNumber).toBe(2)
     expect(v2.supersedes).toBe('d_g1_topic')
     const old = snap().documents.find(d => d.id === 'd_g1_topic')

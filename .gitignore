@@ -3,6 +3,10 @@ dist
 .env
 .env.local
 .firebase
+# Built from src/ by scripts/functions/build.mjs (npm run build:functions)
+functions/lib
+# Emulator-only secret overrides (a placeholder, so the emulator does not ask Secret Manager)
+functions/.secret.local
 *.log
 .DS_Store
 

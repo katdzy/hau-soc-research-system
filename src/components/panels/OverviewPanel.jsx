@@ -3,7 +3,7 @@ import { useApp } from '../../state/AppContext.jsx'
 import { can } from '../../domain/caac.js'
 import {
   addMember, removeMember, assignRole, unassignRole, ASSIGNING_CAPABILITY, assignmentConflict,
-} from '../../services/actions.js'
+} from '../../services/api.js'
 import { useAction, ActionError } from '../useAction.jsx'
 import { Section, Empty, Badge, Field, fmtDate } from '../ui.jsx'
 import {

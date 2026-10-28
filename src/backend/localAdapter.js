@@ -13,7 +13,7 @@ import { nowIso } from './clock.js'
 // v6: NPC students and faculty — three groups of four per program.
 // v7: No `notifications` collection — notifications are email only (`outbox`).
 // v8: projects record `adviserOffices` (NEW-5: the named office sits the approval out).
-const KEY = 'hausoc.db.v8'
+const KEY = 'hausoc.db.v9'
 const subscribers = new Set()
 
 const uid = (prefix) =>
@@ -64,6 +64,11 @@ export const localAdapter = {
     subscribers.add(fn)
     fn(snapshot())
     return () => subscribers.delete(fn)
+  },
+
+  // Firebase build only (claimsSync); nothing outside the store changes here.
+  watch() {
+    return () => {}
   },
 
   async add(collection, data) {

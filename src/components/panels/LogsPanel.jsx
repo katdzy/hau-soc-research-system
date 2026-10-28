@@ -1,7 +1,7 @@
 import { useState } from 'react'
 import { useApp } from '../../state/AppContext.jsx'
 import { can } from '../../domain/caac.js'
-import { submitWeeklyLog, decideWeeklyLog } from '../../services/actions.js'
+import { submitWeeklyLog, decideWeeklyLog } from '../../services/api.js'
 import { useAction, ActionError } from '../useAction.jsx'
 import { Section, Empty, Badge, Field, fmtDate } from '../ui.jsx'
 import { FORMS } from '../../domain/constants.js'

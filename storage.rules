@@ -25,6 +25,8 @@ service firebase.storage {
     }
 
     function holds(role) { return role in request.auth.token.globalRoles; }
+    // An override that revokes project.view or document.read everywhere (claims.js).
+    function hidden() { return request.auth.token.get('hidden', false) == true; }
     function projectRoles(projectId) { return request.auth.token.projects.get(projectId, []); }
     function projectOf(projectId) {
       return firestore.get(/databases/(default)/documents/projects/$(projectId)).data;
@@ -40,7 +42,7 @@ service firebase.storage {
     function canReadFiles(projectId) {
       let roles = projectRoles(projectId);
       let project = projectOf(projectId);
-      return institutional() && (
+      return institutional() && !hidden() && (
         'Member' in roles
         || ('Adviser' in roles
             && !stageIn(project, ['GROUP_FORMATION', 'ADVISER_ASSIGNMENT', 'ADVISER_APPROVAL']))
@@ -59,14 +61,50 @@ service firebase.storage {
       );
     }
 
+    // The PDF document types each stage accepts: allowedDocTypes() in caac.js,
+    // less the video (a link, never a file). At URO_VERIFICATION the group
+    // re-uploads only the certificates the URO returned; which ones is checked
+    // by the service, so either is allowed here. storageRules.test.js fails if
+    // this map and caac.js drift apart.
+    function pdfTypesAt(stage) {
+      return {
+        'TOPIC_PROPOSAL': ['Topic Proposal', 'Concept Paper'],
+        'PROPOSAL_DEVELOPMENT': ['Proposal Manuscript'],
+        'PROPOSAL_DEFENSE': ['Proposal Manuscript'],
+        'PROPOSAL_REVISION': ['Revised Manuscript'],
+        'IMPLEMENTATION': ['Final Manuscript', 'Deployment Information'],
+        'FINAL_DEFENSE': ['Final Manuscript'],
+        'FINAL_REVISION': ['Revised Manuscript'],
+        'CLEARANCE': ['Final Manuscript', "Editor's Certificate", 'Plagiarism Clearance Certificate'],
+        'URO_VERIFICATION': ["Editor's Certificate", 'Plagiarism Clearance Certificate'],
+      }.get(stage, []);
+    }
+
+    // What submitDocument writes beside the bytes (files.js put → metadata).
+    // The fingerprint cannot be checked here; it is kept so the record and the
+    // stored file can be matched later.
+    function describesUpload(projectId) {
+      let meta = request.resource.metadata;
+      return meta.keys().hasOnly(['projectId', 'docType', 'uploadedBy', 'sha256'])
+        && meta.projectId == projectId
+        && meta.uploadedBy is string && meta.uploadedBy.size() > 0
+        && meta.sha256.matches('[0-9a-f]{64}')
+        && meta.docType in pdfTypesAt(projectOf(projectId).currentStage);
+    }
+
     match /projects/{projectId}/documents/{fileId} {
       allow read: if canReadFiles(projectId);
-      // Write-once: only a group member, only a new path, only a PDF (MAX_PDF_MB = 25).
+      // Write-once: only a group member, only a new path (named as filePath()
+      // in files.js names it), only a non-empty PDF up to MAX_PDF_MB = 25, only
+      // a type the project's stage accepts.
       allow create: if institutional()
         && 'Member' in projectRoles(projectId)
         && resource == null
+        && fileId.matches('[a-z0-9]{12,}-[A-Za-z0-9_.-]{0,76}[.][pP][dD][fF]')
         && request.resource.contentType == 'application/pdf'
-        && request.resource.size <= 25 * 1024 * 1024;
+        && request.resource.size > 0
+        && request.resource.size <= 25 * 1024 * 1024
+        && describesUpload(projectId);
       allow update, delete: if false;
     }
 

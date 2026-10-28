@@ -10,6 +10,7 @@ import { InstallApp, InstallBanner, NotificationSetting } from './Pwa.jsx'
 import { useOutboxNotifications } from '../notifications.js'
 import { ViewOnlyBanner } from './ViewOnly.jsx'
 import crest from '../assets/soc-crest.webp'
+import { writePath } from '../services/api.js'
 
 const link = ({ isActive }) => (isActive ? 'active' : undefined)
 
@@ -95,7 +96,7 @@ export default function Shell() {
           </dd>
         </div>
       </dl>
-      <span className="faint small">Backend <span className="mono">{backendName}</span></span>
+      <span className="faint small">Backend <span className="mono">{backendName}</span>{writePath !== 'local' && <> · writes <span className="mono">{writePath}</span></>}</span>
     </div>
   )
 

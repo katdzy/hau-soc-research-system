@@ -41,7 +41,7 @@ function npcStudent(section) {
     email: `${slug(first)}.${slug(last)}${i + 1}@student.hau.edu.ph`,
     globalRoles: [G.STUDENT], programScope: [], status: 'Active', emailVerified: true, verifyToken: null,
     idNumber: `2022-${String(3001 + i)}`, program: programByCode(code).name, yearLevel: yearLevelOf(section),
-    block: section, createdAt: days(-200), npc: true,
+    block: section, createdAt: days(-200), npc: true, demo: true,
   }
 }
 
@@ -50,7 +50,7 @@ function npcFaculty(id, name, globalRoles = [], extra = {}) {
   return {
     id, name, email: `${slug(first)}.${slug(rest.join(''))}@hau.edu.ph`,
     globalRoles: [G.FACULTY, ...globalRoles], programScope: [], status: 'Active', emailVerified: true,
-    verifyToken: null, idNumber: '', program: '', yearLevel: '', block: '', createdAt: days(-400), npc: true, ...extra,
+    verifyToken: null, idNumber: '', program: '', yearLevel: '', block: '', createdAt: days(-400), npc: true, demo: true, ...extra,
   }
 }
 

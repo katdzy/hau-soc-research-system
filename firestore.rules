@@ -11,10 +11,15 @@ rules_version = '2';
 //   • READS are decided here, so the React app can use real-time listeners.
 //
 // The rules read the caller's context from custom claims that the Cloud
-// Functions keep in sync whenever a role, membership or assignment changes:
+// Functions keep in sync whenever an account, membership, assignment or
+// override changes (functions/claims.js, syncClaims.js):
+//   token.userId         the caller's `users` id — records name people by it,
+//                        not by the Auth uid (the app links the two by email)
 //   token.globalRoles    ['Dean'], ['Student'], [] …
 //   token.programScope   programs a Program Chair/Coordinator covers
 //   token.projects       { <projectId>: ['Adviser', 'Panel Member', 'Member'] }
+//   token.hidden         true while an override revokes project.view or
+//                        document.read for every project
 //
 // The stage conditions below mirror src/domain/caac.js (project.view). Keep
 // the two in step.
@@ -33,6 +38,10 @@ service cloud.firestore {
 
     function holds(role) { return role in request.auth.token.globalRoles; }
 
+    function me() { return request.auth.token.get('userId', ''); }
+
+    function hidden() { return request.auth.token.get('hidden', false) == true; }
+
     function projectRoles(projectId) {
       return request.auth.token.projects.get(projectId, []);
     }
@@ -50,7 +59,7 @@ service cloud.firestore {
     // in caac.js (flags as set in src/domain/flags.js on 2026-09-29).
     function canViewProject(projectId, project) {
       let roles = projectRoles(projectId);
-      return institutional() && (
+      return institutional() && !hidden() && (
         'Member' in roles
         // An Adviser gets access once the Dean and AD approve the appointment (S2.2).
         || ('Adviser' in roles
@@ -74,7 +83,7 @@ service cloud.firestore {
     // §2.2: the System Administrator opens the project record for configuration
     // and audit, never its documents (T20).
     function canOpenRecord(projectId, project) {
-      return canViewProject(projectId, project) || (institutional() && holds('System Administrator'));
+      return canViewProject(projectId, project) || (institutional() && !hidden() && holds('System Administrator'));
     }
 
     function viaProject(projectId) {
@@ -129,7 +138,7 @@ service cloud.firestore {
     // Never shared between panelists. Shared notes follow project visibility.
     match /annotations/{annotationId} {
       allow read: if institutional() && viaProject(resource.data.projectId) && (
-        resource.data.authorId == request.auth.uid
+        resource.data.authorId == me()
         || resource.data.visibility == 'shared'
         || (resource.data.releasedAt != null && 'Member' in projectRoles(resource.data.projectId))
       );
@@ -142,7 +151,7 @@ service cloud.firestore {
     // override. Readable by the System Administrator and the affected account.
     match /permissionOverrides/{overrideId} {
       allow read: if institutional()
-        && (holds('System Administrator') || resource.data.userId == request.auth.uid);
+        && (holds('System Administrator') || resource.data.userId == me());
       allow write: if false;
     }
 
@@ -155,7 +164,7 @@ service cloud.firestore {
     // One row per email (R6c). Its recipients read it: the open app mirrors it
     // as a device notification (DEVICE_NOTIFICATIONS, revision 2026-10-07).
     match /outbox/{mailId} {
-      allow read: if institutional() && request.auth.uid in resource.data.userIds;
+      allow read: if institutional() && me() in resource.data.userIds;
       allow write: if false;
     }
 
@@ -163,6 +172,14 @@ service cloud.firestore {
     // read by deliverOutbox (Cloud Functions, Admin SDK); never by a client.
     match /pushTokens/{tokenId} {
       allow read, write: if false;
+    }
+
+    // Touched by syncClaims (Cloud Functions) after it changes an account's
+    // claims; the signed-in app listens to its own and refreshes its ID token.
+    // Keyed by Auth uid.
+    match /claimsSync/{uid} {
+      allow read: if signedIn() && request.auth.uid == uid;
+      allow write: if false;
     }
 
     // Write-once activity log, readable by the System Administrator.

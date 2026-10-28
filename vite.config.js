@@ -1,4 +1,5 @@
 import { defineConfig } from 'vite'
+import { configDefaults } from 'vitest/config'
 import react from '@vitejs/plugin-react'
 import { VitePWA } from 'vite-plugin-pwa'
 
@@ -70,5 +71,7 @@ export default defineConfig({
   test: {
     // Never let a test reach Firebase, whatever .env says.
     env: { VITE_BACKEND: 'local', VITE_USE_EMULATORS: 'false' },
+    // Security-rules tests need the emulators running: npm run test:rules.
+    exclude: [...configDefaults.exclude, 'rules-tests/**'],
   },
 })

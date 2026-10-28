@@ -13,18 +13,20 @@
 // trusts a snapshot handed in by the caller.
 
 import { db, files } from '../backend/index.js'
-import { filePath } from '../backend/files.js'
+import { isFilePathOf } from '../backend/filePath.js'
+import { uploadSubmissionFile } from './submissionFile.js'
 import { sampleFileFor } from '../backend/sampleFiles.js'
 import { GoogleGenAI } from '@google/genai'
 import { normalizePosition, anchorOf } from '../domain/annotations.js'
+import { pdfProblem } from '../domain/uploads.js'
 import {
   bundle, current, authorizeOn, authorizeInstitution, perform, logAudit, logHistory, notify, sendMail,
   assigneeIds, memberIds, latestOf, holdersOf, resolveActor,
 } from './core.js'
 import {
-  DOC_STATUS, DOC_TYPES, DECISIONS, FORMS, AI_MILESTONES, AI_DISCLOSURE, VERDICTS, PROGRAMS,
+  DOC_STATUS, DOC_TYPES, DECISIONS, FORMS, AI_MILESTONES, AI_DISCLOSURE, AI_PLACEHOLDER_NOTICE, VERDICTS, PROGRAMS,
   GLOBAL_ROLES as G, PROJECT_ROLES as P, PANEL_ROLES, ACCOUNT_STATUS, LINK_TYPES, accountType, normalizeEmail,
-  isPdfFile, isVideoLink, topicsProblem, MAX_PDF_MB, COURSES, CAPSTONE2_MILESTONES, normalizeSection, parseSection, sectionProblem, yearLevelOf,
+  isVideoLink, isPdfFile, topicsProblem, COURSES, CAPSTONE2_MILESTONES, normalizeSection, parseSection, sectionProblem, yearLevelOf,
   EMAIL_DOMAINS,
 } from '../domain/constants.js'
 import {
@@ -248,10 +250,13 @@ export async function unassignRole(actor, _snap, projectId, assignment) {
 // --- Documents ---------------------------------------------------------------
 
 /**
- * Submissions are immutable. A new upload never overwrites the previous file;
- * it creates a new version and marks its predecessor Superseded.
+ * Every check a submission must pass before any bytes move, or it throws.
+ * submitDocument runs it; so does the Firebase client (api.js) before it
+ * uploads, so a refused submission leaves no file behind.
+ * `input.storagePath` marks a file already uploaded (Firebase build); the
+ * service then checks the stored object instead of a File (files.verify).
  */
-export async function submitDocument(actor, _snap, projectId, input) {
+export function checkSubmission(actor, projectId, input) {
   const { b, hat, actor: me, snap } = authorizeOn(actor, projectId, 'submitDocument')
   if (!allowedDocTypes(b.project.currentStage, b).includes(input.docType)) {
     throw new Error(`${input.docType} is not accepted at ${stageLabel(b.project.currentStage)}.`)
@@ -260,27 +265,56 @@ export async function submitDocument(actor, _snap, projectId, input) {
   if (blocked) throw new Error(blocked)
   const isLink = LINK_TYPES.includes(input.docType)
   if (isLink && !isVideoLink(input.link)) throw new Error('Enter the full link to the hosted video, starting with https://.')
-  if (!isLink && !input.fileName) throw new Error('Attach the PDF file.')
-  if (!isLink && !isPdfFile(input.fileName, input.fileType)) throw new Error('Only PDF files can be submitted.')
-  if (!isLink && (input.file?.size ?? input.fileSize ?? 0) > MAX_PDF_MB * 1024 * 1024) {
-    throw new Error(`The file is larger than ${MAX_PDF_MB} MB.`)
+  const uploaded = !isLink && input.storagePath != null
+  if (uploaded) {
+    if (!isFilePathOf(projectId, input.storagePath)) throw new Error('That file is not one of this project’s uploads.')
+    if (!isPdfFile(input.fileName)) throw new Error('Only PDF files can be submitted.')
+    if ((current().documents ?? []).some(d => d.storagePath === input.storagePath)) {
+      throw new Error('That file is already recorded as a version. Submit a new upload.')
+    }
+  } else if (!isLink) {
+    // The file itself is the source of truth — its name, type, size and bytes —
+    // never fields the caller describes it with.
+    const quick = pdfProblem(input.file)
+    if (quick) throw new Error(quick)
   }
   const isTopics = input.docType === DOC_TYPES.TOPIC_PROPOSAL
   if (isTopics) {
     const problem = topicsProblem(input.topics)
     if (problem) throw new Error(problem)
   }
+  return { b, hat, me, snap, isLink, isTopics, uploaded }
+}
 
-  // The bytes go to the file store first, at a path no other version uses: if
-  // the upload fails nothing is recorded, and nothing can overwrite a file.
-  // (Service tests submit the name and size only.)
-  const storagePath = !isLink && input.file
-    ? await files.put(filePath(projectId, input.fileName), input.file)
-    : null
+/**
+ * Submissions are immutable. A new upload never overwrites the previous file;
+ * it creates a new version and marks its predecessor Superseded.
+ */
+export async function submitDocument(actor, _snap, projectId, input) {
+  const { b, hat, me, snap, isLink, isTopics, uploaded } = checkSubmission(actor, projectId, input)
+  const file = isLink || uploaded ? null : input.file
+
+  // The bytes are read (is it really a PDF? its fingerprint) and go to the
+  // file store first, at a path no other version uses: if either fails nothing
+  // is recorded, and nothing can overwrite a file. Both run under the
+  // request's key, so a double-click uploads once. If the record then fails to
+  // save, the file stays unreferenced — files are never deleted.
+  // Already uploaded (Firebase build): the stored object is checked instead —
+  // its owner, project, type and bytes (files.verify).
+  const upload = async () => {
+    if (isLink) return { storagePath: null, scan: null, fileName: null }
+    if (uploaded) {
+      const scan = await files.verify(input.storagePath, { projectId, docType: input.docType, uploadedBy: me.id, fileName: input.fileName })
+      return { storagePath: input.storagePath, scan, fileName: String(input.fileName).trim() }
+    }
+    return uploadSubmissionFile(files, {
+      projectId, docType: input.docType, userId: me.id, file, onProgress: input.onProgress, signal: input.signal,
+    })
+  }
 
   // Keyed per member: a double-click records once, while two members
   // uploading at the same moment both land, as consecutive versions.
-  return perform(`submitDocument:${projectId}:${input.docType}:${me.id}`, async () => {
+  return perform(`submitDocument:${projectId}:${input.docType}:${me.id}`, async ({ storagePath, scan, fileName }) => {
     // Number the version inside the transaction, from the store as it is now —
     // transactions queue, so concurrent uploads never share a version number.
     const previous = latestOf(bundle(current(), projectId), input.docType)
@@ -288,8 +322,9 @@ export async function submitDocument(actor, _snap, projectId, input) {
     const doc = await db.add('documents', {
       projectId, docType: input.docType, versionNumber: version,
       title: input.title?.trim() || `${input.docType} v${version}`,
-      fileName: isLink ? null : input.fileName.trim(),
-      fileSize: isLink ? null : (input.fileSize ?? 0),
+      fileName,
+      fileSize: isLink ? null : scan.size,
+      sha256: isLink ? null : scan.sha256,
       storagePath,
       link: isLink ? input.link.trim() : null,
       topics: isTopics ? input.topics.map(t => t.trim()) : null,
@@ -340,7 +375,7 @@ export async function submitDocument(actor, _snap, projectId, input) {
       })
     }
     return doc
-  })
+  }, upload)
 }
 
 /**
@@ -534,6 +569,10 @@ async function summarizeForMilestone(actor, hat, b, defenseType) {
     contributions: 'Contributions extracted from manuscript.',
   }
   
+  // What actually happened, for the record and the audit trail: whether text
+  // left for Gemini, and whether a summary came back.
+  let transmitted = false
+  let generated = false
   const apiKey = typeof import.meta !== 'undefined' ? import.meta.env?.VITE_GEMINI_API_KEY : null
   if (text && apiKey && !isTest) {
     try {
@@ -546,6 +585,7 @@ async function summarizeForMilestone(actor, hat, b, defenseType) {
       Manuscript text:
       ${text.substring(0, 30000)}`
       
+      transmitted = true
       const response = await ai.models.generateContent({
         model: 'gemini-1.5-flash',
         contents: prompt,
@@ -555,6 +595,7 @@ async function summarizeForMilestone(actor, hat, b, defenseType) {
       })
       
       structured = JSON.parse(response.text)
+      generated = true
     } catch (e) {
       console.warn('Gemini API Error:', e)
       structured.background = 'Error calling Gemini API: ' + e.message
@@ -565,15 +606,15 @@ async function summarizeForMilestone(actor, hat, b, defenseType) {
   const row = await db.add('aiSummaries', {
     projectId: b.project.id, documentId: doc.id, documentVersion: doc.versionNumber,
     milestone, generatedAt: now(),
-    model: 'Gemini 2.5 Flash',
-    label: AI_DISCLOSURE,
+    model: generated ? 'Gemini 1.5 Flash' : 'None (placeholder)',
+    label: generated ? AI_DISCLOSURE : AI_PLACEHOLDER_NOTICE,
     structured,
   })
   
   await logAudit({
     actorId: actor.id, hat, action: 'AI_SUMMARY_GENERATED', entityType: 'aiSummaries', entityId: row.id,
     projectId: b.project.id, before: null, after: { documentId: doc.id, milestone },
-    meta: { transmittedTo: 'Gemini Flash API' },
+    meta: { transmittedTo: transmitted ? 'Gemini Flash API' : null, generated },
   })
   return row
 }

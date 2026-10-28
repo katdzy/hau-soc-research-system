@@ -22,7 +22,7 @@ vi.mock('firebase/firestore', () => {
     connectFirestoreEmulator: () => {},
     collection: (_db, name) => ({ name }),
     doc: (_db, name, id) => ({ name, id: id ?? `auto${++n}` }),
-    onSnapshot: (ref, onNext) => { fake.listeners.set(ref.name, onNext); return () => {} },
+    onSnapshot: (ref, options, onNext) => { fake.listeners.set(ref.name, onNext ?? options); return () => {} },
     writeBatch: () => {
       const writes = []
       return {

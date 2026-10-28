@@ -1,5 +1,5 @@
 import { useApp } from '../../state/AppContext.jsx'
-import { signForm } from '../../services/actions.js'
+import { signForm } from '../../services/api.js'
 import { canSign } from '../../domain/forms.js'
 import { useAction, ActionError } from '../useAction.jsx'
 import { Section, Empty, Badge, fmtDateTime } from '../ui.jsx'

@@ -145,6 +145,10 @@ export const AI_DISCLOSURE =
   'AI-generated summary (Gemini Flash). Machine-generated and for decision support only — ' +
   'it is not an evaluation and does not replace reading the manuscript.'
 
+/** Shown instead when no model ran (no key, no extractable text, or the call failed). */
+export const AI_PLACEHOLDER_NOTICE =
+  'No AI summary was generated for this version — the sections below are placeholders. Read the manuscript.'
+
 // S6.5 — the Capstone 2 milestones Instructor 2 confirms, one flag each.
 export const CAPSTONE2_MILESTONES = [
   { key: 'revisedManuscript', label: 'Revised manuscript' },

@@ -1,0 +1,13 @@
+[
+  {
+    "origin": [
+      "https://hausoc-research.web.app",
+      "https://hausoc-research.firebaseapp.com",
+      "http://localhost:5180",
+      "http://localhost:4173"
+    ],
+    "method": ["GET"],
+    "responseHeader": ["Content-Type", "Content-Length"],
+    "maxAgeSeconds": 3600
+  }
+]

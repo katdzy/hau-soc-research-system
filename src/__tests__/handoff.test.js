@@ -6,6 +6,7 @@
 // Set HANDOFF_TRACE=<file> to write the full timeline as JSON.
 
 import { describe, it, expect, beforeAll } from 'vitest'
+import { pdfFile } from './pdfFixture.js'
 import { writeFileSync } from 'node:fs'
 import { db } from '../backend/index.js'
 import { buildSeed } from '../backend/seed.js'
@@ -24,7 +25,7 @@ import { DOC_TYPES as T, DOC_STATUS, DECISIONS, VERDICTS, FORMS, PROJECT_ROLES a
 const snap = () => db.snapshot()
 const user = (id) => snap().users.find(u => u.id === id)
 const as = (id) => { setSessionUserId(id); return user(id) }
-const pdf = (name) => ({ fileName: name, fileSize: 120000, fileType: 'application/pdf' })
+const pdf = (name) => ({ file: pdfFile(name, 120000) })
 const ago = (min) => new Date(Date.now() - min * 6e4).toISOString()
 const TOPICS = ['Barangay Health Queue', 'Tricycle Fare Estimator', 'Campus Lost-and-Found', 'Thesis Archive Search', 'Org Budget Tracker']
 

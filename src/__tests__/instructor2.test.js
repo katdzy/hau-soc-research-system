@@ -5,6 +5,7 @@
 // and the multi-hat isolation.
 
 import { describe, it, expect, beforeAll, beforeEach } from 'vitest'
+import { pdfFile } from './pdfFixture.js'
 import { db } from '../backend/index.js'
 import { buildSeed, SEED_ROLES } from '../backend/seed.js'
 import { applyStage } from '../backend/stageBuilder.js'
@@ -31,7 +32,7 @@ const at = (pid, stage, opts = {}) => load(applyStage(buildSeed(), pid, stage, {
 const recipients = (pid, event) => snap().outbox.filter(m => m.projectId === pid && m.event === event).flatMap(m => m.userIds)
 const audit = (action) => snap().auditLogs.filter(a => a.action === action)
 const row = (uid, pid) => worklist(snap(), user(uid)).find(r => r.project.id === pid)
-const pdf = { fileName: 'r.pdf', fileSize: 1000, fileType: 'application/pdf' }
+const pdf = { file: pdfFile('r.pdf') }
 
 /** G3 at Implementation with its milestones and readiness cleared, as if just routed. */
 async function g3Implementation() {

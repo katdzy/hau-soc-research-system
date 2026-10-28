@@ -4,6 +4,7 @@
 // NEW-45), what the URO must not do, and T11 / T12.
 
 import { describe, it, expect, beforeAll, beforeEach } from 'vitest'
+import { pdfFile } from './pdfFixture.js'
 import { db } from '../backend/index.js'
 import { buildSeed, SEED_ROLES } from '../backend/seed.js'
 import { applyStage } from '../backend/stageBuilder.js'
@@ -28,7 +29,7 @@ const at = (pid, stage, opts = {}) => load(applyStage(buildSeed(), pid, stage, {
 const recipients = (pid, event) => snap().outbox.filter(m => m.projectId === pid && m.event === event).flatMap(m => m.userIds)
 const audit = (action) => snap().auditLogs.filter(a => a.action === action)
 const latest = (pid, t) => b(pid).documents.filter(d => d.docType === t).sort((x, y) => y.versionNumber - x.versionNumber)[0]
-const pdf = { fileName: 'certificate.pdf', fileSize: 1000, fileType: 'application/pdf' }
+const pdf = { file: pdfFile('certificate.pdf') }
 const inQueue = (uid, name) => worklist(snap(), user(uid))
   .filter(r => r.gates.some(g => g.gate.queue === name && !g.blocker)).map(r => r.project.id)
 const EDITOR = T.EDITORS_CERTIFICATE

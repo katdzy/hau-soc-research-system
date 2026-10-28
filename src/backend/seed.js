@@ -35,8 +35,11 @@ const LAST_TERM = 'AY 2025–2026, 2nd Semester'
 const days = (n) => new Date(Date.now() + n * 864e5).toISOString()
 const keyBy = (rows) => Object.fromEntries(rows.map(r => [r.id, r]))
 
+// `demo: true` — a seeded account. Its address is on the university's real
+// domains and may be someone's: mail for it is never sent there
+// (functions/mailRouting.js; MAIL_REDIRECT_TO sends it to an inbox you control).
 const user = (id, name, email, globalRoles, extra = {}) => ({
-  id, name, email, globalRoles, programScope: [], status: 'Active', emailVerified: true, verifyToken: null,
+  id, name, email, globalRoles, programScope: [], status: 'Active', emailVerified: true, verifyToken: null, demo: true,
   idNumber: '', program: '', yearLevel: '', block: '', createdAt: days(-200), ...extra,
 })
 const student = (id, name, email, idNumber, block) =>

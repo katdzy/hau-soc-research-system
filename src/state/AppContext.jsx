@@ -1,10 +1,11 @@
 import { createContext, useContext, useEffect, useMemo, useRef, useState } from 'react'
-import { db, backendName, isLiveBackend } from '../backend/index.js'
+import { db, files, backendName, isLiveBackend } from '../backend/index.js'
 import { buildSeed } from '../backend/seed.js'
 import { emptyStore, COLLECTIONS } from '../backend/schema.js'
 import { getSessionUserId, setSessionUserId } from './session.js'
-import { flagOverdueRevisions } from '../services/actions.js'
+import { flagOverdueRevisions } from '../services/api.js'
 import { unregisterDevice } from '../services/push.js'
+import { followClaims } from '../services/claims.js'
 
 const AppCtx = createContext(null)
 
@@ -25,6 +26,9 @@ export function AppProvider({ children }) {
   const seeding = useRef(false)
 
   useEffect(() => db.subscribe((next) => { setSnap(next); setReady(true) }), [])
+
+  // Firebase build: refresh the ID token whenever the rules' claims change.
+  useEffect(() => { followClaims() }, [])
 
   const usersList = useMemo(() => ensureArray(snap?.users), [snap?.users])
 
@@ -54,11 +58,13 @@ export function AppProvider({ children }) {
 
   const value = useMemo(() => ({
     snap, ready, me, backendName,
-    signIn: (id) => { setSessionUserId(id); setUserId(id) },
+    // A change of account drops the files this tab already fetched (files.js).
+    signIn: (id) => { files.forget(); setSessionUserId(id); setUserId(id) },
     // A shared device stops receiving this account's push notifications first,
     // while the session can still prove whose token it is.
     signOut: async () => {
       await unregisterDevice().catch(() => {})
+      files.forget()
       setSessionUserId(null); setUserId(null)
     },
     // Dev tools only (R9) — the production UI never calls these. They replace

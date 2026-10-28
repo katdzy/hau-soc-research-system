@@ -1,8 +1,10 @@
 // Non-destructive annotation (S3.6, S4.2, S5.5, S6.4, S7.5): a note pinned to a
 // passage or area of one page, stored beside the file, never in it.
 
-import { describe, it, expect, beforeAll, beforeEach } from 'vitest'
-import { db } from '../backend/index.js'
+import { describe, it, expect, beforeAll, beforeEach, vi } from 'vitest'
+import { createHash } from 'node:crypto'
+import { pdfFile, otherFile } from './pdfFixture.js'
+import { db, files } from '../backend/index.js'
 import { buildSeed, SEED_ROLES } from '../backend/seed.js'
 import { applyStage } from '../backend/stageBuilder.js'
 import { scenarioStore } from '../dev/scenarios.js'
@@ -22,7 +24,7 @@ const at = (pid, stage) => load(applyStage(buildSeed(), pid, stage, { roles: SEE
 // G1 at S4.1: the group has just submitted a draft for the Adviser.
 const draftAtS41 = async () => {
   await at('p_g1', 'PROPOSAL_DEVELOPMENT')
-  return submitDocument(as('s_kilo'), null, 'p_g1', { docType: T.PROPOSAL_MANUSCRIPT, fileName: 'draft.pdf', fileSize: 1000, fileType: 'application/pdf' })
+  return submitDocument(as('s_kilo'), null, 'p_g1', { docType: T.PROPOSAL_MANUSCRIPT, file: pdfFile('draft.pdf') })
 }
 
 const passage = { kind: 'text', page: 3, rects: [{ x: 0.1, y: 0.2, w: 0.7, h: 0.02 }, { x: 0.1, y: 0.22, w: 0.3, h: 0.02 }], quote: '  purposive   sampling was used ' }
@@ -88,7 +90,7 @@ describe('addAnnotation', () => {
 
   it('T6 — Instructor 2 still cannot annotate, position or not', async () => {
     await at('p_g3', 'IMPLEMENTATION')
-    const doc = await submitDocument(as('s_quebec'), null, 'p_g3', { docType: T.FINAL_MANUSCRIPT, fileName: 'd.pdf', fileSize: 1000, fileType: 'application/pdf' })
+    const doc = await submitDocument(as('s_quebec'), null, 'p_g3', { docType: T.FINAL_MANUSCRIPT, file: pdfFile('d.pdf') })
     await expect(addAnnotation(as('f_charlie'), null, 'p_g3', doc.id, { text: 'x', position: passage })).rejects.toThrow(/No role you hold/)
     // The Adviser, at the same stage and on the same version, can (S6.4).
     await expect(addAnnotation(as('f_delta'), null, 'p_g3', doc.id, { text: 'x', position: passage })).resolves.toMatchObject({ authorRole: 'Adviser' })
@@ -108,7 +110,7 @@ describe('addAnnotation', () => {
 })
 
 describe('across the version loop and the verdict (Prompt 11 handoffs)', () => {
-  const pdf = { fileName: 'cp.pdf', fileSize: 1000, fileType: 'application/pdf' }
+  const pdf = { file: pdfFile('cp.pdf') }
 
   it('S3.6 — notes on a returned concept paper stay readable on v1; v2 starts clean and v1 takes no new ones', async () => {
     await submitReview(as('f_bravo'), null, 'p_g1', 'd_g1_topic', { decision: DECISIONS.APPROVE, approvedTopic: 'Library Seat Availability Monitor' })
@@ -141,18 +143,62 @@ describe('across the version loop and the verdict (Prompt 11 handoffs)', () => {
 })
 
 describe('submitDocument keeps the file beside the record', () => {
-  const pdf = (size) => ({ fileName: 'Chapters 1-3.pdf', fileSize: size, fileType: 'application/pdf' })
+  const submit = (input) => submitDocument(as('s_kilo'), null, 'p_g1', { docType: T.PROPOSAL_MANUSCRIPT, ...input })
+  const versions = () => snap().documents.filter(d => d.projectId === 'p_g1' && d.docType === T.PROPOSAL_MANUSCRIPT).length
 
-  it('stores the bytes at a path of their own', async () => {
+  it('stores the bytes at a path of their own, and records what was stored', async () => {
     await at('p_g1', 'PROPOSAL_DEVELOPMENT')
-    const file = new Blob(['%PDF-1.4'], { type: 'application/pdf' })
-    const doc = await submitDocument(as('s_kilo'), null, 'p_g1', { docType: T.PROPOSAL_MANUSCRIPT, file, ...pdf(file.size) })
+    const file = pdfFile('Chapters 1-3.pdf', 2048)
+    const put = vi.spyOn(files, 'put')
+    const progress = []
+    const doc = await submit({ file, onProgress: (f) => progress.push(f) })
     expect(doc.storagePath).toMatch(/^projects\/p_g1\/documents\/\w+-Chapters_1-3\.pdf$/)
+    expect(doc).toMatchObject({ fileName: 'Chapters 1-3.pdf', fileSize: 2048 })
+    expect(doc.sha256).toBe(createHash('sha256').update(Buffer.from(await file.arrayBuffer())).digest('hex'))
+    expect(put).toHaveBeenCalledOnce()
+    expect(put.mock.calls[0][2].metadata).toEqual({
+      projectId: 'p_g1', docType: T.PROPOSAL_MANUSCRIPT, uploadedBy: 's_kilo', sha256: doc.sha256,
+    })
+    expect(progress.at(-1)).toBe(1)
+    put.mockRestore()
   })
 
-  it(`rejects a file over ${MAX_PDF_MB} MB`, async () => {
+  it('takes the file, not what the caller says about it', async () => {
     await at('p_g1', 'PROPOSAL_DEVELOPMENT')
-    await expect(submitDocument(as('s_kilo'), null, 'p_g1', { docType: T.PROPOSAL_MANUSCRIPT, ...pdf(MAX_PDF_MB * 1024 * 1024 + 1) }))
-      .rejects.toThrow(`larger than ${MAX_PDF_MB} MB`)
+    await expect(submit({ fileName: 'draft.pdf', fileSize: 1000, fileType: 'application/pdf' })).rejects.toThrow(/Attach the PDF/)
+    const doc = await submit({ file: pdfFile('real.pdf', 4096), fileName: 'other.pdf', fileSize: 1 })
+    expect(doc).toMatchObject({ fileName: 'real.pdf', fileSize: 4096 })
+  })
+
+  it('rejects a renamed file, an empty file and one over the limit — before anything is stored', async () => {
+    await at('p_g1', 'PROPOSAL_DEVELOPMENT')
+    const put = vi.spyOn(files, 'put')
+    await expect(submit({ file: otherFile('thesis.pdf', 'application/pdf', 'PK\u0003\u0004 a zipped .docx') })).rejects.toThrow(/not a PDF/)
+    await expect(submit({ file: new File([], 'empty.pdf', { type: 'application/pdf' }) })).rejects.toThrow(/empty/)
+    await expect(submit({ file: pdfFile('big.pdf', MAX_PDF_MB * 1024 * 1024 + 1) })).rejects.toThrow(`larger than ${MAX_PDF_MB} MB`)
+    expect(put).not.toHaveBeenCalled()
+    put.mockRestore()
+  })
+
+  it('a double-click uploads and records once', async () => {
+    await at('p_g1', 'PROPOSAL_DEVELOPMENT')
+    const before = versions()
+    const put = vi.spyOn(files, 'put')
+    const file = pdfFile('twice.pdf')
+    const [first, second] = await Promise.allSettled([submit({ file }), submit({ file })])
+    expect(first.status).toBe('fulfilled')
+    expect(second.reason?.message).toMatch(/already being processed/)
+    expect(put).toHaveBeenCalledOnce()
+    expect(versions()).toBe(before + 1)
+    put.mockRestore()
+  })
+
+  it('a cancelled upload records nothing', async () => {
+    await at('p_g1', 'PROPOSAL_DEVELOPMENT')
+    const before = versions()
+    const controller = new AbortController()
+    controller.abort()
+    await expect(submit({ file: pdfFile('stop.pdf'), signal: controller.signal })).rejects.toThrow(/cancelled/)
+    expect(versions()).toBe(before)
   })
 })

@@ -3,6 +3,7 @@
 // Approval Sheet, each through the write path, with the handoff it triggers.
 
 import { describe, it, expect, beforeAll, beforeEach } from 'vitest'
+import { pdfFile } from './pdfFixture.js'
 import { db } from '../backend/index.js'
 import { buildSeed, SEED_ROLES } from '../backend/seed.js'
 import { applyStage } from '../backend/stageBuilder.js'
@@ -25,7 +26,7 @@ const as = (id) => { setSessionUserId(id); return user(id) }
 const load = async (store) => { await db.replaceAll(store); setSessionUserId(null) }
 const b = (pid) => bundle(snap(), pid)
 const at = (pid, stage, opts = {}) => load(applyStage(buildSeed(), pid, stage, { roles: SEED_ROLES[pid], ...opts }))
-const pdf = (name = 'file.pdf') => ({ fileName: name, fileSize: 1000, fileType: 'application/pdf' })
+const pdf = (name = 'file.pdf') => ({ file: pdfFile(name) })
 const recipients = (pid, event) => snap().outbox.filter(m => m.projectId === pid && m.event === event).flatMap(m => m.userIds)
 const tasksOf = (uid, pid) => worklist(snap(), user(uid)).find(r => r.project.id === pid)?.tasks ?? []
 

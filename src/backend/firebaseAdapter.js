@@ -89,7 +89,11 @@ async function start() {
 
   // Mirror every collection locally so the UI keeps one synchronous snapshot.
   for (const name of COLLECTIONS) {
-    fb.onSnapshot(fb.collection(db, name), (snap) => {
+    // Metadata changes too: a collection empty in the cache gets its first
+    // snapshot from the cache, and when the server confirms it is still empty
+    // nothing but the metadata changes — without this, that event never
+    // comes and a reload waits on the loading screen for good.
+    fb.onSnapshot(fb.collection(db, name), { includeMetadataChanges: true }, (snap) => {
       server[name] = new Map(snap.docs.map(d => [d.id, { id: d.id, ...d.data() }]))
       rebuild(name)
       if (!snap.metadata.fromCache || !snap.empty) loaded.add(name)
@@ -150,6 +154,17 @@ export const firebaseAdapter = {
     subscribers.add(fn)
     init().then(() => { if (isReady()) fn(mirror) })
     return () => subscribers.delete(fn)
+  },
+
+  /** One document outside the mirrored collections (e.g. claimsSync/{uid}): fn(doc | null) on each change. → stop */
+  watch(collection, id, fn) {
+    let stop = null
+    let stopped = false
+    init().then(({ db, doc, onSnapshot }) => {
+      if (stopped) return
+      stop = onSnapshot(doc(db, collection, id), (s) => fn(s.exists() ? { id: s.id, ...s.data() } : null), () => {})
+    })
+    return () => { stopped = true; stop?.() }
   },
 
   async add(collection, data) {

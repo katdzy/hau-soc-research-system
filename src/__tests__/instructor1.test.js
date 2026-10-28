@@ -4,6 +4,7 @@
 // and Instructor 2, the multi-hat isolation, and the "Must NOT" list.
 
 import { describe, it, expect, beforeAll, beforeEach } from 'vitest'
+import { pdfFile } from './pdfFixture.js'
 import { db } from '../backend/index.js'
 import { buildSeed, SEED_ROLES } from '../backend/seed.js'
 import { applyStage } from '../backend/stageBuilder.js'
@@ -26,7 +27,7 @@ const as = (id) => { setSessionUserId(id); return user(id) }
 const load = async (store) => { await db.replaceAll(store); setSessionUserId(null) }
 const b = (pid) => bundle(snap(), pid)
 const at = (pid, stage, opts = {}) => load(applyStage(buildSeed(), pid, stage, { roles: SEED_ROLES[pid], ...opts }))
-const pdf = { fileName: 'draft.pdf', fileSize: 1000, fileType: 'application/pdf' }
+const pdf = { file: pdfFile('draft.pdf') }
 const mailsFor = (event) => snap().outbox.filter(m => m.event === event)
 const audit = (action) => snap().auditLogs.filter(a => a.action === action)
 

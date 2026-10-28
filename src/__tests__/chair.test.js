@@ -3,6 +3,7 @@
 // FM-AAC-SOC-2004 and its effect on every other role.
 
 import { describe, it, expect, beforeAll, beforeEach } from 'vitest'
+import { pdfFile } from './pdfFixture.js'
 import { db } from '../backend/index.js'
 import { buildSeed, SEED_ROLES } from '../backend/seed.js'
 import { applyStage } from '../backend/stageBuilder.js'
@@ -79,7 +80,7 @@ describe('S5.6 — recording the proposal verdict (G2)', () => {
     expect(recipients('p_g2', 'Re-defense')).toEqual(expect.arrayContaining([...students(), 'f_charlie']))
     // Instructor 1 cannot route to Capstone 2 during a re-defense.
     await expect(runGate(as('f_bravo'), null, 'p_g2', { action: 'CLOSE_PROPOSAL_REVISION' })).rejects.toThrow(/current stage/)
-    const rev = await submitDocument(as('s_november'), null, 'p_g2', { docType: T.REVISED_MANUSCRIPT, fileName: 'r.pdf', fileType: 'application/pdf' })
+    const rev = await submitDocument(as('s_november'), null, 'p_g2', { docType: T.REVISED_MANUSCRIPT, file: pdfFile('r.pdf') })
     await submitReview(as('f_charlie'), null, 'p_g2', rev.id, { decision: DECISIONS.APPROVE })
     expect(b('p_g2').project).toMatchObject({ currentStage: 'PROPOSAL_DEFENSE_SCHEDULING', revisionDeadline: null })
     expect(b('p_g2').defenses.find(d => d.verdict).revisionStatus).toBe('Completed')
@@ -145,7 +146,7 @@ describe('S7.6 — the final verdict (G2 at Final Defense)', () => {
     expect(b('p_g2').project.currentStage).toBe('FINAL_REVISION')
     // The panel's FM-2004 sign-off does not apply; nothing opens Clearance.
     expect(canSign(b('p_g2').forms.filter(f => f.formType === FORMS.F2004.code).at(-1), user('f_echo'), b('p_g2')).ok).toBe(false)
-    const rev = await submitDocument(as('s_november'), null, 'p_g2', { docType: T.REVISED_MANUSCRIPT, fileName: 'r.pdf', fileType: 'application/pdf' })
+    const rev = await submitDocument(as('s_november'), null, 'p_g2', { docType: T.REVISED_MANUSCRIPT, file: pdfFile('r.pdf') })
     await submitReview(as('f_charlie'), null, 'p_g2', rev.id, { decision: DECISIONS.APPROVE })
     expect(b('p_g2').project.currentStage).toBe('FINAL_DEFENSE_SCHEDULING')
     expect(canDo(user('f_foxtrot'), 'scheduleDefense', b('p_g2')).ok).toBe(true)
@@ -177,7 +178,7 @@ describe('NEW-42 — correcting a verdict (once, within 24 hours, before anyone 
     await recordVerdict(as('f_alpha'), null, 'p_g2', { verdict: VERDICTS.MINOR, remarks: 'x' })
     await correctVerdict(as('f_alpha'), null, 'p_g2', { defenseId: recorded().id, verdict: VERDICTS.REDEFENSE, remarks: 'Demo failed.', reason: 'Wrong verdict.' })
     expect(b('p_g2').forms.find(f => f.formType === FORMS.F2004.code).signatories.map(x => x.role)).toEqual([P.PANEL_CHAIR])
-    const rev = await submitDocument(as('s_november'), null, 'p_g2', { docType: T.REVISED_MANUSCRIPT, fileName: 'r.pdf', fileType: 'application/pdf' })
+    const rev = await submitDocument(as('s_november'), null, 'p_g2', { docType: T.REVISED_MANUSCRIPT, file: pdfFile('r.pdf') })
     await submitReview(as('f_charlie'), null, 'p_g2', rev.id, { decision: DECISIONS.APPROVE })
     expect(b('p_g2').project.currentStage).toBe('PROPOSAL_DEFENSE_SCHEDULING')
   })
@@ -186,7 +187,7 @@ describe('NEW-42 — correcting a verdict (once, within 24 hours, before anyone 
     await recordVerdict(as('f_alpha'), null, 'p_g2', { verdict: VERDICTS.MINOR, remarks: 'x' })
     const input = () => ({ defenseId: recorded().id, verdict: VERDICTS.MAJOR, remarks: 'y', reason: 'z' })
     await expect(correctVerdict(as('f_echo'), null, 'p_g2', input())).rejects.toThrow()
-    await submitDocument(as('s_november'), null, 'p_g2', { docType: T.REVISED_MANUSCRIPT, fileName: 'r.pdf', fileType: 'application/pdf' })
+    await submitDocument(as('s_november'), null, 'p_g2', { docType: T.REVISED_MANUSCRIPT, file: pdfFile('r.pdf') })
     await expect(correctVerdict(as('f_alpha'), null, 'p_g2', input())).rejects.toThrow(/already uploaded a revised manuscript/)
 
     await load(buildSeed())

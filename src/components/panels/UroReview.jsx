@@ -4,7 +4,7 @@ import { can } from '../../domain/caac.js'
 import {
   stageByKey, uroReturnOf, uroReturnOutstanding, uroReturnBlocker, uroReturnableTypes, returnResetsSigning,
 } from '../../domain/stages.js'
-import { returnToGroup } from '../../services/actions.js'
+import { returnToGroup } from '../../services/api.js'
 import { useAction, ActionError } from '../useAction.jsx'
 import { Section, Badge, Field, docTone, fmtDate, fmtDateTime } from '../ui.jsx'
 import { Act } from '../ViewOnly.jsx'

@@ -13,7 +13,7 @@ import { bundle } from '../services/core.js'
 import { assignRole, unassignRole, runGate, scheduleDefense, recordVerdict, submitReview } from '../services/actions.js'
 import { worklist, officeQueues } from '../services/worklist.js'
 import { canView, canDo, viewBundle } from '../domain/guard.js'
-import { DOC_STATUS, FORMS, GLOBAL_ROLES as G, PROJECT_ROLES as P } from '../domain/constants.js'
+import { DOC_STATUS, FORMS, GLOBAL_ROLES as G, PROJECT_ROLES as P, AI_PLACEHOLDER_NOTICE } from '../domain/constants.js'
 
 const snap = () => db.snapshot()
 const user = (id) => snap().users.find(u => u.id === id)
@@ -117,6 +117,15 @@ describe('S5.1 / S5.2 — proposal panel and schedule', () => {
     // Instructor 1 cannot schedule it (NEW-2 default).
     await load(buildSeed())
     await expect(scheduleDefense(as('f_npc_emc0'), null, 'p_emc2', { scheduledAt: new Date().toISOString(), venue: 'x' })).rejects.toThrow()
+  })
+
+  it('a summary no model wrote says so — in the record and in the audit trail', async () => {
+    await scheduleDefense(as('f_npc_emc1'), null, 'p_emc2', { scheduledAt: new Date(Date.now() + 5 * 864e5).toISOString(), venue: 'Room 305' })
+    const summaries = snap().aiSummaries.filter(s => s.projectId === 'p_emc2')
+    expect(summaries).toHaveLength(1)
+    expect(summaries[0]).toMatchObject({ model: 'None (placeholder)', label: AI_PLACEHOLDER_NOTICE })
+    const audit = snap().auditLogs.find(a => a.action === 'AI_SUMMARY_GENERATED' && a.entityId === summaries[0].id)
+    expect(audit.meta).toMatchObject({ transmittedTo: null, generated: false })
   })
 
   it('Instructor 2 assignment for Capstone 2 (OQ#5, flag INSTRUCTOR_2_ASSIGNER = PC)', async () => {
