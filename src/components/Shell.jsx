@@ -1,8 +1,9 @@
 import { Suspense, lazy, useEffect, useRef, useState } from 'react'
 import { Link, NavLink, Outlet, matchPath, useLocation, useNavigate } from 'react-router-dom'
 import { useApp } from '../state/AppContext.jsx'
-import { worklist, actionableCount } from '../services/worklist.js'
+import { actionableCount } from '../services/worklist.js'
 import { can, resolveInstitution } from '../domain/caac.js'
+import { useWorkspace } from './Workspace.jsx'
 import { ACCOUNT_STATUS, GLOBAL_ROLES as G, accountType } from '../domain/constants.js'
 import { sectionNow } from '../domain/stages.js'
 import { Avatar } from './ui.jsx'
@@ -31,7 +32,9 @@ export default function Shell() {
   // Each email addressed to me also shows as a device notification.
   useOutboxNotifications(me, snap.outbox)
 
-  const todo = actionableCount(worklist(snap, me))
+  // The "Acting as" context decides the rail and the dashboard (Figma F02).
+  const { held: contexts, current, inContext, choose } = useWorkspace()
+  const todo = actionableCount(inContext)
   const inst = resolveInstitution(me, snap)
   const projects = snap.projects ?? []
   const projectOf = (id) => projects.find(p => p.id === id)
@@ -49,22 +52,17 @@ export default function Shell() {
     ? [...(memberOf.some(m => m.projectId === openId) ? ['Group member'] : []),
        ...held.filter(a => a.projectId === openId).map(a => a.roleType)]
     : []
-  const office = officeOf(me)
-  // A faculty account with no office works from its project roles (Figma: "Instructor 1 — WD-401, NW-402").
-  const faculty = office === G.FACULTY && held.length
-    ? `${[...new Set(held.map(a => a.roleType))].join(' · ')}` : office
-  const acting = open && hereRoles.length ? `${hereRoles.join(' · ')} — ${sectionNow(open).section}` : faculty
-
-  const institutional = ['report.generate', 'records.search', 'records.manage', 'audit.view']
-    .some(c => can(inst, c))
-  const administration = ['admin.accounts', 'admin.caac', 'settings.manage'].some(c => can(inst, c))
+  const office = current?.heading ?? officeOf(me)
+  const acting = open && hereRoles.length
+    ? `${hereRoles.join(' · ')} — ${sectionNow(open).section}`
+    : current ? `${current.heading}${current.scope ? ` — ${current.scope}` : ''}` : office
   // Verified registrations waiting for the System Administrator (S0.3).
   const toActivate = can(inst, 'admin.accounts')
     ? (snap.users ?? []).filter(u => u.status === ACCOUNT_STATUS.INACTIVE && u.emailVerified).length : 0
 
   // A group member's project tabs sit in the rail, as in the wireframe's
   // student navigation (My Project · Version History · Weekly Logs · Defense).
-  const myProject = memberOf[0]?.projectId
+  const myProject = current?.member ? current.projectIds[0] : null
   const tab = new URLSearchParams(location.search).get('tab')
   const onMine = openId && openId === myProject
   const projectLink = (key, label) => {
@@ -107,7 +105,7 @@ export default function Shell() {
         <NavLink to="/" end className={link}>
           <span>Dashboard</span>{todo > 0 && <span className="count">{todo}</span>}
         </NavLink>
-        {myProject ? (
+        {myProject && (
           <>
             {projectLink(null, 'My Project')}
             {projectLink('documents', 'Version History')}
@@ -115,24 +113,13 @@ export default function Shell() {
             {projectLink('defense', 'Defense')}
             {projectLink('forms', 'Forms')}
           </>
-        ) : (
-          <NavLink to="/projects" className={link}>Projects</NavLink>
         )}
-
-        {institutional && <div className="nav-group label">Institutional</div>}
-        {can(inst, 'report.generate') && <NavLink to="/reports" className={link}>Reports</NavLink>}
-        {(can(inst, 'records.search') || can(inst, 'records.manage')) &&
-          <NavLink to="/records" className={link}>Archive</NavLink>}
-        {can(inst, 'audit.view') && <NavLink to="/audit" className={link}>Audit Log</NavLink>}
-
-        {administration && <div className="nav-group label">Administration</div>}
-        {can(inst, 'admin.accounts') && (
-          <NavLink to="/admin/accounts" className={link}>
-            <span>User Accounts</span>{toActivate > 0 && <span className="count">{toActivate}</span>}
+        {(current?.nav ?? []).map(n => (
+          <NavLink key={n.to} to={n.to} className={link}>
+            <span>{n.label}</span>
+            {n.badge === 'toActivate' && toActivate > 0 && <span className="count">{toActivate}</span>}
           </NavLink>
-        )}
-        {can(inst, 'admin.caac') && <NavLink to="/admin/caac" className={link}>Role Configuration</NavLink>}
-        {can(inst, 'settings.manage') && <NavLink to="/admin/settings" className={link}>Global Settings</NavLink>}
+        ))}
       </div>
       {railFoot}
     </>
@@ -150,8 +137,8 @@ export default function Shell() {
         </Link>
         <div className="topbar-end">
           <NotificationCenter me={me} snap={snap} pathname={here} />
-          <ActingAs acting={acting} office={office} held={held} memberOf={memberOf}
-            projectOf={projectOf} openId={openId} pathname={here} />
+          <ActingAs acting={acting} contexts={contexts} current={current} openId={openId}
+            onChoose={(key) => { choose(key); navigate('/') }} pathname={here} />
           <AccountMenu me={me} pathname={here} onSignOut={() => { signOut(); navigate('/') }} />
         </div>
       </header>
@@ -171,17 +158,22 @@ export default function Shell() {
 }
 
 /**
- * "Acting as" (Figma: CAAC role switcher). Permissions are always the Global
- * Role plus the role held on the project at its current stage, so picking a
- * project role opens that project — the context in which the role applies.
+ * "Acting as" (Figma F02: CAAC role switcher). Each entry is one role the
+ * account holds — a Global Role, or a Project-Based Role across its groups —
+ * and picking one switches the rail and the dashboard. Permissions stay the
+ * Global Role plus the role held on the project you open, at its stage.
  */
-function ActingAs({ acting, office, held, memberOf, projectOf, openId, pathname }) {
+function ActingAs({ acting, contexts, current, openId, onChoose, pathname }) {
   const ref = useDisclosure(pathname)
-
-  const entries = [
-    ...memberOf.map(m => ({ key: m.id, role: 'Group member', projectId: m.projectId })),
-    ...held.map(a => ({ key: a.id, role: a.roleType, projectId: a.projectId })),
-  ]
+  const { snap } = useApp()
+  const sections = (c) => [...new Set(c.projectIds
+    .map(id => (snap.projects ?? []).find(p => p.id === id)).filter(Boolean)
+    .map(p => sectionNow(p).section))]
+  const groups = [
+    ['Global role', contexts.filter(c => c.global)],
+    ['Project roles', contexts.filter(c => !c.global && !c.member)],
+    ['Your group', contexts.filter(c => c.member)],
+  ].filter(([, list]) => list.length)
 
   return (
     <details className="acting" ref={ref}>
@@ -190,24 +182,25 @@ function ActingAs({ acting, office, held, memberOf, projectOf, openId, pathname 
         <span className="acting-v">{acting}</span>
       </summary>
       <div className="acting-menu">
-        <div className="label">Global role</div>
-        <Link className="acting-item" to="/" aria-current={!openId ? 'true' : undefined}>
-          <strong>{office}</strong>
-          <span>Dashboard · School of Computing</span>
-        </Link>
-        {entries.length > 0 && <div className="label mt-1">Project roles</div>}
-        {entries.map(e => {
-          const p = projectOf(e.projectId)
-          return (
-            <Link key={e.key} className="acting-item" to={`/projects/${e.projectId}`}
-              aria-current={openId === e.projectId ? 'true' : undefined}>
-              <strong>{e.role} — {sectionNow(p).section}</strong>
-              <span>{p.title}</span>
-            </Link>
-          )
-        })}
+        {groups.length === 0 && <p className="acting-note">No role is assigned to this account yet.</p>}
+        {groups.map(([title, list], i) => (
+          <div key={title}>
+            <div className={`label${i ? ' mt-1' : ''}`}>{title}</div>
+            {list.map(c => {
+              const on = c.key === current?.key && !openId
+              const where = c.global ? c.scope : sections(c).join(' · ') || c.scope
+              return (
+                <button key={c.key} type="button" className="acting-item" aria-current={on ? 'true' : undefined}
+                  onClick={() => { if (ref.current) ref.current.open = false; onChoose(c.key) }}>
+                  <strong>{c.heading}</strong>
+                  <span>{where}</span>
+                </button>
+              )
+            })}
+          </div>
+        ))}
         <p className="acting-note">
-          What you can do is your Global Role plus the role you hold on the project you open, at its current stage.
+          Switching changes the sidebar and the dashboard. What you can do is your Global Role plus the role you hold on the project you open, at its current stage.
         </p>
       </div>
     </details>

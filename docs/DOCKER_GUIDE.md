@@ -7,15 +7,17 @@ This guide gets you from a fresh clone to a working local copy of the HAU-SOC sy
 | Service | What it runs | URL |
 |---|---|---|
 | `app` | Vite dev server (React, hot reload) | http://localhost:5180 |
-| `emulators` | Firebase Emulator Suite (Firestore, Auth, Storage) | http://localhost:4000 (Emulator UI) |
+| `emulators` | Firebase Emulator Suite (Firestore, Auth, Storage, Functions) | http://localhost:4000 (Emulator UI) |
+| `functions-build` | Builds the server code for the `act` Cloud Function and rebuilds it when you save a file | none |
 
-The app is wired to the emulators with the demo project `demo-local`. It never reaches the live Firebase project, whatever your `.env` says.
+The app is wired to the emulators with the demo project `demo-local`. It never reaches the live Firebase project, whatever your `.env` says. Every change the app saves goes through the `act` function on the Functions emulator, as it will in production. On the emulators no email or push notification is ever sent.
 
 ## 1. Prerequisites
 
-- Docker Desktop (Mac or Windows) or Docker Engine + Compose v2 (Linux). Check with `docker --version` and `docker compose version`.
-- Free ports: `5180`, `4000`, `4400`, `4500`, `8080`, `9150`, `9099`, `9199`.
+- Docker Desktop (Mac or Windows) or Docker Engine + Compose v2 (Linux). Check with `docker --version` and `docker compose version`. Docker Desktop must be running before any `docker` command.
+- Free ports: `5180`, `4000`, `4400`, `4500`, `5001`, `8080`, `9150`, `9099`, `9199`.
 - Git, and about 2 GB of disk for the images.
+- On Windows, read [Windows notes](#10-windows-notes) first.
 
 ## 2. Get the code
 
@@ -43,8 +45,9 @@ Never commit `.env`. It is gitignored.
 docker compose up --build
 ```
 
-- The first run is slow. It builds both images and downloads the emulator binaries.
-- The app starts only after the emulators report healthy.
+- The first run is slow. It builds the images, downloads the emulator binaries and installs the functions' dependencies.
+- Start order: `functions-build` builds the server code, then the emulators start, then the app. Each waits for the one before it to report healthy.
+- Wait for `All emulators ready!` and `Local: http://localhost:5180/` in the log, then open the app.
 - Wait for `Local: http://localhost:5180/` in the log, then open it.
 
 To run in the background:
@@ -85,16 +88,25 @@ Production build check:
 docker compose exec app npm run build
 ```
 
+Emulator tests. These run from your computer, not inside the app container, and need Node 22 or later installed. Run `npm install` and `npm install --prefix functions` once first.
+
+| Command | What it checks | Needs the stack running |
+|---|---|---|
+| `npm run test:rules` | Storage rules, custom claims and mail routing on the emulators | Yes |
+| `npm run test:triggers` | The claims triggers, live on the Functions emulator | No, it starts its own throwaway emulators |
+| `npm run test:act` | Every save through `act` under the real rules, with real sign-in accounts | No, it starts its own throwaway emulators |
+
 ## 7. Run modes
 
-| Goal | Command |
-|---|---|
-| Default: app + emulators with open rules (client writes allowed) | `docker compose up` |
-| Enforce the real `firestore.rules` (client writes are denied) | `FIREBASE_CONFIG=firebase.json docker compose up` |
-| In-memory backend only (no Firebase data, emulators unused) | `APP_BACKEND=local docker compose up` |
-| Run in the background | `docker compose up -d` |
+| Goal | Mac / Linux | Windows PowerShell |
+|---|---|---|
+| Default: app + emulators, open rules, saves through `act` | `docker compose up` | `docker compose up` |
+| Browser writes to Firestore directly, skipping `act` | `APP_WRITE_PATH=direct docker compose up` | `$env:APP_WRITE_PATH="direct"; docker compose up` |
+| Enforce the real `firestore.rules` and `storage.rules` (reads need a real signed-in account, so the dev panel's personas can't load data) | `FIREBASE_CONFIG=firebase.json docker compose up` | `$env:FIREBASE_CONFIG="firebase.json"; docker compose up` |
+| In-memory backend only (no Firebase data, emulators unused) | `APP_BACKEND=local docker compose up` | `$env:APP_BACKEND="local"; docker compose up` |
+| Run in the background | `docker compose up -d` | `docker compose up -d` |
 
-On Windows PowerShell, set the variable first: `$env:APP_BACKEND="local"; docker compose up`.
+A PowerShell variable stays set for the rest of that window. Clear it before going back to the default, for example `Remove-Item Env:APP_BACKEND`.
 
 ## 8. Everyday commands
 
@@ -127,22 +139,44 @@ rm -rf .emulator-data
 docker compose up
 ```
 
+On Windows PowerShell, use `Remove-Item -Recurse -Force .emulator-data` for the middle line.
+
 Don't kill the containers with `docker kill` or by closing the terminal abruptly. The data export can be skipped.
 
-## 10. Troubleshooting
+## 10. Windows notes
+
+- **Use PowerShell**, and the PowerShell column in section 7 for anything that sets a variable.
+- **Line endings are handled.** `.gitattributes` keeps shell scripts in LF line endings, and compose strips Windows CR characters before running the functions setup script, so a CRLF checkout still starts.
+- **For speed, keep the project inside WSL 2.** Docker Desktop with the WSL 2 backend reads files on `C:\` slowly and cannot pass file events through. Hot reload still works there, because the app, `functions-build` and the emulators all poll for changes, but it is slower. For the best experience, install Ubuntu from the Microsoft Store, clone the repository inside it (for example under `~/`), and run `docker compose up` from the Ubuntu terminal.
+- **Memory.** Give Docker at least 4 GB. With the WSL 2 backend, set it in `%UserProfile%\.wslconfig`:
+
+  ```
+  [wsl2]
+  memory=6GB
+  ```
+
+  Then run `wsl --shutdown` and restart Docker Desktop.
+- **Ports Windows has reserved.** Windows sometimes reserves port ranges, and the emulators then fail with "access forbidden" or "address already in use" even though nothing is running. Check with `netsh interface ipv4 show excludedportrange protocol=tcp`. If one of the ports in section 1 falls inside a listed range, run `net stop winnat` and then `net start winnat` in an administrator PowerShell, and start the stack again.
+- **Finding what uses a port:** `netstat -ano | findstr :5180` shows the process ID, and Task Manager → Details shows which program that is.
+
+## 11. Troubleshooting
 
 | Problem | Fix |
 |---|---|
-| `port is already allocated` | Stop whatever uses the port (`lsof -i :5180`) or quit other `docker compose` stacks. |
+| `failed to connect to the docker API` | Docker Desktop isn't running. Start it, wait for "Engine running", and run the command again. |
+| `port is already allocated` | Stop whatever uses the port (`lsof -i :5180` on Mac/Linux, `netstat -ano \| findstr :5180` on Windows) or quit other `docker compose` stacks. |
+| `scripts/functions/dev.sh: set: ... illegal option -` | A Windows checkout made before the line-ending fix. Pull the latest `dev`; compose then strips the CR characters itself. |
+| `functions-build` stays unhealthy on the first run | It is installing the functions' dependencies, which can take a few minutes on Windows. Check `docker compose logs functions-build`. |
+| Saving fails with "The server cannot be reached" | The Functions emulator isn't up. Check `docker compose logs emulators` for `functions[us-central1-act]: http function initialized`. |
 | App never starts, emulators `unhealthy` | The emulators can take up to a couple of minutes on first start. Check `docker compose logs emulators`. Make sure Docker has at least 4 GB of memory. |
 | Page is blank or shows stale data | Hard-refresh. Unregister the service worker in DevTools → Application, because the PWA caches aggressively. |
 | Hot reload does nothing | Polling is already on. Restart with `docker compose restart app`. |
 | `Cannot find module` after pulling | `docker compose up --build -V` |
-| Writes fail with permission denied | You started with `FIREBASE_CONFIG=firebase.json`. Those real rules deny client writes. Restart without it. |
+| Nothing loads, or reads fail with permission denied | You started with `FIREBASE_CONFIG=firebase.json`. Those real rules only let a real signed-in account read, so the dev panel's personas can't. Restart without it. |
 | Weird data from an earlier session | Reset the data as in section 9. |
 | Full cleanup (containers, volumes, images) | `docker compose down -v --rmi local` |
 
-## 11. Stop
+## 12. Stop
 
 ```bash
 docker compose down

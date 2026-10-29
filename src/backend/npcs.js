@@ -1,7 +1,10 @@
 // NPC accounts: filler students and faculty so every program has three
 // capstone groups of four (flag GROUP_SIZE). They are not §6 personas and no
 // §7 scenario depends on them; they give the queues, reports and rosters
-// realistic volume. Every name is a placeholder.
+// realistic volume. Names follow the §6 personas' call-sign style: faculty are
+// Greek letters ("Prof. Kappa"), students topping up G1–G4 take the NATO words
+// the personas left free ("Golf Student"), and the other groups' students are
+// named after their group ("NW1 Student 2").
 //
 // The term is AY 2026–2027, 1st Semester, so:
 //   WD, NW, EMC, CYB  4th year, Capstone 1 — groups spread over the Capstone 1 stages
@@ -17,28 +20,22 @@ const days = (n) => new Date(Date.now() + n * 864e5).toISOString()
 const TERM = 'AY 2026–2027, 1st Semester'
 const LAST_TERM = 'AY 2025–2026, 2nd Semester'
 
-const FIRST = [
-  'Angelo', 'Bea', 'Carlo', 'Danica', 'Enzo', 'Francine', 'Gabriel', 'Hannah', 'Ivan', 'Janelle',
-  'Kristoff', 'Lianne', 'Marco', 'Nicole', 'Oliver', 'Patricia', 'Rafael', 'Samantha', 'Tristan', 'Venice',
-  'Warren', 'Ysabel', 'Zach', 'Alyssa', 'Bryan', 'Czarina',
-]
-const LAST = [
-  'Aquino', 'Bautista', 'Castillo', 'Dela Cruz', 'Estrada', 'Flores', 'Garcia', 'Hernandez', 'Ignacio',
-  'Jimenez', 'Lacson', 'Manalo', 'Navarro', 'Ocampo', 'Pangilinan', 'Quiambao', 'Reyes', 'Santos',
-  'Tolentino', 'Villanueva', 'Yap', 'Zamora', 'Mercado', 'Salazar', 'Gutierrez', 'Dizon',
-]
+// The NATO words the §6 personas do not use, for the students topping up G1–G4.
+const TOP_UP_NAMES = ['Golf', 'Hotel', 'India', 'Juliett', 'X-ray', 'Yankee', 'Zulu']
 const slug = (s) => s.toLowerCase().replace(/[^a-z]+/g, '')
 
 let studentSeq = 0
-function npcStudent(section) {
+let topUpSeq = 0
+/** `group` is "NW1"… for an NPC group's students, null for a G1–G4 top-up. */
+function npcStudent(section, group) {
   const i = studentSeq++
-  const first = FIRST[i % FIRST.length]
-  const last = LAST[(i * 7 + Math.floor(i / FIRST.length)) % LAST.length]
   const code = section.split('-')[0].toLowerCase()
+  const word = group ? null : TOP_UP_NAMES[topUpSeq++]
+  const n = group ? (i % 4) + 1 : null
   return {
     id: `s_npc_${code}_${String(i + 1).padStart(2, '0')}`,
-    name: `${first} ${last}`,
-    email: `${slug(first)}.${slug(last)}${i + 1}@student.hau.edu.ph`,
+    name: group ? `${group} Student ${n}` : `${word} Student`,
+    email: group ? `${group.toLowerCase()}.student${n}@student.hau.edu.ph` : `${slug(word)}@student.hau.edu.ph`,
     globalRoles: [G.STUDENT], programScope: [], status: 'Active', emailVerified: true, verifyToken: null,
     idNumber: `2022-${String(3001 + i)}`, program: programByCode(code).name, yearLevel: yearLevelOf(section),
     block: section, createdAt: days(-200), npc: true, demo: true,
@@ -46,9 +43,8 @@ function npcStudent(section) {
 }
 
 function npcFaculty(id, name, globalRoles = [], extra = {}) {
-  const [first, ...rest] = name.replace(/^Prof\. /, '').split(' ')
   return {
-    id, name, email: `${slug(first)}.${slug(rest.join(''))}@hau.edu.ph`,
+    id, name, email: `${slug(name.replace(/^Prof\. /, ''))}@hau.edu.ph`,
     globalRoles: [G.FACULTY, ...globalRoles], programScope: [], status: 'Active', emailVerified: true,
     verifyToken: null, idNumber: '', program: '', yearLevel: '', block: '', createdAt: days(-400), npc: true, demo: true, ...extra,
   }
@@ -58,10 +54,10 @@ function npcFaculty(id, name, globalRoles = [], extra = {}) {
 // Instructor 2 for CS), [1] coordinates the program (CS is Prof. Alpha's),
 // [2] and [3] advise and sit on panels.
 const FACULTY = {
-  NW: ['Prof. Ramon Dizon', 'Prof. Teresa Lim', 'Prof. Arnel Cruz', 'Prof. Joy Valdez'],
-  EMC: ['Prof. Paolo Serrano', 'Prof. Grace Tan', 'Prof. Miguel Ramos', 'Prof. Ella Cabrera'],
-  CYB: ['Prof. Victor Soriano', 'Prof. Liza Fernandez', 'Prof. Noel Pascual', 'Prof. Rina Aguilar'],
-  CS: ['Prof. Dennis Uy', 'Prof. Maricel Robles', 'Prof. Jomar Enriquez', 'Prof. Katrina Sy'],
+  NW: ['Prof. Beta', 'Prof. Gamma', 'Prof. Zeta', 'Prof. Eta'],
+  EMC: ['Prof. Theta', 'Prof. Iota', 'Prof. Kappa', 'Prof. Lambda'],
+  CYB: ['Prof. Mu', 'Prof. Nu', 'Prof. Omicron', 'Prof. Pi'],
+  CS: ['Prof. Rho', 'Prof. Tau', 'Prof. Phi', 'Prof. Omega'],
 }
 const fid = (code, n) => `f_npc_${code.toLowerCase()}${n}`
 
@@ -117,7 +113,7 @@ export const NPC_ROLES = Object.fromEntries(GROUPS.map(g => [g[0], g[6]]))
 export const NPC_STAGES = Object.fromEntries(GROUPS.map(g => [g[0], g[4]]))
 
 // Four students per NPC group, in the section they are in now…
-const groupStudents = GROUPS.map(([id, , , now]) => [id, [0, 1, 2, 3].map(() => npcStudent(now))])
+const groupStudents = GROUPS.map(([id, , , now]) => [id, [0, 1, 2, 3].map(() => npcStudent(now, id.slice(2).toUpperCase()))])
 // …and enough to bring the persona groups to four (G1 has 3; G2, G3, G4 have 2).
 const TOP_UPS = [['p_g1', 'WD-401', 1], ['p_g2', 'WD-401', 2], ['p_g3', 'CS-401', 2], ['p_g4', 'WD-401', 2]]
 const topUpStudents = TOP_UPS.map(([id, now, n]) => [id, Array.from({ length: n }, () => npcStudent(now))])

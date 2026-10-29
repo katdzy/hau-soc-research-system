@@ -152,6 +152,11 @@ a:hover { color: var(--accent-ink); }
 .acting-item[aria-current="true"] { border-color: var(--accent); background: var(--accent-wash); }
 .acting-item strong { font-size: 13px; font-weight: 600; }
 .acting-item span { font-size: 12px; color: var(--ink-muted); }
+button.acting-item {
+  width: 100%; min-height: 0; align-items: flex-start; text-align: left; font: inherit;
+  background: none; cursor: pointer;
+}
+button.acting-item[aria-current="true"] { background: var(--accent-wash); }
 .acting-note { margin: var(--s1) var(--s1) 4px; padding-top: var(--s1); border-top: 1px solid var(--rule); font-size: 12px; color: var(--ink-faint); }
 
 .me { display: flex; align-items: center; gap: 10px; min-width: 0; }
@@ -1519,4 +1524,43 @@ body {
 }
 .modal-footer button {
   font-size: 13px;
+}
+
+/* --- role dashboards (Figma 01 · Dashboards) -------------------------------
+   Four tiles across, then a main column of tables beside a narrow column of
+   short lists. Tiles that lead somewhere are links. */
+.stat-row-4 { grid-template-columns: repeat(4, minmax(0, 1fr)); }
+@media (max-width: 1024px) { .stat-row-4 { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+a.stat { color: inherit; text-decoration: none; transition: border-color .15s ease; }
+a.stat:hover { border-color: var(--ink-faint); color: inherit; }
+a.stat.is-accent:hover { border-color: var(--accent-hover); }
+
+.desk-cols { display: grid; grid-template-columns: minmax(0, 1fr) 360px; gap: var(--s3); align-items: start; }
+.desk-main, .desk-side { min-width: 0; }
+@media (max-width: 1180px) { .desk-cols { grid-template-columns: minmax(0, 1fr); } }
+
+/* Short lists: a title, a supporting line under it, and a chip on the right. */
+.feed { list-style: none; margin: 0; padding: 0; }
+.feed > li {
+  display: flex; justify-content: space-between; align-items: flex-start; gap: 12px;
+  padding: 12px 0; border-top: 1px solid var(--rule);
+}
+.feed > li:first-child { border-top: 0; padding-top: 0; }
+.feed > li:last-child { padding-bottom: 0; }
+.feed-text { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
+.feed-title { font-size: 13.5px; font-weight: 500; color: var(--ink); text-decoration: none; overflow-wrap: anywhere; }
+a.feed-title:hover { text-decoration: underline; color: var(--ink); }
+.feed-sub { font-size: 12.5px; color: var(--ink-faint); overflow-wrap: anywhere; }
+.feed .badge { flex: none; }
+
+/* A project row that needs attention (overdue, returned) reads at a glance. */
+tbody tr.is-flagged td { background: var(--stop-wash); }
+tbody tr.is-flagged:hover td { background: var(--stop-wash); }
+/* Faint grey drops under 4.5:1 on the red wash; use the darker grey there. */
+tbody tr.is-flagged :is(.faint, .muted) { color: var(--ink-muted); }
+.anchor { scroll-margin-top: calc(var(--topbar) + var(--s2)); }
+@media (max-width: 480px) {
+  /* Bell, switcher and avatar must fit beside ☰ and the crest on a phone. */
+  .topbar-end { gap: var(--s1); }
+  .acting > summary { max-width: 36vw; }
 }

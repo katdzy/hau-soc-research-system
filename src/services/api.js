@@ -27,6 +27,28 @@ const EMULATORS = import.meta.env.VITE_USE_EMULATORS === 'true'
 
 const UNREACHABLE = new Set(['functions/unavailable', 'functions/deadline-exceeded'])
 
+/**
+ * What a failed `act` call tells the user. The SDK ends each message with the
+ * HTTP status ("… [403]"); status 0 means no answer at all — the request never
+ * reached the function (nothing listening on its port, another program on it,
+ * or the connection dropped), which the SDK reports as a bare "internal".
+ */
+export function actErrorMessage(e, { emulators = false } = {}) {
+  const raw = String(e?.message ?? '')
+  const status = Number(raw.match(/\[(\d+)\]$/)?.[1] ?? NaN)
+  const text = raw.replace(/\s*\[\d+\]$/, '').trim()
+  if (UNREACHABLE.has(e?.code) || (e?.code === 'functions/internal' && status === 0)) {
+    return emulators
+      ? 'The server did not answer: nothing replied on the Functions emulator (127.0.0.1:5001). Check that `docker compose ps` shows the emulators healthy, and that no other program on this computer uses port 5001.'
+      : 'The server cannot be reached. Check your connection and try again.'
+  }
+  // A crash the function did not turn into a message of its own.
+  if (e?.code === 'functions/internal' && (!text || text === 'internal' || text === 'INTERNAL')) {
+    return 'Something went wrong on the server. Try again; if it keeps happening, tell the System Administrator.'
+  }
+  return text || 'The request failed. Try again.'
+}
+
 /** The service calls, sent to the server with `send(name, args) → result`. */
 export function remoteActions({ send, files: store, check = local.checkSubmission }) {
   // A second identical call while the first is out (a double-click) is
@@ -73,9 +95,8 @@ async function sendToAct(name, args) {
     const res = await call('act', { name, args, ...(EMULATORS ? { as: getSessionUserId() } : {}) })
     return res.data?.result ?? null
   } catch (e) {
-    if (UNREACHABLE.has(e?.code)) throw new Error('The server cannot be reached. Check your connection and try again.')
-    // The SDK appends the HTTP status ("… [403]"); the message is the server's own.
-    throw new Error(String(e?.message ?? '').replace(/\s*\[\d{3}\]$/, '') || 'The request failed. Try again.')
+    if (EMULATORS) console.warn(`act ${name} failed:`, e?.code, e?.message)
+    throw new Error(actErrorMessage(e, { emulators: EMULATORS }))
   }
 }
 

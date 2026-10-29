@@ -10,6 +10,11 @@ import Records from './pages/Records.jsx'
 import Reports from './pages/Reports.jsx'
 import { AccountsPage, CaacPage, SettingsPage } from './pages/Admin.jsx'
 import Audit from './pages/Audit.jsx'
+import { WorkspaceProvider } from './components/Workspace.jsx'
+import {
+  Advisees, WeeklyLogs, Versions, Completed, Panels, Rosters, Defended, Scheduling,
+  Routing, AdviserApprovals, Approvals, School, Completions, Clearance, Cleared,
+} from './pages/WorkViews.jsx'
 
 // R9: dev tools exist only in dev builds; this import is dropped from production.
 const DevTools = import.meta.env.DEV ? lazy(() => import('./dev/DevTools.jsx')) : null
@@ -27,7 +32,7 @@ export default function App() {
 
   return (
     <Routes>
-      <Route element={<Shell />}>
+      <Route element={<WorkspaceProvider><Shell /></WorkspaceProvider>}>
         <Route index element={<Dashboard />} />
         <Route path="projects" element={<Projects />} />
         <Route path="projects/:id" element={<ProjectWorkspace />} />
@@ -40,6 +45,22 @@ export default function App() {
         <Route path="admin/caac" element={<CaacPage />} />
         <Route path="admin/settings" element={<SettingsPage />} />
         <Route path="audit" element={<Audit />} />
+        {/* Each "Acting as" context's rail (domain/workspaces.js). */}
+        <Route path="advisees" element={<Advisees />} />
+        <Route path="weekly-logs" element={<WeeklyLogs />} />
+        <Route path="versions" element={<Versions />} />
+        <Route path="completed" element={<Completed />} />
+        <Route path="panels" element={<Panels />} />
+        <Route path="rosters" element={<Rosters />} />
+        <Route path="defended" element={<Defended />} />
+        <Route path="scheduling" element={<Scheduling />} />
+        <Route path="routing" element={<Routing />} />
+        <Route path="adviser-approvals" element={<AdviserApprovals />} />
+        <Route path="approvals" element={<Approvals />} />
+        <Route path="school" element={<School />} />
+        <Route path="completions" element={<Completions />} />
+        <Route path="clearance" element={<Clearance />} />
+        <Route path="cleared" element={<Cleared />} />
         {DevTools && (
           <Route path="dev" element={<Suspense fallback={<div className="page"><p className="muted">Loading…</p></div>}><DevTools /></Suspense>} />
         )}

@@ -1,6 +1,6 @@
 // Prompt 4 — Program Chair/Coordinator. Prof. Alpha (WD + CS; Adviser of G1,
-// Panel Chair of G2) and the NPC coordinators (Prof. Teresa Lim for NW, Prof.
-// Grace Tan for EMC). Assignments and endorsements through the write path, and
+// Panel Chair of G2) and the NPC coordinators (Prof. Gamma for NW, Prof.
+// Iota for EMC). Assignments and endorsements through the write path, and
 // their reflection on the Dean/AD, panel, Instructor 2, URO and students.
 
 import { describe, it, expect, beforeAll, beforeEach } from 'vitest'

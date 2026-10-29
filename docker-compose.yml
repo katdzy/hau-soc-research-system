@@ -53,7 +53,9 @@ services:
       context: .
       dockerfile: Dockerfile
     # First run on a fresh clone installs functions/ dependencies, then watches.
-    command: ["sh", "scripts/functions/dev.sh"]
+    # CRs are stripped first: a Windows checkout may have given the script CRLF
+    # line endings, which sh refuses ("set: illegal option -").
+    command: ["sh", "-c", "tr -d '\\r' < scripts/functions/dev.sh | sh"]
     volumes:
       - .:/app
       - /app/node_modules
@@ -82,8 +84,13 @@ services:
       - .:/app
     environment:
       # FIREBASE_CONFIG=firebase.json docker compose up  → load the real
-      # firestore.rules / storage.rules (client writes are then denied).
+      # firestore.rules / storage.rules (reads then need a real signed-in
+      # account; the dev panel's personas are not Auth accounts).
       FIREBASE_CONFIG: ${FIREBASE_CONFIG:-emulator/firebase.json}
+      # The Functions emulator reloads when functions/lib/app.js is rebuilt.
+      # Docker Desktop on Windows (and sometimes macOS) does not pass file
+      # events through the bind mount, so it polls, like the app does.
+      CHOKIDAR_USEPOLLING: "true"
     depends_on:
       functions-build:
         condition: service_healthy

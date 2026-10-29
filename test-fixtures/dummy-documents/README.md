@@ -8,9 +8,9 @@ and certificates carry a "DUMMY — FOR TESTING" watermark.**
 
 ## Groups
 
-- **G1 — Thesis Adviser Consultation Scheduler** (WD-401 (Capstone 1) → WD-401 (Capstone 2)). Members: Kilo Student, Lima Student, Mike Student, Tristan Salazar. Instructor 1 Prof. Bravo · Adviser Prof. Alpha · Panel Chair Prof. Foxtrot · Panel Member Prof. Charlie · Instructor 2 Prof. Foxtrot.
-- **G2 — Smart Queue Management System for University Clinics** (WD-401 (Capstone 1) → WD-401 (Capstone 2)). Members: November Student, Oscar Student, Venice Estrada, Warren Manalo. Instructor 1 Prof. Bravo · Adviser Prof. Charlie · Panel Chair Prof. Alpha · Panel Member AD Echo · Instructor 2 Prof. Foxtrot.
-- **G3 — IoT-Based Laboratory Equipment Tracking for Computing Laboratories** (CS-301 (Capstone 1) → CS-401 (Capstone 2)). Members: Quebec Student, Romeo Student, Ysabel Tolentino, Zach Dizon. Instructor 1 Prof. Foxtrot · Adviser Dean Delta · Panel Chair Prof. Foxtrot · Panel Member Prof. Bravo · Instructor 2 Prof. Charlie.
+- **G1 — Thesis Adviser Consultation Scheduler** (WD-401 (Capstone 1) → WD-401 (Capstone 2)). Members: Kilo Student, Lima Student, Mike Student, Golf Student. Instructor 1 Prof. Bravo · Adviser Prof. Alpha · Panel Chair Prof. Foxtrot · Panel Member Prof. Charlie · Instructor 2 Prof. Foxtrot.
+- **G2 — Smart Queue Management System for University Clinics** (WD-401 (Capstone 1) → WD-401 (Capstone 2)). Members: November Student, Oscar Student, Hotel Student, India Student. Instructor 1 Prof. Bravo · Adviser Prof. Charlie · Panel Chair Prof. Alpha · Panel Member AD Echo · Instructor 2 Prof. Foxtrot.
+- **G3 — IoT-Based Laboratory Equipment Tracking for Computing Laboratories** (CS-301 (Capstone 1) → CS-401 (Capstone 2)). Members: Quebec Student, Romeo Student, Juliett Student, X-ray Student. Instructor 1 Prof. Foxtrot · Adviser Dean Delta · Panel Chair Prof. Foxtrot · Panel Member Prof. Bravo · Instructor 2 Prof. Charlie.
 
 Use **Dev tools → Set project to stage** to put a group at the stage in the table,
 then sign in as a member of that group and upload the file under **Documents**.

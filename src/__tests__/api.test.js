@@ -3,7 +3,7 @@
 
 import { describe, it, expect, beforeEach, vi } from 'vitest'
 import { pdfFile, otherFile } from './pdfFixture.js'
-import { remoteActions } from '../services/api.js'
+import { remoteActions, actErrorMessage } from '../services/api.js'
 import * as api from '../services/api.js'
 import * as actions from '../services/actions.js'
 import { REMOTE, writePathOf } from '../services/remote.js'
@@ -126,5 +126,25 @@ describe('writePathOf (VITE_WRITE_PATH)', () => {
 
   it('is local outside the Firebase build', () => {
     expect(api.writePath).toBe('local')
+  })
+})
+
+describe('actErrorMessage', () => {
+  const err = (code, message) => ({ code, message })
+
+  it('no answer at all (status 0) says so, and on the emulators names the port', () => {
+    expect(actErrorMessage(err('functions/internal', 'internal [0]'))).toMatch(/cannot be reached/)
+    expect(actErrorMessage(err('functions/internal', 'internal [0]'), { emulators: true })).toMatch(/127\.0\.0\.1:5001/)
+    expect(actErrorMessage(err('functions/unavailable', 'unavailable [503]'))).toMatch(/cannot be reached/)
+  })
+
+  it('keeps the server’s own message, without the status', () => {
+    expect(actErrorMessage(err('functions/permission-denied', 'No role you hold on this project allows this. [403]')))
+      .toBe('No role you hold on this project allows this.')
+  })
+
+  it('a crash with no message of its own reads as a server problem', () => {
+    expect(actErrorMessage(err('functions/internal', 'internal [500]'))).toMatch(/went wrong on the server/)
+    expect(actErrorMessage(err('functions/internal', 'Something went wrong on the server. Try again. [500]'))).toBe('Something went wrong on the server. Try again.')
   })
 })

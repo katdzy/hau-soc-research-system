@@ -35,6 +35,15 @@ initializeApp()
 // Set by the Emulator Suite, never in a deployed function.
 const EMULATOR = process.env.FUNCTIONS_EMULATOR === 'true'
 
+// Emulator only: the runtime has now and then printed MaxListenersExceededWarning
+// during `act`, which no test outside it reproduces (store.js already reads a few
+// collections at a time). Log where it comes from, so it can be fixed there.
+if (EMULATOR) {
+  process.on('warning', (w) => {
+    if (w.name === 'MaxListenersExceededWarning') logger.warn('MaxListenersExceededWarning', { message: w.message, stack: w.stack })
+  })
+}
+
 const RESEND_API_KEY = defineSecret('RESEND_API_KEY')
 const MAIL_FROM = defineString('MAIL_FROM', { default: 'HAU-SOC Capstone <no-reply@example.com>' })
 // One inbox you control for mail addressed to the seeded demo accounts
