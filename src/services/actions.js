@@ -587,7 +587,7 @@ async function summarizeForMilestone(actor, hat, b, defenseType) {
       
       transmitted = true
       const response = await ai.models.generateContent({
-        model: 'gemini-1.5-flash',
+        model: 'gemini-3.5-flash',
         contents: prompt,
         config: {
           responseMimeType: "application/json",
@@ -606,7 +606,7 @@ async function summarizeForMilestone(actor, hat, b, defenseType) {
   const row = await db.add('aiSummaries', {
     projectId: b.project.id, documentId: doc.id, documentVersion: doc.versionNumber,
     milestone, generatedAt: now(),
-    model: generated ? 'Gemini 1.5 Flash' : 'None (placeholder)',
+    model: generated ? 'Gemini 3.5 Flash' : 'None (placeholder)',
     label: generated ? AI_DISCLOSURE : AI_PLACEHOLDER_NOTICE,
     structured,
   })
