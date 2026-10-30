@@ -5,13 +5,14 @@ import { reportScope } from '../Reports.jsx'
 import { Badge, Section, fmtDate, fmtDateTime, daysLeft } from '../../components/ui.jsx'
 import { viewBundle } from '../../domain/guard.js'
 import { sectionNow, courseOfStage, uroReturnOutstanding } from '../../domain/stages.js'
+import { FLAGS } from '../../domain/flags.js'
 import {
   GLOBAL_ROLES as G, PROJECT_ROLES as P, ACCOUNT_STATUS, DOC_STATUS, COURSES, accountType, programCode,
 } from '../../domain/constants.js'
 import {
   DeskHead, Stat, Stats, Columns, ProjectCell, Feed, OwedFeed, Activity, DefenseTable, VerifyList,
   owedBy, countKind, statusOf, isOverdue, stepOf, latestDoc, upcomingDefenses, itemLink, queueItems,
-  reviewQueue, panelManuscript, ProgramSummary, RecordsSearch, RETURNED, stageOrder,
+  reviewQueue, panelManuscript, ProgramSummary, RecordsSearch, ProjectDirectory, RETURNED, stageOrder,
 } from './parts.jsx'
 
 // One dashboard per "Acting as" context (Figma 01 · Dashboards, DB-02 – DB-11).
@@ -317,6 +318,7 @@ export function CoordinatorDesk({ rows, notice }) {
           <Section title="Projects open to you now" aside={<span className="faint small">During your steps only</span>}>
             <ProjectTable rows={rows} hats={[G.COORDINATOR]} empty="No project is at one of your steps right now." />
           </Section>
+          <ProjectDirectory title="All projects in your programs" canOpen={(p) => rows.some(r => r.project.id === p.id)} />
           <ProgramSummary />
         </>}
         side={<>
@@ -453,7 +455,10 @@ export function AdminDesk({ notice }) {
   const { snap } = useApp()
   const users = snap.users ?? []
   const nameOf = (id) => users.find(u => u.id === id)?.name ?? 'System'
-  const toActivate = users.filter(u => u.status === ACCOUNT_STATUS.INACTIVE && u.emailVerified)
+  // Flag ACCOUNT_ACTIVATION: with 'email' verification alone activates, so what
+  // waits is the owner's verification; with 'email+admin', this office.
+  const byEmail = FLAGS.ACCOUNT_ACTIVATION === 'email'
+  const toActivate = users.filter(u => u.status === ACCOUNT_STATUS.INACTIVE && (byEmail ? !u.emailVerified : u.emailVerified))
   const changes = (snap.auditLogs ?? []).filter(a => ROLE_ACTIONS[a.action])
     .sort((a, b) => new Date(b.at) - new Date(a.at)).slice(0, 5)
   const overrides = (snap.permissionOverrides ?? []).filter(o => !o.liftedAt).length
@@ -463,15 +468,15 @@ export function AdminDesk({ notice }) {
       <DeskHead notice={notice} sub="Accounts and role setup for the School of Computing" />
       <Stats>
         <Stat label="Total users" n={users.length} to="/admin/accounts" />
-        <Stat label="Waiting for activation" n={toActivate.length} tone={toActivate.length ? 'accent' : undefined} to="/admin/accounts" />
+        <Stat label={byEmail ? 'Not yet verified' : 'Waiting for activation'} n={toActivate.length} tone={toActivate.length ? 'accent' : undefined} to="/admin/accounts" />
         <Stat label="Faculty" n={users.filter(u => accountType(u.email) === 'Faculty').length} />
         <Stat label="Students" n={users.filter(u => accountType(u.email) === 'Student').length} />
       </Stats>
       <Columns
         main={<>
-          <Section title="New accounts waiting for activation" aside={<Link className="small" to="/admin/accounts">User Accounts</Link>}>
-            <Feed empty="Every verified registration is active." items={toActivate.slice(0, 6).map(u => ({
-              key: u.id, title: u.name, sub: `${u.email} · registered ${fmtDate(u.createdAt)}`, chip: ['Needs activation', 'warn'], to: '/admin/accounts',
+          <Section title={byEmail ? 'Registrations waiting for email verification' : 'New accounts waiting for activation'} aside={<Link className="small" to="/admin/accounts">User Accounts</Link>}>
+            <Feed empty={byEmail ? 'Every registration is verified.' : 'Every verified registration is active.'} items={toActivate.slice(0, 6).map(u => ({
+              key: u.id, title: u.name, sub: `${u.email} · registered ${fmtDate(u.createdAt)}`, chip: [byEmail ? 'Not verified' : 'Needs activation', 'warn'], to: '/admin/accounts',
             }))} />
           </Section>
           <Section title="Recent role changes" aside={<Link className="small" to="/audit">Audit Log</Link>}>

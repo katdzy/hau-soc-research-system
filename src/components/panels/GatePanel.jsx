@@ -3,8 +3,12 @@ import { can } from '../../domain/caac.js'
 import { runGate } from '../../services/api.js'
 import { useAction, ActionError } from '../useAction.jsx'
 import { stageByKey, resolveNext, openGates, staysAtStage } from '../../domain/stages.js'
-import { GLOBAL_ROLES as G, PROJECT_ROLES as P } from '../../domain/constants.js'
+import { useState } from 'react'
+import { GLOBAL_ROLES as G, PROJECT_ROLES as P, FORMS } from '../../domain/constants.js'
+import { formOf, lineMethod } from '../../domain/forms.js'
 import { Act } from '../ViewOnly.jsx'
+import { Field } from '../ui.jsx'
+import { SignedCopyField, signedCopyReady } from '../FormFiles.jsx'
 
 const TAB_LABEL = { defense: 'Defense', documents: 'Documents', logs: 'Weekly logs', forms: 'Forms & signatures', overview: 'Overview' }
 
@@ -62,22 +66,72 @@ export default function GatePanel({ b, ctx, goTo }) {
               ? <StepList steps={gate.steps(b)} b={b} ctx={ctx} goTo={goTo} />
               : blocker && <p className="blocker">{blocker}</p>}
             {!blocker && <Act>
-              <div className="actions mt-2">
-                {gate.handledIn
-                  ? <button className="primary" onClick={() => goTo(gate.handledIn)}>
+              {gate.handledIn
+                ? <div className="actions mt-2">
+                    <button className="primary" onClick={() => goTo(gate.handledIn)}>
                       Continue in the {TAB_LABEL[gate.handledIn]} tab
                     </button>
-                  : <button className="primary" disabled={busy}
-                      onClick={() => run(() => runGate(me, snap, b.project.id, gate))}>
-                      {gate.label}
-                    </button>}
-              </div>
+                  </div>
+                : <GateAction gate={gate} b={b} busy={busy}
+                    onRun={(extra) => run(() => runGate(me, snap, b.project.id, { ...gate, ...extra }))} />}
             </Act>}
             <ActionError error={error} />
           </div>
         )
       })}
     </>
+  )
+}
+
+/**
+ * The button that runs a gate, with what the gate needs first: the copy the
+ * actor signed outside the system when the gate carries a signature on an
+ * upload line (M-06, M-21, M-23), and FM-2005's outcome (F-05, F-06, F-06b).
+ */
+function GateAction({ gate, b, busy, onRun }) {
+  const { snap, me } = useApp()
+  const [copy, setCopy] = useState(null)
+  const [outcome, setOutcome] = useState('Recommended')
+  const [reasons, setReasons] = useState('')
+  const nameOf = (id) => (snap.users ?? []).find(u => u.id === id)?.name ?? '—'
+  const recommend = gate.action === 'RECOMMEND_FINAL_DEFENSE'
+  const form = gate.signs ? formOf(b, gate.signs) : null
+  const line = form?.signatories.find(x => x.viaGate && !x.signedAt && (me.globalRoles ?? []).includes(x.role))
+  const formType = recommend ? FORMS.F2005.code : gate.signs
+  const needsCopy = recommend || (line && lineMethod(form, line) === 'upload')
+  const notRecommended = recommend && outcome === 'Not Recommended'
+  const ready = (!needsCopy || signedCopyReady(copy)) && (!notRecommended || reasons.trim())
+
+  return (
+    <div className="mt-2">
+      {recommend && (
+        <fieldset className="choice">
+          <legend className="label">Outcome</legend>
+          {[['Recommended', 'Goes to the Program Chair/Coordinator to be noted and endorsed.'],
+            ['Not Recommended', 'The group stays in Implementation. Write the reasons on the form; every member signs it too.']].map(([value, hint]) => (
+            <label key={value} className="choice-card">
+              <input type="radio" name="f2005-outcome" checked={outcome === value} onChange={() => setOutcome(value)} />
+              <span><strong className="small">{value}</strong><span className="faint small">{hint}</span></span>
+            </label>
+          ))}
+        </fieldset>
+      )}
+      {notRecommended && (
+        <Field label="Reasons" hint="Also written on the form. The group sees them.">
+          <textarea value={reasons} onChange={e => setReasons(e.target.value)} />
+        </Field>
+      )}
+      {needsCopy && (
+        <SignedCopyField formType={formType} form={recommend ? null : form} group={b.project.title} value={copy} onChange={setCopy} nameOf={nameOf}
+          intro={gate.action === 'ENDORSE_FINAL_DEFENSE' ? 'Sign “Noted by” on the Adviser’s uploaded form.' : undefined} />
+      )}
+      <div className="actions mt-2">
+        <button className="primary" disabled={busy || !ready}
+          onClick={() => onRun({ file: needsCopy ? copy.file : undefined, ...(recommend ? { outcome, reasons } : {}) })}>
+          {busy && needsCopy ? 'Uploading…' : notRecommended ? `Upload ${FORMS.F2005.code} (not recommended)` : gate.label}
+        </button>
+      </div>
+    </div>
   )
 }
 

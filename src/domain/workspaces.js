@@ -70,7 +70,7 @@ export const CONTEXTS = [
       { to: '/rosters', label: 'Groups & Rosters' },
       { to: '/versions', label: 'Version History' },
       { to: '/defended', label: 'Defended Groups' },
-      { to: '/completed', label: 'Archive' },
+      { to: '/completed', label: 'Completed Groups' },
     ],
   },
   {
@@ -78,7 +78,7 @@ export const CONTEXTS = [
     nav: [
       { to: '/scheduling', label: 'Rosters & Scheduling' },
       { to: '/versions', label: 'Version History' },
-      { to: '/completed', label: 'Archive' },
+      { to: '/completed', label: 'Completed Groups' },
     ],
   },
   {
@@ -87,7 +87,7 @@ export const CONTEXTS = [
       { to: '/advisees', label: 'My Advisees' },
       { to: '/versions', label: 'Version History' },
       { to: '/weekly-logs', label: 'Weekly Logs' },
-      { to: '/completed', label: 'Archive' },
+      { to: '/completed', label: 'Completed Groups' },
     ],
   },
   {

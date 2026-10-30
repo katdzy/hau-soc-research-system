@@ -49,23 +49,25 @@ export const CAPABILITIES = {
   'verdict.record': 'Record the official verdict on FM-AAC-SOC-2004',
   'verdict.correct': 'Correct a verdict just recorded, before anyone acts on it',
   'revision.close': 'Close the revision period and advance the project',
-  'revision.verify': 'Verify revisions against the panel’s requirements and sign FM-AAC-SOC-2004',
+  'revision.verify': 'Verify revisions against the panel’s requirements on FM-AAC-SOC-2004',
   'weeklylog.submit': 'Submit a weekly accomplishment log',
-  'weeklylog.sign': 'Approve, return and sign weekly logs (FM-AAC-SOC-2003)',
+  'weeklylog.sign': 'Mark uploaded weekly logs (FM-AAC-SOC-2003) as reviewed, or return them',
   'weeklylog.export': 'Export FM-AAC-SOC-2003 logs',
   'milestone.confirm': 'Confirm Capstone 2 milestones',
   'readiness.confirm': 'Confirm, with the Adviser, that the group is ready for final defense',
   'requirements.confirm': 'Confirm the post-defense course requirements',
   'finaldefense.recommend': 'Submit the Capstone Recommendation Form (FM-AAC-SOC-2005)',
   'finaldefense.endorse': 'Endorse the project for final defense scheduling',
-  'clearance.endorse': 'Endorse the cleared project and sign the Approval Sheet',
-  'uro.verify': 'Verify the certificates and sign for the URO',
+  'clearance.endorse': 'Upload the signed Approval Sheet and route the project to the URO',
+  'uro.verify': 'Verify the certificates and approve the clearance',
   'uro.return': 'Return the certificates to the group with remarks',
   'final.approve': 'Give final approval by signing the Approval Sheet',
   // Institution scope
   'group.create': 'Create project groups for a Capstone 1 block',
+  'groupdraft.manage': 'Draft a project group with classmates for Instructor 1 to approve',
   'report.generate': 'Generate and export reports',
   'records.search': 'Search and filter the records-table archive',
+  'archive.browse': 'Browse the archive of completed projects (metadata only)',
   'records.manage': 'Manage the thesis and capstone archive',
   'admin.accounts': 'Manage accounts and Global Role assignments',
   'admin.caac': 'Configure and audit the CAAC tagging framework, including permission overrides',
@@ -263,8 +265,16 @@ export const PROJECT_POLICIES = [
   g(G.ADMIN, 'project.view', always),
 ]
 
+// Every active, verified account — student or faculty, with or without a role.
+export const ANY_ACCOUNT = 'Registered user'
+
 export const INSTITUTION_POLICIES = [
+  // S-17 — the archive of completed projects, metadata only (title, members,
+  // program, adviser, year): never a document, and not public (§9).
+  g(ANY_ACCOUNT, 'archive.browse', always),
   p(P.INSTRUCTOR_1, 'group.create', teachesBlock),
+  // Revision 2026-10-30 (replaces Decision 17): students draft their groups.
+  ...(FLAGS.STUDENT_GROUP_DRAFTS ? [g(G.STUDENT, 'groupdraft.manage', always)] : []),
   ...[G.DEAN, G.ASSOCIATE_DEAN].flatMap(role => [
     g(role, 'report.generate', always),
     g(role, 'records.search', always),
@@ -369,7 +379,7 @@ export function resolveInstitution(user, snap) {
   if (!user) return { user, globalRoles: [], grants: new Map(), active: [], dormant: [], sections: [] }
   const globalRoles = globalRolesOf(user)
   const sections = (snap?.sections ?? []).filter(s => s.instructorId === user.id)
-  const held = new Set(isActiveAccount(user) ? globalRoles : [])
+  const held = new Set(isActiveAccount(user) ? [...globalRoles, ANY_ACCOUNT] : [])
   if (isActiveAccount(user) && sections.some(s => s.course === COURSES.C1)) held.add(P.INSTRUCTOR_1)
   const overrides = overridesFor(user, (snap?.permissionOverrides ?? []).filter(o => o.projectId == null))
   const { grants, active, dormant } = evaluate(INSTITUTION_POLICIES, held, { user, sections }, overrides)

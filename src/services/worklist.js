@@ -1,5 +1,5 @@
 // What each signed-in user owes the system right now. Gate actions come from
-// the stage machine; the softer tasks (unsigned logs, returned drafts, forms at
+// the stage machine; the softer tasks (logs to review, returned drafts, forms at
 // your turn) come from the same project bundle. Nothing here checks a role
 // name — every row is the result of CAAC resolution for this user, on this
 // project, at this stage.
@@ -108,7 +108,7 @@ function pendingTasks(b, ctx, me) {
 
   if (can(ctx, 'weeklylog.sign')) {
     const waiting = b.weeklyLogs.filter(l => l.status === 'Submitted')
-    if (waiting.length) tasks.push({ label: `${waiting.length} weekly log(s) to approve and sign`, tab: 'logs', hat: hatOf('weeklylog.sign'), kind: 'log', n: waiting.length })
+    if (waiting.length) tasks.push({ label: `${waiting.length} weekly log upload(s) to review`, tab: 'logs', hat: hatOf('weeklylog.sign'), kind: 'log', n: waiting.length })
   }
   // Instructor 2: S6.5 milestones, S6.7 readiness (NEW-43), S8.5 post-defense requirements (NEW-44).
   if (can(ctx, 'milestone.confirm')) {
@@ -138,7 +138,9 @@ function pendingTasks(b, ctx, me) {
   for (const f of b.forms) {
     const sign = canSign(f, me, b)
     if (sign.ok) {
-      const label = f.formType === FORMS.F2004.code ? `Verify the revisions and sign ${f.formType}` : `${f.formType} to sign`
+      const label = f.formType === FORMS.F2004.code
+        ? (sign.line.role === P.PANEL_CHAIR ? `Upload the final ${f.formType}` : `Verify the revisions on ${f.formType}`)
+        : `${f.formType}: sign and upload your copy`
       tasks.push({ label, tab: 'forms', hat: sign.line.role, kind: f.formType === FORMS.F2004.code ? 'revision' : 'form', n: 1 })
     }
   }

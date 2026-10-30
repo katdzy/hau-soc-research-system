@@ -1,5 +1,6 @@
 import { useApp } from '../state/AppContext.jsx'
-import { Section, Badge, Empty, Restricted, downloadCsv } from '../components/ui.jsx'
+import { Section, Badge, Empty, Restricted } from '../components/ui.jsx'
+import { ExportMenu } from '../components/Export.jsx'
 import { PHASES, stageByKey, stageIndex, sectionNow } from '../domain/stages.js'
 import { GLOBAL_ROLES as G, PROJECT_ROLES as P, programCode } from '../domain/constants.js'
 import { can, resolveInstitution } from '../domain/caac.js'
@@ -56,11 +57,12 @@ export default function Reports() {
     .sort((a, b) => (b.advisees + b.panels) - (a.advisees + a.panels))
 
   // Status data only — no document, annotation or summary content.
-  const csv = () => downloadCsv(
-    'capstone-projects.csv',
-    ['Project', 'Program', 'Section', 'Course', 'Stage', 'Status', 'Result'],
-    projects.map(p => [p.title, p.program, sectionNow(p).section, sectionNow(p).course, stageByKey(p.currentStage)?.label, p.status, p.archiveResult]),
-  )
+  const exported = {
+    name: scope ? `${scope.map(programCode).join('-')}_Projects` : 'SOC_Projects',
+    title: scope ? `HAU — SOC · ${scope.map(programCode).join(', ')} projects by stage` : 'HAU — SOC · Projects by stage',
+    header: ['Project', 'Program', 'Section', 'Course', 'Stage', 'Status', 'Result'],
+    rows: projects.map(p => [p.title, p.program, sectionNow(p).section, sectionNow(p).course, stageByKey(p.currentStage)?.label, p.status, p.archiveResult]),
+  }
 
   return (
     <div className="page">
@@ -83,7 +85,7 @@ export default function Reports() {
         </div>
       </div>
 
-      <Section title="Projects by phase" aside={<button className="small" onClick={csv}>Export CSV</button>}>
+      <Section title="Projects by phase" aside={<ExportMenu {...exported} />}>
         <table>
           <thead><tr><th>Phase</th><th className="tight">Projects</th><th>Share</th></tr></thead>
           <tbody>

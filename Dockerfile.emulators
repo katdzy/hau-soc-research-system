@@ -3,7 +3,10 @@ FROM node:22-alpine
 
 RUN apk add --no-cache openjdk21-jre-headless bash
 
-RUN npm install -g firebase-tools
+# Pinned so every machine runs the same emulators; bump deliberately
+# (docker compose build emulators) after checking the release notes.
+ARG FIREBASE_TOOLS_VERSION=15.32.1
+RUN npm install -g firebase-tools@${FIREBASE_TOOLS_VERSION} --no-audit --no-fund
 
 # Bake the emulator binaries into the image so a fresh container does not
 # download them on every start.

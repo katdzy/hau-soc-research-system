@@ -7,7 +7,7 @@
  * uploaded with.
  */
 import { getStorage } from 'firebase-admin/storage'
-import { inspectPdf } from '../../src/domain/uploads.js'
+import { inspectPdf, inspectFormFile } from '../../src/domain/uploads.js'
 
 const refuse = (message) => { throw new Error(message) }
 
@@ -36,6 +36,24 @@ export const serverFiles = {
     const scan = await inspectPdf(new File([bytes], fileName, { type: meta.contentType }))
     if (scan.problem) refuse(scan.problem)
     if (scan.sha256 !== custom.sha256) refuse('The stored file does not match what was uploaded. Submit it again.')
+    return scan
+  },
+
+  // A signed form's copy (uploadFormFile): this project, uploaded by the
+  // caller, a real PDF, JPG or PNG, bytes matching their fingerprint.
+  async verifyForm(path, { projectId, uploadedBy, fileName }) {
+    const file = getStorage().bucket().file(path)
+    const [exists] = await file.exists()
+    if (!exists) refuse('The uploaded form was not found. Upload it again.')
+    const [meta] = await file.getMetadata()
+    const custom = meta.metadata ?? {}
+    if (custom.projectId !== projectId) refuse('That form was uploaded for a different project. Upload it again.')
+    if (custom.uploadedBy !== uploadedBy) refuse('That form was uploaded by someone else.')
+    const [bytes] = await file.download()
+    const scan = await inspectFormFile(new File([bytes], fileName, { type: meta.contentType }))
+    if (scan.problem) refuse(scan.problem)
+    if (scan.contentType !== meta.contentType) refuse('The stored form is not the type it was uploaded as. Upload it again.')
+    if (scan.sha256 !== custom.sha256) refuse('The stored form does not match what was uploaded. Upload it again.')
     return scan
   },
 }

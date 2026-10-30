@@ -11,3 +11,6 @@ export function pdfFile(name = 'upload.pdf', size = 1000, type = 'application/pd
 
 /** Any other file: no PDF header. */
 export const otherFile = (name, type = '', text = 'not a pdf') => new File([text], name, { type })
+
+/** A form signed outside the system, as its signatory uploads it. */
+export const signed = (name = 'signed-form.pdf') => pdfFile(name)

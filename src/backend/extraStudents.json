@@ -1,0 +1,320 @@
+{
+  "about": "Ungrouped WD-401 students for testing group drafting (STUDENT_GROUP_DRAFTS). Loaded by src/backend/seed.js into the local demo data; every one is a demo account (never emailed). Add or remove rows here; bump the localStorage key in localAdapter.js or use Dev tools > Reset seed to see the change.",
+  "students": [
+    {
+      "id": "s_wd401_01",
+      "name": "WD401 Student 01",
+      "email": "wd401.student01@student.hau.edu.ph",
+      "idNumber": "2022-5001",
+      "block": "WD-401"
+    },
+    {
+      "id": "s_wd401_02",
+      "name": "WD401 Student 02",
+      "email": "wd401.student02@student.hau.edu.ph",
+      "idNumber": "2022-5002",
+      "block": "WD-401"
+    },
+    {
+      "id": "s_wd401_03",
+      "name": "WD401 Student 03",
+      "email": "wd401.student03@student.hau.edu.ph",
+      "idNumber": "2022-5003",
+      "block": "WD-401"
+    },
+    {
+      "id": "s_wd401_04",
+      "name": "WD401 Student 04",
+      "email": "wd401.student04@student.hau.edu.ph",
+      "idNumber": "2022-5004",
+      "block": "WD-401"
+    },
+    {
+      "id": "s_wd401_05",
+      "name": "WD401 Student 05",
+      "email": "wd401.student05@student.hau.edu.ph",
+      "idNumber": "2022-5005",
+      "block": "WD-401"
+    },
+    {
+      "id": "s_wd401_06",
+      "name": "WD401 Student 06",
+      "email": "wd401.student06@student.hau.edu.ph",
+      "idNumber": "2022-5006",
+      "block": "WD-401"
+    },
+    {
+      "id": "s_wd401_07",
+      "name": "WD401 Student 07",
+      "email": "wd401.student07@student.hau.edu.ph",
+      "idNumber": "2022-5007",
+      "block": "WD-401"
+    },
+    {
+      "id": "s_wd401_08",
+      "name": "WD401 Student 08",
+      "email": "wd401.student08@student.hau.edu.ph",
+      "idNumber": "2022-5008",
+      "block": "WD-401"
+    },
+    {
+      "id": "s_wd401_09",
+      "name": "WD401 Student 09",
+      "email": "wd401.student09@student.hau.edu.ph",
+      "idNumber": "2022-5009",
+      "block": "WD-401"
+    },
+    {
+      "id": "s_wd401_10",
+      "name": "WD401 Student 10",
+      "email": "wd401.student10@student.hau.edu.ph",
+      "idNumber": "2022-5010",
+      "block": "WD-401"
+    },
+    {
+      "id": "s_wd401_11",
+      "name": "WD401 Student 11",
+      "email": "wd401.student11@student.hau.edu.ph",
+      "idNumber": "2022-5011",
+      "block": "WD-401"
+    },
+    {
+      "id": "s_wd401_12",
+      "name": "WD401 Student 12",
+      "email": "wd401.student12@student.hau.edu.ph",
+      "idNumber": "2022-5012",
+      "block": "WD-401"
+    },
+    {
+      "id": "s_wd401_13",
+      "name": "WD401 Student 13",
+      "email": "wd401.student13@student.hau.edu.ph",
+      "idNumber": "2022-5013",
+      "block": "WD-401"
+    },
+    {
+      "id": "s_wd401_14",
+      "name": "WD401 Student 14",
+      "email": "wd401.student14@student.hau.edu.ph",
+      "idNumber": "2022-5014",
+      "block": "WD-401"
+    },
+    {
+      "id": "s_wd401_15",
+      "name": "WD401 Student 15",
+      "email": "wd401.student15@student.hau.edu.ph",
+      "idNumber": "2022-5015",
+      "block": "WD-401"
+    },
+    {
+      "id": "s_wd401_16",
+      "name": "WD401 Student 16",
+      "email": "wd401.student16@student.hau.edu.ph",
+      "idNumber": "2022-5016",
+      "block": "WD-401"
+    },
+    {
+      "id": "s_wd401_17",
+      "name": "WD401 Student 17",
+      "email": "wd401.student17@student.hau.edu.ph",
+      "idNumber": "2022-5017",
+      "block": "WD-401"
+    },
+    {
+      "id": "s_wd401_18",
+      "name": "WD401 Student 18",
+      "email": "wd401.student18@student.hau.edu.ph",
+      "idNumber": "2022-5018",
+      "block": "WD-401"
+    },
+    {
+      "id": "s_wd401_19",
+      "name": "WD401 Student 19",
+      "email": "wd401.student19@student.hau.edu.ph",
+      "idNumber": "2022-5019",
+      "block": "WD-401"
+    },
+    {
+      "id": "s_wd401_20",
+      "name": "WD401 Student 20",
+      "email": "wd401.student20@student.hau.edu.ph",
+      "idNumber": "2022-5020",
+      "block": "WD-401"
+    },
+    {
+      "id": "s_wd401_21",
+      "name": "WD401 Student 21",
+      "email": "wd401.student21@student.hau.edu.ph",
+      "idNumber": "2022-5021",
+      "block": "WD-401"
+    },
+    {
+      "id": "s_wd401_22",
+      "name": "WD401 Student 22",
+      "email": "wd401.student22@student.hau.edu.ph",
+      "idNumber": "2022-5022",
+      "block": "WD-401"
+    },
+    {
+      "id": "s_wd401_23",
+      "name": "WD401 Student 23",
+      "email": "wd401.student23@student.hau.edu.ph",
+      "idNumber": "2022-5023",
+      "block": "WD-401"
+    },
+    {
+      "id": "s_wd401_24",
+      "name": "WD401 Student 24",
+      "email": "wd401.student24@student.hau.edu.ph",
+      "idNumber": "2022-5024",
+      "block": "WD-401"
+    },
+    {
+      "id": "s_wd401_25",
+      "name": "WD401 Student 25",
+      "email": "wd401.student25@student.hau.edu.ph",
+      "idNumber": "2022-5025",
+      "block": "WD-401"
+    },
+    {
+      "id": "s_wd401_26",
+      "name": "WD401 Student 26",
+      "email": "wd401.student26@student.hau.edu.ph",
+      "idNumber": "2022-5026",
+      "block": "WD-401"
+    },
+    {
+      "id": "s_wd401_27",
+      "name": "WD401 Student 27",
+      "email": "wd401.student27@student.hau.edu.ph",
+      "idNumber": "2022-5027",
+      "block": "WD-401"
+    },
+    {
+      "id": "s_wd401_28",
+      "name": "WD401 Student 28",
+      "email": "wd401.student28@student.hau.edu.ph",
+      "idNumber": "2022-5028",
+      "block": "WD-401"
+    },
+    {
+      "id": "s_wd401_29",
+      "name": "WD401 Student 29",
+      "email": "wd401.student29@student.hau.edu.ph",
+      "idNumber": "2022-5029",
+      "block": "WD-401"
+    },
+    {
+      "id": "s_wd401_30",
+      "name": "WD401 Student 30",
+      "email": "wd401.student30@student.hau.edu.ph",
+      "idNumber": "2022-5030",
+      "block": "WD-401"
+    },
+    {
+      "id": "s_wd401_31",
+      "name": "WD401 Student 31",
+      "email": "wd401.student31@student.hau.edu.ph",
+      "idNumber": "2022-5031",
+      "block": "WD-401"
+    },
+    {
+      "id": "s_wd401_32",
+      "name": "WD401 Student 32",
+      "email": "wd401.student32@student.hau.edu.ph",
+      "idNumber": "2022-5032",
+      "block": "WD-401"
+    },
+    {
+      "id": "s_wd401_33",
+      "name": "WD401 Student 33",
+      "email": "wd401.student33@student.hau.edu.ph",
+      "idNumber": "2022-5033",
+      "block": "WD-401"
+    },
+    {
+      "id": "s_wd401_34",
+      "name": "WD401 Student 34",
+      "email": "wd401.student34@student.hau.edu.ph",
+      "idNumber": "2022-5034",
+      "block": "WD-401"
+    },
+    {
+      "id": "s_wd401_35",
+      "name": "WD401 Student 35",
+      "email": "wd401.student35@student.hau.edu.ph",
+      "idNumber": "2022-5035",
+      "block": "WD-401"
+    },
+    {
+      "id": "s_wd401_36",
+      "name": "WD401 Student 36",
+      "email": "wd401.student36@student.hau.edu.ph",
+      "idNumber": "2022-5036",
+      "block": "WD-401"
+    },
+    {
+      "id": "s_wd401_37",
+      "name": "WD401 Student 37",
+      "email": "wd401.student37@student.hau.edu.ph",
+      "idNumber": "2022-5037",
+      "block": "WD-401"
+    },
+    {
+      "id": "s_wd401_38",
+      "name": "WD401 Student 38",
+      "email": "wd401.student38@student.hau.edu.ph",
+      "idNumber": "2022-5038",
+      "block": "WD-401"
+    },
+    {
+      "id": "s_wd401_39",
+      "name": "WD401 Student 39",
+      "email": "wd401.student39@student.hau.edu.ph",
+      "idNumber": "2022-5039",
+      "block": "WD-401"
+    },
+    {
+      "id": "s_wd401_40",
+      "name": "WD401 Student 40",
+      "email": "wd401.student40@student.hau.edu.ph",
+      "idNumber": "2022-5040",
+      "block": "WD-401"
+    },
+    {
+      "id": "s_wd401_41",
+      "name": "WD401 Student 41",
+      "email": "wd401.student41@student.hau.edu.ph",
+      "idNumber": "2022-5041",
+      "block": "WD-401"
+    },
+    {
+      "id": "s_wd401_42",
+      "name": "WD401 Student 42",
+      "email": "wd401.student42@student.hau.edu.ph",
+      "idNumber": "2022-5042",
+      "block": "WD-401"
+    },
+    {
+      "id": "s_wd401_43",
+      "name": "WD401 Student 43",
+      "email": "wd401.student43@student.hau.edu.ph",
+      "idNumber": "2022-5043",
+      "block": "WD-401"
+    },
+    {
+      "id": "s_wd401_44",
+      "name": "WD401 Student 44",
+      "email": "wd401.student44@student.hau.edu.ph",
+      "idNumber": "2022-5044",
+      "block": "WD-401"
+    },
+    {
+      "id": "s_wd401_45",
+      "name": "WD401 Student 45",
+      "email": "wd401.student45@student.hau.edu.ph",
+      "idNumber": "2022-5045",
+      "block": "WD-401"
+    }
+  ]
+}

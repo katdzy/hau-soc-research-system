@@ -899,7 +899,7 @@ button.linkish:hover:not(:disabled) { background: none; color: var(--accent-ink)
 .plain-list { list-style: none; margin: 4px 0 0; padding: 0; display: flex; flex-direction: column; gap: 4px; }
 @media (max-width: 1180px) {
   .block-grid { grid-template-columns: minmax(0, 1fr); gap: var(--s3); }
-  .block-grid .group-people { border-left: 0; padding-left: 0; border-top: 1px solid var(--rule); padding-top: var(--s2); order: -1; }
+  .block-grid .group-people { border-left: 0; padding-left: 0; border-top: 1px solid var(--rule); padding-top: var(--s2); }
 }
 
 /* --- pills: filter chips (Figma: All · Faculty · Students) ---------------- */
@@ -1564,3 +1564,47 @@ tbody tr.is-flagged :is(.faint, .muted) { color: var(--ink-muted); }
   .topbar-end { gap: var(--s1); }
   .acting > summary { max-width: 36vw; }
 }
+
+/* --- Signed forms (E-00/E-01, F-02/F-04/F-07/F-09) ---------------------------
+   Download → sign outside the system → upload: a numbered three-step column. */
+.copy-steps { list-style: none; counter-reset: copy; margin: var(--s2) 0 0; padding: 0; display: flex; flex-direction: column; gap: var(--s2); max-width: 640px; }
+.copy-steps > li { counter-increment: copy; position: relative; padding-left: var(--s4); }
+.copy-steps > li::before {
+  content: counter(copy); position: absolute; left: 0; top: 0;
+  width: 22px; height: 22px; border-radius: 50%; border: 1px solid var(--rule-strong);
+  font: 600 12px/20px var(--sans); text-align: center; color: var(--ink-muted);
+}
+.copy-steps .choice label { gap: var(--s1); flex-wrap: nowrap; align-items: flex-start; }
+.copy-steps .choice input[type=checkbox] { margin-top: 2px; flex: none; }
+.copy-list { margin-top: var(--s1); border-top: 1px solid var(--rule); }
+.copy-row { display: flex; flex-wrap: wrap; align-items: baseline; gap: 4px var(--s2); padding: var(--s1) 0; border-bottom: 1px solid var(--rule); }
+.copy-row .inline { margin-left: auto; }
+.blank-forms { list-style: none; margin: 0; padding: 0; }
+.blank-forms li { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 4px var(--s3); padding: var(--s2) 0; border-bottom: 1px solid var(--rule); }
+.blank-forms li p { grid-column: 1; margin: 0; }
+.blank-forms li .inline { grid-column: 2; grid-row: 1 / span 2; align-self: center; }
+@media (max-width: 600px) {
+  .blank-forms li { grid-template-columns: 1fr; }
+  .blank-forms li .inline { grid-column: 1; grid-row: auto; }
+  .copy-row .inline { margin-left: 0; }
+}
+
+/* --- Export (S-18) --------------------------------------------------------- */
+.export-menu { position: relative; display: inline-block; }
+.export-menu > summary { list-style: none; }
+.export-menu > summary::-webkit-details-marker { display: none; }
+.export-pop {
+  position: absolute; right: 0; top: calc(100% + 4px); z-index: 20; width: 280px;
+  background: var(--surface); border: 1px solid var(--rule-strong); border-radius: var(--radius-box);
+  padding: var(--s2); text-align: left;
+}
+.export-formats { gap: 4px; margin: var(--s1) 0; }
+.export-formats label { white-space: nowrap; }
+@media (max-width: 600px) { .export-pop { position: fixed; left: 16px; right: 16px; top: auto; bottom: 16px; width: auto; } }
+.pre-line { white-space: pre-line; }
+
+/* Group drafts: classmate search results (GroupDraft.jsx) */
+.classmate-search { max-width: 560px; }
+.classmate-results { list-style: none; margin: calc(-1 * var(--s1)) 0 0; padding: 0; border: 1px solid var(--rule); border-radius: var(--radius-box); }
+.classmate-results li { display: flex; align-items: center; justify-content: space-between; gap: var(--s2); padding: var(--s1) var(--s2); }
+.classmate-results li + li { border-top: 1px solid var(--rule); }

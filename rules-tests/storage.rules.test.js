@@ -81,8 +81,10 @@ afterAll(async () => {
       const root = ctx.storage().ref('projects')
       const { prefixes } = await root.listAll()
       for (const project of prefixes.filter(p => p.name.startsWith('rules_'))) {
-        const { items } = await project.child('documents').listAll()
-        await Promise.all(items.map(i => i.delete()))
+        for (const folder of ['documents', 'forms']) {
+          const { items } = await project.child(folder).listAll()
+          await Promise.all(items.map(i => i.delete()))
+        }
       }
     })
   } finally {
@@ -167,5 +169,34 @@ describe('read — as document.read allows', () => {
 
   it('stays closed while an override hides every project (claims `hidden`)', async () => {
     await assertFails(as('revoked').ref(existing.dev).getMetadata())
+  })
+})
+
+// Forms signed outside the system and uploaded back (revision 2026-10-30):
+// projects/{id}/forms/{fileId}, a PDF or a JPG/PNG scan, write-once. Anyone
+// who reads the project's files may add one; whose turn it is to sign is the
+// service's check (functions/app/files.js verifyForm).
+describe('signed form copies — forms/', () => {
+  const PNG = new Uint8Array([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a, 1, 2, 3])
+  const formPath = (projectId, file = 'FM-AAC-SOC-2004_signed.pdf') => `projects/${projectId}/forms/${name(file)}`
+  const formMeta = (projectId, extra = {}, contentType = 'application/pdf') => ({
+    contentType, customMetadata: { projectId, formType: 'FM-AAC-SOC-2004', uploadedBy: 'f_alpha', sha256: SHA, ...extra },
+  })
+
+  it('lets the group and the Adviser upload a PDF or a scan; never replaced', async () => {
+    const path = formPath(P.dev)
+    await assertSucceeds(put(as('adviser'), path, PDF, formMeta(P.dev)))
+    await assertFails(put(as('adviser'), path, PDF, formMeta(P.dev)))
+    await assertFails(as('adviser').ref(path).delete())
+    await assertSucceeds(put(as('student'), formPath(P.dev, 'log_scan.png'), PNG, formMeta(P.dev, { formType: 'FM-AAC-SOC-2003' }, 'image/png')))
+  })
+
+  it('refuses whoever cannot read the project’s files, and other types, forms or projects', async () => {
+    await assertFails(put(as('admin'), formPath(P.dev), PDF, formMeta(P.dev)))
+    await assertFails(put(as('outsider'), formPath(P.dev), PDF, formMeta(P.dev)))
+    await assertFails(put(as('panel'), formPath(P.dev), PDF, formMeta(P.dev)))
+    await assertFails(put(as('student'), formPath(P.dev, 'form.docx'), PDF, formMeta(P.dev, {}, 'application/msword')))
+    await assertFails(put(as('student'), formPath(P.dev), PDF, formMeta(P.dev, { formType: 'EVALUATION_FORM' })))
+    await assertFails(put(as('student'), formPath(P.dev), PDF, formMeta(P.uro)))
   })
 })

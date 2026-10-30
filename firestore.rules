@@ -104,8 +104,22 @@ service cloud.firestore {
       allow write: if false;
     }
 
+    // Group drafts (STUDENT_GROUP_DRAFTS): names and statuses only, read by any
+    // institutional account so students can see their invitations and
+    // Instructor 1 their section's drafts. Written through `act`.
+    match /groupDrafts/{draftId} {
+      allow read: if institutional();
+      allow write: if false;
+    }
+
+    // S-17 (caac.js archive.browse): every active, verified account browses the
+    // archive's metadata — the archived project record, its members and its
+    // assignments (for the adviser's name). Never its documents or history.
+    function archived(project) { return project.currentStage == 'ARCHIVED'; }
+
     match /projects/{projectId} {
-      allow read: if canOpenRecord(projectId, resource.data);
+      allow read: if canOpenRecord(projectId, resource.data)
+        || (institutional() && !hidden() && archived(resource.data));
       allow write: if false;
     }
 
@@ -113,6 +127,11 @@ service cloud.firestore {
     match /{col}/{docId} {
       allow read: if col in ['projectMembers', 'projectAssignments', 'workflowHistory']
         && canOpenRecord(resource.data.projectId, projectOf(resource.data.projectId));
+      allow write: if false;
+    }
+    match /{col}/{docId} {
+      allow read: if col in ['projectMembers', 'projectAssignments']
+        && institutional() && !hidden() && archived(projectOf(resource.data.projectId));
       allow write: if false;
     }
 

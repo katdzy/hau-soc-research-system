@@ -15,6 +15,7 @@ import { canView, canDo, viewBundle } from '../domain/guard.js'
 import { resolveInstitution, can } from '../domain/caac.js'
 import { stageByKey, STAGES } from '../domain/stages.js'
 import { DOC_STATUS, FORMS, GLOBAL_ROLES as G, PROJECT_ROLES as P } from '../domain/constants.js'
+import { signed } from './pdfFixture.js'
 
 const snap = () => db.snapshot()
 const user = (id) => snap().users.find(u => u.id === id)
@@ -112,7 +113,7 @@ describe('S9.5 — final approval', () => {
     expect(canView(user('f_delta'), b('p_g3'))).toBe(true) // as G3's Adviser
     expect(canDo(user('f_delta'), 'FINAL_APPROVE', b('p_g3')).ok).toBe(false)
     expect(canView(user('f_echo'), b('p_g3'))).toBe(false)
-    await expect(runGate(as('f_delta'), null, 'p_g3', { action: 'FINAL_APPROVE' })).rejects.toThrow()
+    await expect(runGate(as('f_delta'), null, 'p_g3', { action: 'FINAL_APPROVE', file: signed() })).rejects.toThrow()
   })
 
   it('after URO clearance: both sign in any order → Archived, Completed, records table', async () => {
@@ -120,11 +121,11 @@ describe('S9.5 — final approval', () => {
     const gate = stageByKey('FINAL_APPROVAL').gates[0]
     const open = () => gate.steps(b('p_g3')).filter(s => !s.done).map(s => s.role)
     expect(open()).toEqual([G.DEAN, G.ASSOCIATE_DEAN])
-    await runGate(as('f_echo'), null, 'p_g3', { action: 'FINAL_APPROVE' })
+    await runGate(as('f_echo'), null, 'p_g3', { action: 'FINAL_APPROVE', file: signed() })
     expect(b('p_g3').project.currentStage).toBe('FINAL_APPROVAL')
     expect(open()).toEqual([G.DEAN])
     expect(recipients('p_g3', 'Final approval')).toContain('f_delta')
-    await runGate(as('f_delta'), null, 'p_g3', { action: 'FINAL_APPROVE' })
+    await runGate(as('f_delta'), null, 'p_g3', { action: 'FINAL_APPROVE', file: signed() })
     const p = b('p_g3').project
     expect(p).toMatchObject({ currentStage: 'ARCHIVED', status: 'Archived', archiveResult: 'Pass' })
     expect(b('p_g3').forms.find(f => f.formType === FORMS.APPROVAL.code).status).toBe('Signed')

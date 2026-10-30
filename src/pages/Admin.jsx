@@ -173,7 +173,9 @@ function Accounts() {
           </table></div>
         )}
         <p className="faint small mt-2">
-          Activation follows email verification (flag ACCOUNT_ACTIVATION = {FLAGS.ACCOUNT_ACTIVATION}).
+          {FLAGS.ACCOUNT_ACTIVATION === 'email'
+            ? 'An account becomes active as soon as its owner verifies the email; you can suspend it here.'
+            : 'Activation follows email verification: the owner verifies, then you activate the account here.'}
           Student addresses start as {caacTag(G.STUDENT)}; faculty addresses start
           as {FLAGS.FACULTY_BASE_IDENTITY ? caacTag(G.FACULTY) : 'no Global Role'}, which grants nothing
           until an office role or a project assignment is added.

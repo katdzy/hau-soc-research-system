@@ -6,6 +6,7 @@ import { can, resolveInstitution } from '../domain/caac.js'
 import { useWorkspace } from './Workspace.jsx'
 import { ACCOUNT_STATUS, GLOBAL_ROLES as G, accountType } from '../domain/constants.js'
 import { sectionNow } from '../domain/stages.js'
+import { FLAGS } from '../domain/flags.js'
 import { Avatar } from './ui.jsx'
 import { InstallApp, InstallBanner, NotificationSetting } from './Pwa.jsx'
 import { useOutboxNotifications } from '../notifications.js'
@@ -23,6 +24,8 @@ const officeOf = (user) => {
   const roles = user.globalRoles ?? []
   return roles.find(r => r !== G.FACULTY) ?? roles[0] ?? accountType(user.email) ?? 'No role'
 }
+
+const SHARED_NAV = [{ to: '/records', label: 'Archive' }, { to: '/forms', label: 'Blank forms' }]
 
 export default function Shell() {
   const { me, snap, signOut, backendName } = useApp()
@@ -56,8 +59,9 @@ export default function Shell() {
   const acting = open && hereRoles.length
     ? `${hereRoles.join(' · ')} — ${sectionNow(open).section}`
     : current ? `${current.heading}${current.scope ? ` — ${current.scope}` : ''}` : office
-  // Verified registrations waiting for the System Administrator (S0.3).
-  const toActivate = can(inst, 'admin.accounts')
+  // Verified registrations waiting for the System Administrator (S0.3) —
+  // none when verification alone activates (flag ACCOUNT_ACTIVATION = 'email').
+  const toActivate = can(inst, 'admin.accounts') && FLAGS.ACCOUNT_ACTIVATION !== 'email'
     ? (snap.users ?? []).filter(u => u.status === ACCOUNT_STATUS.INACTIVE && u.emailVerified).length : 0
 
   // A group member's project tabs sit in the rail, as in the wireframe's
@@ -119,6 +123,10 @@ export default function Shell() {
             <span>{n.label}</span>
             {n.badge === 'toActivate' && toActivate > 0 && <span className="count">{toActivate}</span>}
           </NavLink>
+        ))}
+        {/* Every account (S-17, F-10): the archive and the blank form library. */}
+        {SHARED_NAV.filter(n => !(current?.nav ?? []).some(x => x.to === n.to)).map(n => (
+          <NavLink key={n.to} to={n.to} className={link}><span>{n.label}</span></NavLink>
         ))}
       </div>
       {railFoot}

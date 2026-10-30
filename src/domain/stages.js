@@ -189,7 +189,7 @@ const signatureSteps = (form, label) => [...(form?.signatories ?? [])]
     tab: s.viaGate ? 'overview' : 'forms',
   }))
 
-/** S5.7 / S8.1–S8.4: group revises → Adviser approves and signs → Panel Members sign. */
+/** S5.7 / S8.1–S8.4: group revises → Adviser approves and verifies → Panel Members confirm → Panel Chair uploads the final FM-2004. */
 function revisionSteps(b, defenseType) {
   const verdictAt = lastDefense(b, defenseType)?.recordedAt
   const rev = latest(b, DOC_TYPES.REVISED_MANUSCRIPT)
@@ -198,10 +198,14 @@ function revisionSteps(b, defenseType) {
   return [
     { label: 'Upload the revised manuscript', role: GROUP, tab: 'documents', done: fresh, order: 0 },
     { label: 'Approve the revised manuscript', role: P.ADVISER, tab: 'documents', done: fresh && rev.status === DOC_STATUS.APPROVED, order: 1 },
-    ...signatureSteps(f2004Of(b, defenseType), `Sign ${FORMS.F2004.code}`).map(st => (
-      st.role === P.PANEL_CHAIR
-        ? { ...st, label: `Recorded the verdict and signed ${FORMS.F2004.code}`, order: -1 }
-        : { ...st, order: st.order + 1 }
+    ...signatureSteps(f2004Of(b, defenseType), '').map(st => (
+      st.role === P.PANEL_CHAIR && st.order === 1
+        ? { ...st, label: `Recorded the verdict and uploaded ${FORMS.F2004.code}`, order: -1 }
+        : st.role === P.PANEL_CHAIR
+          ? { ...st, label: `Upload the final ${FORMS.F2004.code}, signed by the panel members`, order: st.order + 1 }
+          : st.role === P.ADVISER
+            ? { ...st, label: 'Verify the revisions', order: st.order + 1 }
+            : { ...st, label: 'Confirm the revisions', order: st.order + 1 }
     )),
   ].sort((x, y) => x.order - y.order)
 }
@@ -417,7 +421,7 @@ export const STAGES = [
     key: 'PROPOSAL_REVISION',
     label: 'Proposal Revision',
     phase: PHASES.PROPOSAL,
-    blurb: 'The group uploads the revised manuscript before the countdown ends. The Adviser verifies it first, then the Panel Members sign FM-AAC-SOC-2004. Instructor 1 then moves the group on to Capstone 2.',
+    blurb: 'The group uploads the revised manuscript before the countdown ends. The Adviser verifies it first, then the Panel Members confirm the revisions and the Panel Chair uploads the final FM-AAC-SOC-2004, signed outside the system. Instructor 1 then moves the group on to Capstone 2.',
     gates: [{
       action: 'CLOSE_PROPOSAL_REVISION',
       label: 'Move the group on to Capstone 2',
@@ -441,10 +445,10 @@ export const STAGES = [
     key: 'IMPLEMENTATION',
     label: 'Implementation & Monitoring',
     phase: PHASES.IMPLEMENTATION,
-    blurb: 'Weekly logs (FM-AAC-SOC-2003) are approved and signed by the Adviser; Instructor 2 confirms milestones. When the project is ready, the Adviser submits the Capstone Recommendation Form.',
+    blurb: 'The group uploads its filled weekly logs (FM-AAC-SOC-2003) and the Adviser marks them reviewed; Instructor 2 confirms milestones. When the project is ready, the Adviser uploads the Capstone Recommendation Form.',
     gates: [{
       action: 'RECOMMEND_FINAL_DEFENSE',
-      label: `Submit ${FORMS.F2005.code} (Capstone Recommendation)`,
+      label: `Upload ${FORMS.F2005.code} (Capstone Recommendation)`,
       capability: 'finaldefense.recommend',
       actorHint: P.ADVISER,
       next: 'FINAL_DEFENSE_ENDORSEMENT',
@@ -454,16 +458,16 @@ export const STAGES = [
         const done = milestoneStatus(b.project)
         const ownStep = FLAGS.I2_READINESS_CHECK === 'own-step'
         return [
-          { label: 'Get at least 2 weekly logs approved', role: GROUP, tab: 'logs', order: 0, done: b.weeklyLogs.filter(l => l.status === 'Approved').length >= 2 },
+          { label: 'Get at least 2 weekly logs reviewed', role: GROUP, tab: 'logs', order: 0, done: b.weeklyLogs.filter(l => l.status === 'Approved').length >= 2 },
           { label: 'Upload the Final Manuscript', role: GROUP, tab: 'documents', order: 0, done: Boolean(latest(b, DOC_TYPES.FINAL_MANUSCRIPT)) },
           ...CAPSTONE2_MILESTONES.map(m => ({ label: `Confirm the ${m.label.toLowerCase()} milestone`, role: P.INSTRUCTOR_2, tab: 'overview', order: 0, done: Boolean(done[m.key]) })),
           ...(ownStep ? [{ label: 'Confirm, with the Adviser, that the group is ready for final defense', role: P.INSTRUCTOR_2, tab: 'overview', order: 1, done: Boolean(b.project.readinessConfirmedAt) }] : []),
-          { label: `Submit ${FORMS.F2005.code}`, role: P.ADVISER, tab: 'overview', order: 2, done: false, gate: true },
+          { label: `Upload ${FORMS.F2005.code}`, role: P.ADVISER, tab: 'overview', order: 2, done: false, gate: true },
         ]
       },
       requires: (b) => {
         const approved = b.weeklyLogs.filter(l => l.status === 'Approved').length
-        if (approved < 2) return `At least 2 approved weekly logs are required (currently ${approved}).`
+        if (approved < 2) return `At least 2 reviewed weekly logs are required (currently ${approved}).`
         if (!latest(b, DOC_TYPES.FINAL_MANUSCRIPT)) return 'The group must upload a Final Manuscript first.'
         if (!milestonesComplete(b.project)) return 'Instructor 2 has not confirmed the Capstone 2 milestones.'
         if (FLAGS.I2_READINESS_CHECK === 'own-step' && !b.project.readinessConfirmedAt) {
@@ -477,16 +481,20 @@ export const STAGES = [
     key: 'FINAL_DEFENSE_ENDORSEMENT',
     label: 'Final Defense Endorsement',
     phase: PHASES.IMPLEMENTATION,
-    blurb: 'After the Adviser’s recommendation, the Program Chair/Coordinator formally endorses the project for final defense scheduling.',
+    blurb: 'After the Adviser’s recommendation, the Program Chair/Coordinator signs “Noted by” on FM-AAC-SOC-2005 outside the system, uploads the noted copy and endorses the project for final defense scheduling.',
     gates: [{
       action: 'ENDORSE_FINAL_DEFENSE',
       queue: 'Recommendations to endorse',
-      label: 'Endorse for final defense scheduling',
+      label: 'Upload the noted FM-AAC-SOC-2005 and endorse',
       capability: 'finaldefense.endorse',
       actorHint: 'Program Chair/Coordinator',
+      // M-21 — the noted copy is the Program Chair/Coordinator's line.
+      signs: FORMS.F2005.code,
       next: 'FINAL_DEFENSE_SCHEDULING',
       requires: (b) => {
-        if (!formOf(b, FORMS.F2005.code)) return `${FORMS.F2005.code} has not been submitted.`
+        const f2005 = formOf(b, FORMS.F2005.code)
+        if (!f2005) return `${FORMS.F2005.code} has not been submitted.`
+        if (f2005.payload?.outcome === 'Not Recommended') return `The Adviser did not recommend the group on ${FORMS.F2005.code}.`
         if (!has(b.assignments, a => a.roleType === P.INSTRUCTOR_2)) return 'Assign an Instructor 2 to publish the schedule.'
         return null
       },
@@ -527,11 +535,11 @@ export const STAGES = [
     key: 'FINAL_REVISION',
     label: 'Final Revision',
     phase: PHASES.IMPLEMENTATION,
-    blurb: 'Post-defense revisions go to the Adviser first, then the Panel Members, who sign FM-AAC-SOC-2004. The last signature completes the revisions and opens clearance (S8.4).',
+    blurb: 'Post-defense revisions go to the Adviser first, then the Panel Members, who confirm them; the Panel Chair uploads the final FM-AAC-SOC-2004, signed outside the system. That upload completes the revisions and opens clearance (S8.4).',
     gates: [{
       // S8.4 — handled by the signatures themselves: the last FM-2004 line moves the stage.
       action: 'COMPLETE_FINAL_REVISION',
-      label: `Verify the revisions and sign ${FORMS.F2004.code}`,
+      label: `Verify the revisions on ${FORMS.F2004.code}`,
       capability: 'revision.verify',
       actorHint: 'Adviser and Panel Members',
       handledIn: 'forms',
@@ -547,11 +555,11 @@ export const STAGES = [
     key: 'CLEARANCE',
     label: 'Final Requirements',
     phase: PHASES.CLEARANCE,
-    blurb: 'The group uploads the Editor’s Certificate and Plagiarism Clearance Certificate. The Approval Sheet is signed by the Adviser, then the Panel, then endorsed by the Program Chair/Coordinator.',
+    blurb: 'The group uploads the Editor’s Certificate and Plagiarism Clearance Certificate. The Approval Sheet is signed outside the system by the Adviser, then the Panel, then the Program Chair/Coordinator — each uploads the copy they signed — and the Program Chair/Coordinator routes it to the URO.',
     gates: [{
       action: 'ENDORSE_TO_URO',
       queue: 'Approval Sheets to endorse',
-      label: 'Endorse and sign the Approval Sheet',
+      label: 'Upload the signed Approval Sheet and route to the URO',
       capability: 'clearance.endorse',
       actorHint: 'Program Chair/Coordinator',
       signs: FORMS.APPROVAL.code,
@@ -559,9 +567,9 @@ export const STAGES = [
       steps: (b) => [
         { label: 'Upload the Editor’s Certificate', role: GROUP, tab: 'documents', order: 0, done: Boolean(latest(b, DOC_TYPES.EDITORS_CERTIFICATE)) },
         { label: 'Upload the Plagiarism Clearance Certificate', role: GROUP, tab: 'documents', order: 0, done: Boolean(latest(b, DOC_TYPES.PLAGIARISM_CERTIFICATE)) },
-        ...signatureSteps(formOf(b, FORMS.APPROVAL.code), 'Sign the Approval Sheet')
+        ...signatureSteps(formOf(b, FORMS.APPROVAL.code), 'Sign the latest Approval Sheet and upload it')
           .filter(st => st.order <= 3)
-          .map(st => (st.order === 3 ? { ...st, label: 'Endorse and sign the Approval Sheet', gate: true } : st)),
+          .map(st => (st.order === 3 ? { ...st, label: 'Sign the Approval Sheet, upload it and route to the URO', gate: true } : st)),
       ],
       requires: (b) => {
         const missing = [DOC_TYPES.EDITORS_CERTIFICATE, DOC_TYPES.PLAGIARISM_CERTIFICATE]
@@ -576,11 +584,11 @@ export const STAGES = [
     key: 'URO_VERIFICATION',
     label: 'URO Verification',
     phase: PHASES.CLEARANCE,
-    blurb: 'The University Research Office verifies the Editor’s Certificate, the Plagiarism Clearance Certificate and the manuscript, then signs.',
+    blurb: 'The University Research Office verifies the Editor’s Certificate, the Plagiarism Clearance Certificate and the manuscript, then approves the clearance.',
     gates: [{
       action: 'URO_VERIFY',
       queue: 'Clearances to verify',
-      label: 'Verify certificates and sign',
+      label: 'Approve clearance',
       capability: 'uro.verify',
       actorHint: 'University Research Office',
       // Not explicit in the manuscript (flag URO_SIGNS_APPROVAL_SHEET), read when used.
@@ -603,17 +611,17 @@ export const STAGES = [
     key: 'FINAL_APPROVAL',
     label: 'Final Approval',
     phase: PHASES.CLEARANCE,
-    blurb: 'The Dean and the Associate Dean sign the Approval Sheet and give final approval. The second signature archives the project.',
+    blurb: 'The Dean and the Associate Dean each sign the latest Approval Sheet outside the system and upload it. The second upload archives the project.',
     gates: [{
       action: 'FINAL_APPROVE',
       queue: 'Projects for final approval',
       // The whole Approval Sheet chain; the Dean's and AD's lines are the open ones.
       steps: (b) => signatureSteps(formOf(b, FORMS.APPROVAL.code), '').map(st => ({
         ...st,
-        label: ({ 1: 'Signed the Approval Sheet', 2: 'Signed the Approval Sheet', 3: 'Endorsed and signed the Approval Sheet', 4: 'Verified the certificates and signed' })[st.order]
-          ?? 'Sign the Approval Sheet (final approval)',
+        label: ({ 1: 'Signed and uploaded the Approval Sheet', 2: 'Signed and uploaded the Approval Sheet', 3: 'Signed, uploaded and routed the Approval Sheet', 4: 'Approved the clearance' })[st.order]
+          ?? 'Upload the signed Approval Sheet (final approval)',
       })),
-      label: 'Sign the Approval Sheet (final approval)',
+      label: 'Upload the signed Approval Sheet (final approval)',
       capability: 'final.approve',
       actorHint: 'Dean and Associate Dean',
       signs: FORMS.APPROVAL.code,

@@ -5,7 +5,7 @@
 // and the multi-hat isolation.
 
 import { describe, it, expect, beforeAll, beforeEach } from 'vitest'
-import { pdfFile } from './pdfFixture.js'
+import { pdfFile, signed } from './pdfFixture.js'
 import { db } from '../backend/index.js'
 import { buildSeed, SEED_ROLES } from '../backend/seed.js'
 import { applyStage } from '../backend/stageBuilder.js'
@@ -135,7 +135,7 @@ describe('S6.7 — readiness check with the Adviser (NEW-43), then FM-2005', () 
     await submitDocument(as('s_quebec'), null, 'p_g3', { docType: T.FINAL_MANUSCRIPT, ...pdf })
     const logs = Object.values(snap().weeklyLogs).filter(l => l.projectId === 'p_g3')
     await db.add('weeklyLogs', { ...logs[0], id: undefined, weekNo: 2 })
-    await expect(runGate(as('f_delta'), null, 'p_g3', { action: 'RECOMMEND_FINAL_DEFENSE' })).rejects.toThrow(/ready for final defense/)
+    await expect(runGate(as('f_delta'), null, 'p_g3', { action: 'RECOMMEND_FINAL_DEFENSE', file: signed() })).rejects.toThrow(/ready for final defense/)
 
     await confirmReadiness(as('f_charlie'), null, 'p_g3', 'Checked with Dean Delta.')
     expect(b('p_g3').project).toMatchObject({ readinessConfirmedBy: 'f_charlie', readinessNote: 'Checked with Dean Delta.' })
@@ -143,7 +143,7 @@ describe('S6.7 — readiness check with the Adviser (NEW-43), then FM-2005', () 
     expect(recipients('p_g3', 'Ready for final defense')).toEqual(['f_delta'])
     await expect(confirmReadiness(as('f_charlie'), null, 'p_g3')).rejects.toThrow(/already confirmed/)
 
-    await runGate(as('f_delta'), null, 'p_g3', { action: 'RECOMMEND_FINAL_DEFENSE' })
+    await runGate(as('f_delta'), null, 'p_g3', { action: 'RECOMMEND_FINAL_DEFENSE', file: signed() })
     expect(b('p_g3').project.currentStage).toBe('FINAL_DEFENSE_ENDORSEMENT')
   })
 
@@ -165,7 +165,7 @@ describe('S7.1 → S7.3 — the final-defense schedule', () => {
     // The Defense tab shows the step disabled, with what comes first (it reads the dormant grant).
     expect(resolveContext(user('f_charlie'), b('p_g3')).dormant.some(d => d.cap === 'defense.schedule')).toBe(true)
 
-    await runGate(as('f_alpha'), null, 'p_g3', { action: 'ENDORSE_FINAL_DEFENSE' })
+    await runGate(as('f_alpha'), null, 'p_g3', { action: 'ENDORSE_FINAL_DEFENSE', file: signed() })
     expect(recipients('p_g3', 'Stage: Final Defense Scheduling')).toContain('f_charlie')
     // On the dashboard the step sits under the Instructor 2 hat (not an office queue).
     expect(row('f_charlie', 'p_g3').gates.map(g => [g.gate.action, g.hat, g.blocker])).toEqual([['SCHEDULE_FINAL_DEFENSE', P.INSTRUCTOR_2, null]])
@@ -205,7 +205,7 @@ describe('S8.5 — post-defense course requirements (NEW-44, record only)', () =
     await load(scenarioStore('T10')) // Clearance, Approval Sheet panel-signed
     expect(canDo(user('f_charlie'), 'confirmPostDefenseRequirements', b('p_g3')).ok).toBe(true)
     // Not a gate: the PC endorses without it.
-    await runGate(as('f_alpha'), null, 'p_g3', { action: 'ENDORSE_TO_URO' })
+    await runGate(as('f_alpha'), null, 'p_g3', { action: 'ENDORSE_TO_URO', file: signed() })
     expect(b('p_g3').project.currentStage).toBe('URO_VERIFICATION')
     expect(canDo(user('f_charlie'), 'confirmPostDefenseRequirements', b('p_g3')).ok).toBe(false)
     for (const stage of ['IMPLEMENTATION', 'FINAL_DEFENSE', 'URO_VERIFICATION', 'FINAL_APPROVAL']) {
@@ -240,11 +240,11 @@ describe('Must NOT (item 4)', () => {
     const sheet = b('p_g3').forms.find(f => f.formType === FORMS.APPROVAL.code)
     expect(sheet.signatories.some(s => s.userId === 'f_charlie' || s.role === P.INSTRUCTOR_2)).toBe(false)
     expect(canSign(sheet, user('f_charlie'), b('p_g3')).ok).toBe(false)
-    await expect(signForm(as('f_charlie'), null, 'p_g3', sheet.id)).rejects.toThrow()
+    await expect(signForm(as('f_charlie'), null, 'p_g3', sheet.id, { file: signed() })).rejects.toThrow()
     await load(buildSeed())
     const f2004 = b('p_g3').forms.find(f => f.formType === FORMS.F2004.code && f.payload.defenseType === 'Final')
     expect(f2004.signatories.some(s => s.role === P.INSTRUCTOR_2)).toBe(false)
-    await expect(signForm(as('f_charlie'), null, 'p_g3', f2004.id)).rejects.toThrow()
+    await expect(signForm(as('f_charlie'), null, 'p_g3', f2004.id, { file: signed() })).rejects.toThrow()
     for (const a of ['ENDORSE_TO_URO', 'URO_VERIFY', 'FINAL_APPROVE', 'recordVerdict', 'RECOMMEND_FINAL_DEFENSE', 'ENDORSE_FINAL_DEFENSE']) {
       for (const s of STAGES) expect(allowedActions(P.INSTRUCTOR_2, s.key), `${a} ${s.key}`).not.toContain(a)
     }

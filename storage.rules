@@ -108,6 +108,33 @@ service firebase.storage {
       allow update, delete: if false;
     }
 
+    // A form signed outside the system (FM-AAC-SOC-2003/2004/2005, Approval
+    // Sheet), uploaded back as the signatory's copy: PDF, or a JPG/PNG scan or
+    // photo (uploadFormFile in submissionFile.js). Anyone who can read the
+    // project's files may add one at a new path; whether it is their turn to
+    // sign is checked by the service before the copy is recorded
+    // (functions/app/files.js verifyForm). Write-once like documents.
+    function describesForm(projectId) {
+      let meta = request.resource.metadata;
+      return meta.keys().hasOnly(['projectId', 'formType', 'uploadedBy', 'sha256'])
+        && meta.projectId == projectId
+        && meta.formType in ['FM-AAC-SOC-2003', 'FM-AAC-SOC-2004', 'FM-AAC-SOC-2005', 'Approval Sheet']
+        && meta.uploadedBy is string && meta.uploadedBy.size() > 0
+        && meta.sha256.matches('[0-9a-f]{64}');
+    }
+
+    match /projects/{projectId}/forms/{fileId} {
+      allow read: if canReadFiles(projectId);
+      allow create: if canReadFiles(projectId)
+        && resource == null
+        && fileId.matches('[a-z0-9]{12,}-[A-Za-z0-9_.-]{0,76}[.]([pP][dD][fF]|[jJ][pP][eE]?[gG]|[pP][nN][gG])')
+        && request.resource.contentType in ['application/pdf', 'image/jpeg', 'image/png']
+        && request.resource.size > 0
+        && request.resource.size <= 25 * 1024 * 1024
+        && describesForm(projectId);
+      allow update, delete: if false;
+    }
+
     match /{everything=**} {
       allow read, write: if false;
     }

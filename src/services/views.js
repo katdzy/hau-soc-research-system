@@ -201,7 +201,7 @@ export function studentChecklist(b) {
 
 /**
  * Wireframe S-07: everything waiting on this user in the current context —
- * submissions to decide or annotate, weekly logs to sign, revision forms to
+ * submissions to decide or annotate, weekly logs to review, revision forms to
  * verify — oldest first.
  */
 export function reviewQueue(snap, me) {

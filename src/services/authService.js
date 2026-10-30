@@ -1,4 +1,5 @@
 import { EMAIL_DOMAINS, isInstitutionalEmail, normalizeEmail } from '../domain/constants.js'
+import { emulatorHost } from '../backend/emulatorHost.js'
 
 /**
  * Validates whether an email belongs to an allowed institutional domain.
@@ -43,7 +44,7 @@ export async function getAuthInstance() {
 
       if (import.meta.env.VITE_USE_EMULATORS === 'true') {
         try {
-          authModule.connectAuthEmulator(auth, 'http://127.0.0.1:9099', { disableWarnings: true })
+          authModule.connectAuthEmulator(auth, `http://${emulatorHost()}:9099`, { disableWarnings: true })
         } catch {
           // Emulator may already be connected in HMR
         }

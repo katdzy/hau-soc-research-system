@@ -23,10 +23,19 @@ export const FLAGS = {
   FACULTY_BASE_IDENTITY: true,
 
   /**
-   * OQ#4 · Mockup default. 'email+admin' = the owner verifies the email, then the
-   * System Administrator activates the account. 'email' = verification alone activates.
+   * OQ#4 · Decided 2026-10-30: email verification alone activates the account.
+   * 'email+admin' = the owner verifies the email, then the System Administrator
+   * activates it. The System Administrator can still suspend an account.
    */
-  ACCOUNT_ACTIVATION: 'email+admin',
+  ACCOUNT_ACTIVATION: 'email',
+
+  /**
+   * Decided 2026-10-30 (replaces Decision 17): students draft their own group
+   * from their section, inviting classmates who accept; a full group submits it
+   * and Instructor 1 approves (it becomes the project) or returns it. Instructor 1
+   * can still create a group directly, e.g. for students left without one.
+   */
+  STUDENT_GROUP_DRAFTS: true,
 
   /**
    * NEW-7 · Mockup default. 'both' = Dean AND Associate Dean approve, any order.
@@ -81,7 +90,7 @@ export const FLAGS = {
    */
   REVISION_DAYS: { Minor: 7, Major: 14 },
 
-  /** OQ#7 · Mockup default. Who approves and e-signs weekly logs: P.ADVISER | P.INSTRUCTOR_2. */
+  /** OQ#7 · Mockup default. Who reviews (marks reviewed or returns) uploaded weekly logs: P.ADVISER | P.INSTRUCTOR_2. */
   WEEKLY_LOG_SIGNER: P.ADVISER,
 
   /**
@@ -233,7 +242,8 @@ export const FLAGS = {
 /** Where each flag takes effect — shown on the dev tools page and in the report. */
 export const FLAG_NOTES = {
   FACULTY_BASE_IDENTITY: { source: 'NEW-1', kind: 'Mockup default', wired: 'verifyEmail (actions.js), Admin role options' },
-  ACCOUNT_ACTIVATION: { source: 'OQ#4', kind: 'Mockup default', wired: 'verifyEmail, setAccountStatus (actions.js)' },
+  STUDENT_GROUP_DRAFTS: { source: 'Team, 2026-10-30 (replaces Decision 17)', kind: 'Decided 2026-10-30', wired: 'caac.js groupdraft.manage; group drafts (actions.js); GroupDraftCard (dashboard), GroupDraftReview (Groups & Rosters)' },
+  ACCOUNT_ACTIVATION: { source: 'OQ#4', kind: 'Decided 2026-10-30', wired: 'markVerified, confirmProviderVerification, setAccountStatus (actions.js); SignIn admit; Shell badge and AdminDesk' },
   ADVISER_APPROVAL: { source: 'NEW-7', kind: 'Mockup default', wired: 'APPROVE_ADVISER gate (stages.js, actions.js)' },
   ADVISER_ACCEPT_STEP: { source: 'OQ#5', kind: 'Mockup default', wired: 'not wired (off)' },
   PROPOSAL_DEFENSE_SCHEDULER: { source: 'NEW-2', kind: 'Mockup default', wired: 'caac.js defense.schedule policy' },

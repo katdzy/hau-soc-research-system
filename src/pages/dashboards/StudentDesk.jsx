@@ -112,7 +112,7 @@ export default function StudentDesk({ r }) {
               ? <Stat label={deadline < 0 ? 'Days past the revision deadline' : 'Days before the revision deadline'}
                   n={deadline < 0 ? `−${Math.abs(deadline)}` : deadline} tone={deadline < 0 ? 'stop' : undefined} />
               : <Stat label="Documents submitted" n={b.documents.length} />}
-            <Stat label="Weekly logs approved" n={`${logsDone} / ${b.weeklyLogs.length}`} to={link('logs')} />
+            <Stat label="Weekly logs reviewed" n={`${logsDone} / ${b.weeklyLogs.length}`} to={link('logs')} />
           </Stats>
 
           {openDefense && (

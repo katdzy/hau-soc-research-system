@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { Fragment, useState } from 'react'
 import { useApp } from '../../state/AppContext.jsx'
 import { can } from '../../domain/caac.js'
 import { STAGES, stageByKey, stageIndex, openGates, defenseNotHeld, verdictCorrectionBlocker } from '../../domain/stages.js'
@@ -9,6 +9,9 @@ import { VERDICTS, FORMS } from '../../domain/constants.js'
 import { FLAGS } from '../../domain/flags.js'
 import { revisionDaysOf } from '../../domain/settings.js'
 import { Act } from '../ViewOnly.jsx'
+import { SignedCopyField, signedCopyReady, StoredFileLink } from '../FormFiles.jsx'
+import { copiesOf } from '../../domain/forms.js'
+import { PANEL_ROLES } from '../../domain/constants.js'
 
 export default function DefensePanel({ b, ctx }) {
   const { snap, me } = useApp()
@@ -67,7 +70,17 @@ export default function DefensePanel({ b, ctx }) {
                   {d.revisionStatus === 'Overdue' && <> · <Badge tone="stop">overdue</Badge> <Countdown deadline={d.revisionDeadline} /></>}
                 </dd>
               </>}
-              {d.remarks && <><dt>{d.verdict === VERDICTS.REDEFENSE ? 'Required changes' : 'Required revisions'}</dt><dd className="small">{d.remarks}</dd></>}
+              {d.remarks && <><dt>{d.verdict === VERDICTS.REDEFENSE ? 'Required changes' : 'Required revisions'}</dt><dd className="small pre-line">{d.remarks}</dd></>}
+              {/* F-03 — the Capstone Revision Form the Panel Chair uploaded, read-only. */}
+              {copiesOf(b.forms.find(f => f.formType === FORMS.F2004.code && f.payload?.defenseId === d.id)).map(c => (
+                <Fragment key={c.n}>
+                  <dt>{FORMS.F2004.code}</dt>
+                  <dd className="small">
+                    <span className="mono">{c.fileName}</span> <span className="faint">· uploaded by {nameOf(c.uploadedBy)}, {fmtDateTime(c.uploadedAt)}</span>
+                    <span className="inline"><StoredFileLink storagePath={c.storagePath} fileName={c.fileName} /><StoredFileLink storagePath={c.storagePath} fileName={c.fileName} download /></span>
+                  </dd>
+                </Fragment>
+              ))}
             </dl>
           </div>
         ))}
@@ -131,8 +144,11 @@ export default function DefensePanel({ b, ctx }) {
             // NEW-40 (flag VERDICT_AFTER_SCHEDULED_TIME): the form opens after the scheduled time.
             <p className="note small" role="note">{defenseNotHeld(open)}</p>
           ) : (
-            <VerdictForm busy={busy} submitLabel="Record verdict"
-              onSubmit={({ verdict: v, remarks: r }) => run(() => recordVerdict(me, snap, b.project.id, { verdict: v, remarks: r }))} />
+            <>
+              <PanelComments b={b} nameOf={nameOf} />
+              <VerdictForm busy={busy} submitLabel="Submit verdict & form" b={b} nameOf={nameOf}
+                onSubmit={({ verdict: v, remarks: r, file }) => run(() => recordVerdict(me, snap, b.project.id, { verdict: v, remarks: r, file }))} />
+            </>
           )}
           {FLAGS.VERDICT_CORRECTION_HOURS > 0 && (
             <p className="faint small mt-1">
@@ -150,7 +166,7 @@ export default function DefensePanel({ b, ctx }) {
             {fmtDateTime(new Date(new Date(corrigible.recordedAt).getTime() + FLAGS.VERDICT_CORRECTION_HOURS * 36e5).toISOString())}
             {' '}and only while nobody has acted on it. The countdown still runs from the original recording.
           </p>
-          <VerdictForm busy={busy} submitLabel="Correct verdict" initial={corrigible} withReason
+          <VerdictForm busy={busy} submitLabel="Correct verdict" initial={corrigible} withReason b={b} nameOf={nameOf}
             onSubmit={(input) => run(() => correctVerdict(me, snap, b.project.id, { ...input, defenseId: corrigible.id }))} />
           <ActionError error={error} />
         </Section>
@@ -163,12 +179,42 @@ export default function DefensePanel({ b, ctx }) {
   )
 }
 
-/** The verdict and its required text; for a correction, also the reason. */
-function VerdictForm({ busy, submitLabel, onSubmit, initial = null, withReason = false }) {
+/**
+ * M-18 — before the verdict: what each panelist left on the defense manuscript.
+ * Shared comments only; private notes are their author's, and even their
+ * number would leak (R12).
+ */
+function PanelComments({ b, nameOf }) {
+  const panel = b.assignments.filter(a => PANEL_ROLES.includes(a.roleType))
+  const latestIds = new Set(b.documents.filter(d => d.status !== 'Superseded').map(d => d.id))
+  return (
+    <div className="mb-2">
+      <div className="label">Panel comments</div>
+      <ul className="plain-list">
+        {panel.map(a => {
+          const n = b.annotations.filter(x => x.authorId === a.userId && x.visibility !== 'private' && latestIds.has(x.documentId)).length
+          return (
+            <li key={a.id ?? a.userId} className="small">
+              <strong>{nameOf(a.userId)}</strong> <span className="faint">· {a.roleType} · {n ? `${n} shared comment${n > 1 ? 's' : ''} on the manuscript` : 'no shared comments'}</span>
+            </li>
+          )
+        })}
+      </ul>
+      <p className="faint small m-0 mt-half">Read them in the Documents tab before recording the verdict.</p>
+    </div>
+  )
+}
+
+/**
+ * The verdict, its required text and FM-2004 signed outside the system (M-19);
+ * for a correction, also the reason and the corrected copy.
+ */
+function VerdictForm({ busy, submitLabel, onSubmit, b, nameOf, initial = null, withReason = false }) {
   const [verdict, setVerdict] = useState(initial?.verdict ?? VERDICTS.MINOR)
   const [remarks, setRemarks] = useState(initial?.remarks ?? '')
   const [reason, setReason] = useState('')
-  const ready = remarks.trim() && (!withReason || reason.trim())
+  const [copy, setCopy] = useState(null)
+  const ready = remarks.trim() && (!withReason || reason.trim()) && signedCopyReady(copy)
   return (
     <>
       <fieldset className="choice">
@@ -181,7 +227,7 @@ function VerdictForm({ busy, submitLabel, onSubmit, initial = null, withReason =
         ))}
       </fieldset>
       <Field label={verdict === VERDICTS.REDEFENSE ? 'Changes required before the re-defense (required)' : 'Required revisions (required)'}
-        hint="Shown to the group and the Adviser, and recorded on the form.">
+        hint="One per line. Shown to the group and the Adviser; the panel members check each one when they verify the revisions.">
         <textarea value={remarks} onChange={e => setRemarks(e.target.value)} required />
       </Field>
       {withReason && (
@@ -189,9 +235,12 @@ function VerdictForm({ busy, submitLabel, onSubmit, initial = null, withReason =
           <input value={reason} onChange={e => setReason(e.target.value)} required />
         </Field>
       )}
-      <button className="primary" disabled={busy || !ready}
-        onClick={() => onSubmit({ verdict, remarks, reason })}>
-        {submitLabel}
+      <div className="label mt-2">{FORMS.F2004.code} · {FORMS.F2004.name}</div>
+      <SignedCopyField formType={FORMS.F2004.code} group={b.project.title} value={copy} onChange={setCopy} nameOf={nameOf}
+        intro={withReason ? 'Fill in the corrected verdict; you and the proponents sign it again.' : 'Fill in the verdict and the recommendations; you and the proponents sign it.'} />
+      <button className="primary mt-2" disabled={busy || !ready}
+        onClick={() => onSubmit({ verdict, remarks, reason, file: copy.file })}>
+        {busy ? 'Uploading…' : submitLabel}
       </button>
     </>
   )

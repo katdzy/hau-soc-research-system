@@ -1,0 +1,59 @@
+rules_version = '2';
+
+// Rules for the live project on the free Spark plan, until the Blaze plan
+// lets the `act` Cloud Function and the claims triggers run.
+//
+// The real rules (firestore.rules) read each account's roles from custom
+// claims, which only Cloud Functions can set, and deny every client write
+// (writes go through `act`). Without functions neither works, so here:
+//   - the app writes from the browser (VITE_WRITE_PATH=direct) and the CAAC
+//     guard runs in the browser only;
+//   - any verified @hau.edu.ph / @student.hau.edu.ph account may read and
+//     write project data — the rules no longer enforce who sees which project;
+//   - registering creates only your own Inactive record with no roles;
+//   - the audit log and the mail outbox stay append-only.
+// Switch back to firestore.rules once `act` is deployed.
+
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    function institutional() {
+      return request.auth != null && (
+        request.auth.token.email.matches('.*@hau[.]edu[.]ph') ||
+        request.auth.token.email.matches('.*@student[.]hau[.]edu[.]ph')
+      );
+    }
+    function verified() {
+      return institutional() && request.auth.token.email_verified == true;
+    }
+
+    // Registration reads the list to refuse a duplicate before the address is
+    // verified, and creates the new account's own record: Inactive, no roles.
+    match /users/{userId} {
+      allow read: if institutional();
+      allow create: if institutional()
+        && request.resource.data.email == request.auth.token.email
+        && request.resource.data.status == 'Inactive'
+        && request.resource.data.globalRoles.size() == 0;
+      allow update: if verified();
+      allow delete: if false;
+    }
+
+    // Append-only. Registration writes one of each before verification.
+    match /auditLogs/{id} {
+      allow read: if verified();
+      allow create: if institutional();
+      allow update, delete: if false;
+    }
+    match /outbox/{id} {
+      allow read: if verified();
+      allow create: if institutional();
+      allow update, delete: if false;
+    }
+
+    // Everything else the app keeps (schema.js COLLECTIONS, settings, claimsSync).
+    match /{col}/{docId} {
+      allow read, write: if verified() && !(col in ['users', 'auditLogs', 'outbox']);
+    }
+  }
+}

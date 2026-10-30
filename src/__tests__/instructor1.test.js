@@ -4,7 +4,7 @@
 // and Instructor 2, the multi-hat isolation, and the "Must NOT" list.
 
 import { describe, it, expect, beforeAll, beforeEach } from 'vitest'
-import { pdfFile } from './pdfFixture.js'
+import { pdfFile, signed } from './pdfFixture.js'
 import { db } from '../backend/index.js'
 import { buildSeed, SEED_ROLES } from '../backend/seed.js'
 import { applyStage } from '../backend/stageBuilder.js'
@@ -190,18 +190,20 @@ describe('S5.8 — routing to Capstone 2', () => {
     const gate = stageByKey('PROPOSAL_REVISION').gates[0]
     const now = () => { const st = gate.steps(b('p_g2')); return st.find(x => !x.done) }
     const roles = gate.steps(b('p_g2')).map(x => x.role)
-    expect(roles).toEqual([P.PANEL_CHAIR, 'Group', P.ADVISER, P.ADVISER, P.PANEL_MEMBER, 'Program Chair/Coordinator', P.INSTRUCTOR_1])
+    expect(roles).toEqual([P.PANEL_CHAIR, 'Group', P.ADVISER, P.ADVISER, P.PANEL_MEMBER, P.PANEL_CHAIR, 'Program Chair/Coordinator', P.INSTRUCTOR_1])
     expect(gate.steps(b('p_g2'))[0].done).toBe(true) // the Chair signed with the verdict
     expect(now()).toMatchObject({ role: 'Group', label: 'Upload the revised manuscript' })
 
     const rev = await submitDocument(as('s_november'), null, 'p_g2', { docType: T.REVISED_MANUSCRIPT, ...pdf })
     expect(now()).toMatchObject({ role: P.ADVISER, label: 'Approve the revised manuscript' })
     await submitReview(as('f_charlie'), null, 'p_g2', rev.id, { decision: DECISIONS.APPROVE })
-    expect(now()).toMatchObject({ role: P.ADVISER, label: 'Sign FM-AAC-SOC-2004' })
+    expect(now()).toMatchObject({ role: P.ADVISER, label: 'Verify the revisions' })
     const f = b('p_g2').forms.find(x => x.formType === FORMS.F2004.code)
     await signForm(as('f_charlie'), null, 'p_g2', f.id)
-    expect(now()).toMatchObject({ role: P.PANEL_MEMBER, userId: 'f_echo' })
+    expect(now()).toMatchObject({ role: P.PANEL_MEMBER, userId: 'f_echo', label: 'Confirm the revisions' })
     await signForm(as('f_echo'), null, 'p_g2', f.id)
+    expect(now()).toMatchObject({ role: P.PANEL_CHAIR, userId: 'f_alpha', label: 'Upload the final FM-AAC-SOC-2004, signed by the panel members' })
+    await signForm(as('f_alpha'), null, 'p_g2', f.id, { file: signed() })
     expect(now()).toMatchObject({ role: 'Program Chair/Coordinator', label: 'Assign an Instructor 2' })
     await assignRole(as('f_alpha'), null, 'p_g2', 'f_foxtrot', P.INSTRUCTOR_2)
     expect(now()).toMatchObject({ role: P.INSTRUCTOR_1, gate: true })
@@ -271,7 +273,7 @@ describe('Must NOT (item 5)', () => {
     await at('p_g2', 'IMPLEMENTATION')
     await expect(confirmMilestones(as('f_bravo'), null, 'p_g2', 'systemComponents')).rejects.toThrow(/Not permitted|not available/)
     await load(buildSeed())
-    await expect(recordVerdict(as('f_bravo'), null, 'p_g2', { verdict: 'Re-defense' })).rejects.toThrow()
+    await expect(recordVerdict(as('f_bravo'), null, 'p_g2', { file: signed(), verdict: 'Re-defense' })).rejects.toThrow()
   })
 
   it('see groups outside the block as Instructor 1', async () => {

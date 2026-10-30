@@ -4,7 +4,7 @@
 // NEW-45), what the URO must not do, and T11 / T12.
 
 import { describe, it, expect, beforeAll, beforeEach } from 'vitest'
-import { pdfFile } from './pdfFixture.js'
+import { pdfFile, signed } from './pdfFixture.js'
 import { db } from '../backend/index.js'
 import { buildSeed, SEED_ROLES } from '../backend/seed.js'
 import { applyStage } from '../backend/stageBuilder.js'
@@ -173,7 +173,7 @@ describe('NEW-46 — the URO returns the manuscript (flag URO_MANUSCRIPT_RETURN)
 
     // The Adviser waits for the group; the voided sheet cannot be signed.
     expect(canSign(sheets()[0], user('f_delta'), b('p_g3')).reason).toMatch(/waiting for the group’s new Final Manuscript/)
-    await expect(signForm(as('f_delta'), null, 'p_g3', sheets()[0].id)).rejects.toThrow()
+    await expect(signForm(as('f_delta'), null, 'p_g3', sheets()[0].id, { file: signed() })).rejects.toThrow()
     expect(recipients('p_g3', 'Approval Sheet to sign')).toEqual([])
     const due = groupDue(b('p_g3'), resolveContext(user('s_quebec'), b('p_g3')))
     expect(due).toEqual([expect.objectContaining({ label: `${T.FINAL_MANUSCRIPT} v1 was returned — upload a revised version`, urgent: true })])
@@ -181,10 +181,10 @@ describe('NEW-46 — the URO returns the manuscript (flag URO_MANUSCRIPT_RETURN)
     const v2 = await submitDocument(as('s_quebec'), null, 'p_g3', { docType: T.FINAL_MANUSCRIPT, ...pdf })
     expect(v2.versionNumber).toBe(2)
     expect(recipients('p_g3', 'Approval Sheet to sign')).toEqual(['f_delta'])
-    await signForm(as('f_delta'), null, 'p_g3', sheets()[0].id)
-    await signForm(as('f_foxtrot'), null, 'p_g3', sheets()[0].id)
-    await signForm(as('f_bravo'), null, 'p_g3', sheets()[0].id)
-    await runGate(as('f_alpha'), null, 'p_g3', { action: 'ENDORSE_TO_URO' })
+    await signForm(as('f_delta'), null, 'p_g3', sheets()[0].id, { file: signed() })
+    await signForm(as('f_foxtrot'), null, 'p_g3', sheets()[0].id, { file: signed() })
+    await signForm(as('f_bravo'), null, 'p_g3', sheets()[0].id, { file: signed() })
+    await runGate(as('f_alpha'), null, 'p_g3', { action: 'ENDORSE_TO_URO', file: signed() })
     expect(b('p_g3').project.currentStage).toBe('URO_VERIFICATION')
     expect(inQueue('o_uniform', 'Clearances to verify')).toEqual(['p_g3'])
     await runGate(as('o_uniform'), null, 'p_g3', { action: 'URO_VERIFY' })
@@ -210,7 +210,7 @@ describe('URO emails (flag URO_EMAILS — not stated in the manuscript)', () => 
       await submitDocument(as('s_quebec'), null, 'p_g3', { docType: T.EDITORS_CERTIFICATE, ...pdf })
       expect(recipients('p_g3', 'Certificates resubmitted')).toEqual([])
       await load(scenarioStore('T10'))
-      await runGate(as('f_alpha'), null, 'p_g3', { action: 'ENDORSE_TO_URO' })
+      await runGate(as('f_alpha'), null, 'p_g3', { action: 'ENDORSE_TO_URO', file: signed() })
       expect(recipients('p_g3', 'Stage: URO Verification')).not.toContain('o_uniform')
     } finally { FLAGS.URO_EMAILS = was }
   })
@@ -232,8 +232,8 @@ describe('URO emails (flag URO_EMAILS — not stated in the manuscript)', () => 
       expect(b('p_g3').project.currentStage).toBe('FINAL_APPROVAL')
       expect(audit('STAGE_URO_VERIFY')[0]).toMatchObject({ actorId: 'o_uniform', hat: G.URO })
       expect(audit('SIGNATURE_APPLIED').filter(a => a.actorId === 'o_uniform')).toEqual([])
-      await runGate(as('f_echo'), null, 'p_g3', { action: 'FINAL_APPROVE' })
-      await runGate(as('f_delta'), null, 'p_g3', { action: 'FINAL_APPROVE' })
+      await runGate(as('f_echo'), null, 'p_g3', { action: 'FINAL_APPROVE', file: signed() })
+      await runGate(as('f_delta'), null, 'p_g3', { action: 'FINAL_APPROVE', file: signed() })
       expect(b('p_g3').project.currentStage).toBe('ARCHIVED')
     } finally { FLAGS.URO_SIGNS_APPROVAL_SHEET = was }
   })
@@ -256,11 +256,11 @@ describe('Must NOT (item 3)', () => {
     }
     // signForm is the Approval Sheet's own check: the URO line is signed only through URO_VERIFY.
     const sheet = b('p_g3').forms.find(f => f.formType === FORMS.APPROVAL.code)
-    return expect(signForm(as('o_uniform'), null, 'p_g3', sheet.id)).rejects.toThrow()
+    return expect(signForm(as('o_uniform'), null, 'p_g3', sheet.id, { file: signed() })).rejects.toThrow()
   })
 
   it('T11 — the Dean cannot give the final signature before the URO clears', async () => {
-    await expect(runGate(as('f_delta'), null, 'p_g3', { action: 'FINAL_APPROVE' })).rejects.toThrow()
-    await expect(runGate(as('f_echo'), null, 'p_g3', { action: 'FINAL_APPROVE' })).rejects.toThrow()
+    await expect(runGate(as('f_delta'), null, 'p_g3', { action: 'FINAL_APPROVE', file: signed() })).rejects.toThrow()
+    await expect(runGate(as('f_echo'), null, 'p_g3', { action: 'FINAL_APPROVE', file: signed() })).rejects.toThrow()
   })
 })

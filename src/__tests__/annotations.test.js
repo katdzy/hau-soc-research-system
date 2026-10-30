@@ -3,7 +3,7 @@
 
 import { describe, it, expect, beforeAll, beforeEach, vi } from 'vitest'
 import { createHash } from 'node:crypto'
-import { pdfFile, otherFile } from './pdfFixture.js'
+import { pdfFile, otherFile, signed } from './pdfFixture.js'
 import { db, files } from '../backend/index.js'
 import { buildSeed, SEED_ROLES } from '../backend/seed.js'
 import { applyStage } from '../backend/stageBuilder.js'
@@ -134,7 +134,7 @@ describe('across the version loop and the verdict (Prompt 11 handoffs)', () => {
     const row = await addAnnotation(as('f_echo'), null, 'p_g2', m.id, { text: 'Define “fair” for the queue.', position: passage })
     const seen = () => viewBundle(user('s_november'), b('p_g2')).annotations.find(a => a.id === row.id)
     expect(seen()).toBeUndefined()
-    await recordVerdict(as('f_alpha'), null, 'p_g2', { verdict: VERDICTS.MINOR, remarks: 'Minor revisions.' })
+    await recordVerdict(as('f_alpha'), null, 'p_g2', { file: signed(), verdict: VERDICTS.MINOR, remarks: 'Minor revisions.' })
     expect(seen()).toMatchObject({ visibility: 'private', position: { page: 3, kind: 'text' } })
     expect(seen().releasedAt).toBeTruthy()
     // Never between panelists, even after the verdict.

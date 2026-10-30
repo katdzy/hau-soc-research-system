@@ -7,6 +7,7 @@
 //
 //   node scripts/dummy-docs/generate.mjs            → test-fixtures/dummy-documents/
 //   node scripts/dummy-docs/generate.mjs --only p_g2
+//   node scripts/dummy-docs/generate.mjs --blanks     → blank-forms/ only (the app's form library)
 //
 // Needs Google Chrome (headless print to PDF; override with CHROME_PATH).
 // On macOS it also merges each manuscript's front matter (roman page numbers)
@@ -35,6 +36,7 @@ const CHROME = process.env.CHROME_PATH ?? [
 ].find(existsSync)
 const MAC = process.platform === 'darwin'
 const only = process.argv.includes('--only') ? process.argv[process.argv.indexOf('--only') + 1] : null
+const blanksOnly = process.argv.includes('--blanks')
 
 if (!CHROME) {
   console.error('Google Chrome not found. Set CHROME_PATH to a Chrome or Chromium binary.')
@@ -221,6 +223,15 @@ function generateBlanks() {
   add('FM-AAC-SOC-2003_MonitoringForm_BLANK.pdf', T.fm2003(blank, false), 'Capstone-Thesis Monitoring Form')
   add('FM-AAC-SOC-2004_RevisionForm_BLANK.pdf', T.fm2004(blank, false), 'Capstone Revision Form')
   add('FM-AAC-SOC-2005_RecommendationForm_BLANK.pdf', T.fm2005(blank, false), 'Capstone Recommendation Form')
+  const sheet = {
+    p: {
+      degree: '[Degree]', programShort: '[Program]',
+      faculty: { adviser: '[Name of Adviser]', panelChair: '[Name of Panel Chair]', panelMembers: [], coordinator: '[Name of Program Chair/Coordinator]', dean: '[Name of Dean]' },
+    },
+    x: { title: '[Title of the capstone project]' },
+    sealSrc,
+  }
+  add('ApprovalSheet_BLANK.pdf', T.approvalSheet(sheet), 'Approval Sheet')
 }
 
 function writeReadme() {
@@ -256,11 +267,13 @@ ${['G1', 'G2', 'G3', 'Blank'].map(g => `### ${g === 'Blank' ? 'Blank forms' : g}
 
 ## Forms in the app vs these PDFs
 
-The app issues FM-AAC-SOC-2004, FM-AAC-SOC-2005 and the Approval Sheet as digital
-forms and records weekly logs (FM-AAC-SOC-2003) as entries, so the form PDFs are
-references for what each role fills in and signs — they are not uploaded. The
-student uploads are the topic proposal, concept papers, manuscripts, deployment
-information and the two certificates.
+Forms are never filled in or signed inside the app. Each signatory downloads the
+latest copy (or the blank form from \`blank-forms/\`, which the app serves as its
+blank form library), signs it outside the system and uploads the signed copy — a
+PDF, or a JPG/PNG scan or photo. The filled FM-AAC-SOC-2003, 2004 and 2005 PDFs
+and the Approval Sheets above can be uploaded as those signed copies when testing.
+The student document uploads are the topic proposal, concept papers, manuscripts,
+deployment information and the two certificates.
 `
   writeFileSync(join(OUT, 'README.md'), md)
 }
@@ -269,10 +282,14 @@ information and the two certificates.
 
 mkdirSync(TMP, { recursive: true })
 try {
-  if (!only) rmSync(OUT, { recursive: true, force: true })
-  mkdirSync(OUT, { recursive: true })
-  for (const pid of only ? [only] : ['p_g1', 'p_g2', 'p_g3']) generateGroup(pid)
-  if (!only) { generateBlanks(); writeReadme() }
+  if (blanksOnly) {
+    generateBlanks()
+  } else {
+    if (!only) rmSync(OUT, { recursive: true, force: true })
+    mkdirSync(OUT, { recursive: true })
+    for (const pid of only ? [only] : ['p_g1', 'p_g2', 'p_g3']) generateGroup(pid)
+    if (!only) { generateBlanks(); writeReadme() }
+  }
   console.log(`\n${index.length} files in ${OUT}${sealSrc.hau ? '' : ' (no seal images: add scripts/dummy-docs/assets/*.png)'}`)
 } finally {
   rmSync(TMP, { recursive: true, force: true })

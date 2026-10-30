@@ -7,6 +7,8 @@ import { can } from '../../domain/caac.js'
 import { canDo, viewBundle } from '../../domain/guard.js'
 import { FLAGS } from '../../domain/flags.js'
 import { STAGES, openGates, sectionNow, courseOfStage, milestoneStatus, stageLabel } from '../../domain/stages.js'
+import { ExportMenu } from '../../components/Export.jsx'
+import { GroupDraftReview } from '../../components/GroupDraft.jsx'
 import {
   ACCOUNT_STATUS, DOC_STATUS, DOC_TYPES, COURSES, FORMS, CAPSTONE2_MILESTONES, accountType, programCode,
 } from '../../domain/constants.js'
@@ -348,6 +350,88 @@ export function ProgramSummary({ title }) {
   )
 }
 
+/**
+ * S-12 / S-20 — every project in the office's scope (the Program Chair's
+ * programs; the whole school for the Dean and AD), filterable and exportable.
+ * Status data only (NEW-11): group, members, adviser, step. A row opens the
+ * project only where the office may view it now.
+ */
+export function ProjectDirectory({ title = 'All projects', canOpen }) {
+  const { snap, me } = useApp()
+  const { scope, projects } = reportScope(me, snap)
+  const [q, setQ] = useState('')
+  const [program, setProgram] = useState('')
+  const [stage, setStage] = useState('')
+  const [block, setBlock] = useState('')
+  const users = snap.users ?? []
+  const nameOf = (id) => users.find(u => u.id === id)?.name ?? '—'
+  const membersOf = (p) => (snap.projectMembers ?? []).filter(m => m.projectId === p.id).map(m => nameOf(m.userId))
+  const adviserOf = (p) => {
+    const a = (snap.projectAssignments ?? []).find(x => x.projectId === p.id && x.roleType === 'Adviser')
+    return a ? nameOf(a.userId) : 'Not assigned'
+  }
+  const programs = [...new Set(projects.map(p => p.program))]
+  const blocks = [...new Set(projects.map(p => sectionNow(p).section).filter(Boolean))].sort()
+  const stages = STAGES.filter(st => projects.some(p => p.currentStage === st.key))
+  const needle = q.trim().toLowerCase()
+  const shown = projects
+    .filter(p => (!program || p.program === program) && (!stage || p.currentStage === stage) && (!block || sectionNow(p).section === block))
+    .filter(p => !needle || [p.title, p.groupName, sectionNow(p).section, adviserOf(p), ...membersOf(p)].some(v => v?.toLowerCase().includes(needle)))
+    .sort((a, b) => String(sectionNow(a).section).localeCompare(String(sectionNow(b).section)) || String(a.title).localeCompare(String(b.title)))
+  const statusText = (p) => (p.currentStage === 'ARCHIVED' ? 'Completed' : isOverdue(p) ? 'Overdue' : 'In progress')
+  const label = scope ? scope.map(programCode).join(', ') : 'SOC'
+
+  return (
+    <Section title={`${title} · ${shown.length} of ${projects.length}`}
+      aside={<ExportMenu name={`${label.replace(/,\s*/g, '-')}_Projects`} title={`HAU — SOC · ${label} projects`}
+        header={['Group', 'Members', 'Block', 'Program', 'Title', 'Adviser', 'Current step', 'Status']}
+        rows={shown.map(p => [p.groupName ?? '', membersOf(p).join('; '), sectionNow(p).section, programCode(p.program), p.title, adviserOf(p), stepOf(p), statusText(p)])} />}>
+      <div className="filters">
+        <input type="search" value={q} onChange={e => setQ(e.target.value)} placeholder="Title, group, member or adviser…" aria-label="Search projects" />
+        {programs.length > 1 && (
+          <select value={program} onChange={e => setProgram(e.target.value)} aria-label="Program">
+            <option value="">All programs</option>
+            {programs.map(x => <option key={x} value={x}>{programCode(x)}</option>)}
+          </select>
+        )}
+        <select value={stage} onChange={e => setStage(e.target.value)} aria-label="Stage">
+          <option value="">All stages</option>
+          {stages.map(st => <option key={st.key} value={st.key}>{st.label}</option>)}
+        </select>
+        <select value={block} onChange={e => setBlock(e.target.value)} aria-label="Block">
+          <option value="">All blocks</option>
+          {blocks.map(x => <option key={x}>{x}</option>)}
+        </select>
+      </div>
+      {shown.length === 0 ? <p className="empty">No project matches.</p> : (
+        <div className="table-scroll"><table className="cards">
+          <thead><tr><th>Group</th><th>Title</th><th>Adviser</th><th>Current step</th><th className="tight">Status</th></tr></thead>
+          <tbody>
+            {shown.map(p => {
+              const st = statusText(p)
+              return (
+                <tr key={p.id}>
+                  <td className="small" data-label="Group">
+                    <strong>{p.groupName ?? sectionNow(p).section}</strong>
+                    <div className="faint">{sectionNow(p).section} · {membersOf(p).length} members</div>
+                  </td>
+                  <td className="card-title">
+                    {canOpen?.(p) ? <Link className="row-link" to={`/projects/${p.id}`}>{p.title}</Link> : p.title}
+                    <div className="faint small">{membersOf(p).join(', ')}</div>
+                  </td>
+                  <td className="small" data-label="Adviser">{adviserOf(p)}</td>
+                  <td className="small" data-label="Current step">{stepOf(p)}</td>
+                  <td className="tight card-status"><Badge tone={st === 'Overdue' ? 'stop' : st === 'Completed' ? 'ok' : 'neutral'}>{st}</Badge></td>
+                </tr>
+              )
+            })}
+          </tbody>
+        </table></div>
+      )}
+    </Section>
+  )
+}
+
 /** S10.1 — a way into the records-table archive. */
 export function RecordsSearch() {
   const { snap } = useApp()
@@ -374,6 +458,9 @@ export function RecordsSearch() {
  * Groups are the ones visible to this user right now (CAAC), so a group routed
  * to Capstone 2 drops out here (NEW-6, flag I1_ACCESS_AFTER_ROUTING).
  */
+// The section roster lists this many ungrouped students before "Show more".
+const ROSTER_SHOWN = 10
+
 export function BlockDesk({ section, rows }) {
   const { snap, me } = useApp()
   const groups = rows.filter(r => r.project.sectionId === section.id)
@@ -403,6 +490,8 @@ export function BlockDesk({ section, rows }) {
               </li>
             ))}
           </ul>
+
+          {FLAGS.STUDENT_GROUP_DRAFTS && <GroupDraftReview section={section} />}
 
           <h3 className="label group-sub">Groups by stage</h3>
           {groups.length === 0 && <p className="small faint m-0">No groups in Capstone 1 for this section.</p>}
@@ -443,8 +532,16 @@ export function BlockDesk({ section, rows }) {
             <>
               <div className="small muted">Not in a group yet:</div>
               <ul className="plain-list small">
-                {ungrouped.map(u => <li key={u.id}>{u.name} <span className="faint mono">{u.idNumber}</span></li>)}
+                {ungrouped.slice(0, ROSTER_SHOWN).map(u => <li key={u.id}>{u.name} <span className="faint mono">{u.idNumber}</span></li>)}
               </ul>
+              {ungrouped.length > ROSTER_SHOWN && (
+                <details className="small mt-1">
+                  <summary>Show {ungrouped.length - ROSTER_SHOWN} more</summary>
+                  <ul className="plain-list">
+                    {ungrouped.slice(ROSTER_SHOWN).map(u => <li key={u.id}>{u.name} <span className="faint mono">{u.idNumber}</span></li>)}
+                  </ul>
+                </details>
+              )}
             </>
           )}
         </aside>

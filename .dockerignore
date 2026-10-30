@@ -1,4 +1,4 @@
-node_modules
+**/node_modules
 npm-debug.log
 .git
 .gitignore
@@ -7,3 +7,7 @@ Dockerfile
 .env
 .emulator-data
 dist
+functions/lib
+functions/.secret.local
+functions/.env.local
+*.log

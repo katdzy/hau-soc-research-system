@@ -12,6 +12,7 @@
 
 import { COLLECTIONS, emptyStore } from './schema.js'
 import { nowIso } from './clock.js'
+import { emulatorHost } from './emulatorHost.js'
 
 // What the listeners last delivered, per collection: Map<id, doc>.
 const server = Object.fromEntries(COLLECTIONS.map(c => [c, new Map()]))
@@ -83,7 +84,7 @@ async function start() {
     localCache: firestore.persistentLocalCache({ tabManager: firestore.persistentMultipleTabManager() }),
   })
   if (import.meta.env.VITE_USE_EMULATORS === 'true') {
-    firestore.connectFirestoreEmulator(db, '127.0.0.1', 8080)
+    firestore.connectFirestoreEmulator(db, emulatorHost(), 8080)
   }
   fb = { app, db, ...firestore }
 

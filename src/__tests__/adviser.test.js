@@ -3,7 +3,7 @@
 // Approval Sheet, each through the write path, with the handoff it triggers.
 
 import { describe, it, expect, beforeAll, beforeEach } from 'vitest'
-import { pdfFile } from './pdfFixture.js'
+import { pdfFile, signed } from './pdfFixture.js'
 import { db } from '../backend/index.js'
 import { buildSeed, SEED_ROLES } from '../backend/seed.js'
 import { applyStage } from '../backend/stageBuilder.js'
@@ -95,8 +95,8 @@ describe('S6.2 / S6.7 — Implementation (T1)', () => {
 
   it('S6.7 — FM-2005 needs 2 signed logs, a final manuscript, Instructor 2’s milestones and readiness check; then it reaches the PC', async () => {
     await load(scenarioStore('T1'))
-    const blocked = () => runGate(as('f_alpha'), null, 'p_g1', { action: 'RECOMMEND_FINAL_DEFENSE' })
-    await expect(blocked()).rejects.toThrow(/2 approved weekly logs/)
+    const blocked = () => runGate(as('f_alpha'), null, 'p_g1', { action: 'RECOMMEND_FINAL_DEFENSE', file: signed() })
+    await expect(blocked()).rejects.toThrow(/2 reviewed weekly logs/)
     const log = b('p_g1').weeklyLogs.find(l => l.status === 'Submitted')
     await decideWeeklyLog(as('f_alpha'), null, 'p_g1', log.id, { approve: true })
     expect(b('p_g1').weeklyLogs.find(l => l.id === log.id)).toMatchObject({ status: 'Approved', signedBy: 'f_alpha' })
@@ -107,7 +107,7 @@ describe('S6.2 / S6.7 — Implementation (T1)', () => {
     await confirmMilestones(as('f_foxtrot'), null, 'p_g1', 'systemComponents', 'System components demonstrated.')
     await expect(blocked()).rejects.toThrow(/ready for final defense/) // NEW-43
     await confirmReadiness(as('f_foxtrot'), null, 'p_g1')
-    await runGate(as('f_alpha'), null, 'p_g1', { action: 'RECOMMEND_FINAL_DEFENSE' })
+    await runGate(as('f_alpha'), null, 'p_g1', { action: 'RECOMMEND_FINAL_DEFENSE', file: signed() })
 
     expect(b('p_g1').project.currentStage).toBe('FINAL_DEFENSE_ENDORSEMENT')
     const f = b('p_g1').forms.find(x => x.formType === FORMS.F2005.code)
@@ -127,15 +127,15 @@ describe('S8.3 / S9.3a — verifying revisions and the Approval Sheet (Dean Delt
     const f = () => b('p_g3').forms.find(x => x.formType === FORMS.F2004.code && x.payload.defenseType === 'Final')
     // The approved revised manuscript from the proposal defense does not count.
     expect(canSign(f(), user('f_delta'), b('p_g3'))).toMatchObject({ ok: false, reason: expect.stringMatching(/not uploaded its revised manuscript/) })
-    await expect(signForm(as('f_delta'), null, 'p_g3', f().id)).rejects.toThrow()
+    await expect(signForm(as('f_delta'), null, 'p_g3', f().id, { file: signed() })).rejects.toThrow()
     const rev = await submitDocument(as('s_quebec'), null, 'p_g3', { docType: T.REVISED_MANUSCRIPT, ...pdf() })
     expect(tasksOf('f_delta', 'p_g3')).toEqual([expect.objectContaining({ kind: 'revision' })])
     expect(canSign(f(), user('f_delta'), b('p_g3')).reason).toMatch(/Approve the revised manuscript/)
     await submitReview(as('f_delta'), null, 'p_g3', rev.id, { decision: DECISIONS.APPROVE })
-    await signForm(as('f_delta'), null, 'p_g3', f().id)
+    await signForm(as('f_delta'), null, 'p_g3', f().id, { file: signed() })
     // Panel: "Revisions to verify".
     expect(recipients('p_g3', `${FORMS.F2004.code} to sign`)).toEqual(['f_bravo'])
-    expect(tasksOf('f_bravo', 'p_g3')).toEqual([expect.objectContaining({ kind: 'revision', hat: P.PANEL_MEMBER, label: `Verify the revisions and sign ${FORMS.F2004.code}` })])
+    expect(tasksOf('f_bravo', 'p_g3')).toEqual([expect.objectContaining({ kind: 'revision', hat: P.PANEL_MEMBER, label: `Verify the revisions on ${FORMS.F2004.code}` })])
   })
 
   it('S9.3a — the Approval Sheet waits for both certificates; the Adviser’s signature opens the panel’s lines', async () => {
@@ -144,10 +144,10 @@ describe('S8.3 / S9.3a — verifying revisions and the Approval Sheet (Dean Delt
     expect(canSign(sheet(), user('f_delta'), b('p_g3')).reason).toMatch(/Editor’s Certificate|Editor's Certificate/)
     await submitDocument(as('s_quebec'), null, 'p_g3', { docType: T.EDITORS_CERTIFICATE, ...pdf() })
     await submitDocument(as('s_romeo'), null, 'p_g3', { docType: T.PLAGIARISM_CERTIFICATE, ...pdf() })
-    expect(tasksOf('f_delta', 'p_g3')).toEqual([expect.objectContaining({ kind: 'form', label: 'Approval Sheet to sign' })])
-    await signForm(as('f_delta'), null, 'p_g3', sheet().id)
+    expect(tasksOf('f_delta', 'p_g3')).toEqual([expect.objectContaining({ kind: 'form', label: 'Approval Sheet: sign and upload your copy' })])
+    await signForm(as('f_delta'), null, 'p_g3', sheet().id, { file: signed() })
     expect(recipients('p_g3', 'Approval Sheet to sign').sort()).toEqual(['f_bravo', 'f_foxtrot'])
-    expect(snap().auditLogs.find(a => a.action === 'SIGNATURE_APPLIED' && a.projectId === 'p_g3')).toMatchObject({ actorId: 'f_delta', hat: P.ADVISER })
+    expect(snap().auditLogs.find(a => a.action === 'SIGNED_COPY_UPLOADED' && a.projectId === 'p_g3')).toMatchObject({ actorId: 'f_delta', hat: P.ADVISER })
   })
 })
 
@@ -161,7 +161,7 @@ describe('Must NOT (item 4) and T4 / T8', () => {
   })
 
   it('no verdict, no other adviser’s group, no edit or delete path', async () => {
-    await expect(recordVerdict(as('f_charlie'), null, 'p_g2', { verdict: 'Re-defense' })).rejects.toThrow() // Adviser of G2
+    await expect(recordVerdict(as('f_charlie'), null, 'p_g2', { file: signed(), verdict: 'Re-defense' })).rejects.toThrow() // Adviser of G2
     const m = b('p_g2').documents.find(d => d.docType === T.PROPOSAL_MANUSCRIPT && d.status === DOC_STATUS.APPROVED)
     await expect(submitReview(as('f_alpha'), null, 'p_g2', m.id, { decision: DECISIONS.APPROVE })).rejects.toThrow() // Alpha is not G2's Adviser
     expect(canView(user('f_delta'), b('p_g1'))).toBe(false)

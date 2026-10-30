@@ -153,6 +153,8 @@ export function applyStage(store, projectId, target, opts = {}) {
       sig(1, P.PANEL_CHAIR, chair, true),
       ...(adviser ? [sig(2, P.ADVISER, adviser, signedAll)] : []),
       ...panelMembers.map(u => sig(3, P.PANEL_MEMBER, u, signedAll)),
+      // The Panel Chair's upload of the copy the members signed (Figma F-04).
+      { ...sig(4, P.PANEL_CHAIR, chair, signedAll), final: true },
     ],
   })
 
@@ -256,7 +258,7 @@ export function applyStage(store, projectId, target, opts = {}) {
       add('weeklyLogs', {
         id: id('w'), projectId, weekNo: w, periodStart: at(), periodEnd: tick(2),
         submittedBy: student, submittedAt: at(), activities: `Week ${w}: implemented and tested module ${w}.`,
-        status: 'Approved', signedBy: adviser, signedAt: at(), adviserRemarks: 'Signed.',
+        status: 'Approved', signedBy: adviser, signedAt: at(), adviserRemarks: 'Reviewed.',
       })
     }
     if (target === 'IMPLEMENTATION' && opts.pendingLog) {
@@ -277,10 +279,11 @@ export function applyStage(store, projectId, target, opts = {}) {
       patch.readinessConfirmedAt = tick(1)
       patch.readinessConfirmedBy = i2
     }
+    const noted = past('FINAL_DEFENSE_ENDORSEMENT')
     add('forms', {
       id: id('form2005'), projectId, formType: FORMS.F2005.code, name: FORMS.F2005.name,
-      status: 'Signed', createdAt: at(), stage: null, payload: {},
-      signatories: [sig(1, P.ADVISER, adviser, true)],
+      status: noted ? 'Signed' : 'Circulating', createdAt: at(), stage: null, payload: { outcome: 'Recommended' },
+      signatories: [sig(1, P.ADVISER, adviser, true), sig(2, G.COORDINATOR, coordinator, noted, true)],
     })
     history('IMPLEMENTATION', 'FINAL_DEFENSE_ENDORSEMENT', adviser, 'RECOMMEND_FINAL_DEFENSE')
   }

@@ -13,12 +13,12 @@
 // trusts a snapshot handed in by the caller.
 
 import { db, files } from '../backend/index.js'
-import { isFilePathOf } from '../backend/filePath.js'
-import { uploadSubmissionFile } from './submissionFile.js'
+import { isFilePathOf, isFormFilePathOf } from '../backend/filePath.js'
+import { uploadSubmissionFile, uploadFormFile } from './submissionFile.js'
 import { sampleFileFor } from '../backend/sampleFiles.js'
 import { GoogleGenAI } from '@google/genai'
 import { normalizePosition, anchorOf } from '../domain/annotations.js'
-import { pdfProblem } from '../domain/uploads.js'
+import { pdfProblem, formFileProblem } from '../domain/uploads.js'
 import {
   bundle, current, authorizeOn, authorizeInstitution, perform, logAudit, logHistory, notify, sendMail,
   assigneeIds, memberIds, latestOf, holdersOf, resolveActor,
@@ -36,7 +36,7 @@ import {
 import { resolveContext, allowedDocTypes, uploadBlocker, can, CAPABILITIES, PROJECT_POLICIES } from '../domain/caac.js'
 import { SETTINGS_ID, revisionDaysOf, REVISION_DAYS_LIMITS } from '../domain/settings.js'
 import { canDo } from '../domain/guard.js'
-import { formOf } from '../domain/forms.js'
+import { formOf, lineMethod, latestCopy, canSign } from '../domain/forms.js'
 import { FLAGS } from '../domain/flags.js'
 import { nowIso } from '../backend/clock.js'
 
@@ -96,28 +96,212 @@ export async function createProject(actor, _snap, { title, sectionId, researchAr
   const section = inst.sections.find(s => s.id === sectionId && s.course === COURSES.C1)
   if (!section) throw new Error('You can only create groups for a Capstone 1 section you teach.')
 
-  return perform(`createProject:${me.id}:${sectionId}:${title}`, async () => {
-    const project = await db.add('projects', {
-      title: title || `Untitled — ${section.block}`,
-      previousTitles: [], category: 'Capstone', researchArea: researchArea || 'Not yet set',
-      program: section.program, term: section.term, block: section.block, sectionId: section.id,
-      currentStage: 'GROUP_FORMATION', status: 'Active', archiveResult: null,
-      revisionClass: null, revisionDeadline: null, revisionStatus: null,
-      milestonesConfirmedAt: null, milestonesConfirmedBy: null, milestones: {}, adviserApprovals: {},
-      readinessConfirmedAt: null, readinessConfirmedBy: null, postDefenseConfirmedAt: null, postDefenseConfirmedBy: null, uroReturns: [],
+  return perform(`createProject:${me.id}:${sectionId}:${title}`, () => newProject(me, hat, section, { title, researchArea }))
+}
+
+/** A group at Group Formation, with its Instructor 1 — inside a perform(). */
+async function newProject(me, hat, section, { title, researchArea, note = 'Group created' } = {}) {
+  const project = await db.add('projects', {
+    title: title || `Untitled — ${section.block}`,
+    previousTitles: [], category: 'Capstone', researchArea: researchArea || 'Not yet set',
+    program: section.program, term: section.term, block: section.block, sectionId: section.id,
+    currentStage: 'GROUP_FORMATION', status: 'Active', archiveResult: null,
+    revisionClass: null, revisionDeadline: null, revisionStatus: null,
+    milestonesConfirmedAt: null, milestonesConfirmedBy: null, milestones: {}, adviserApprovals: {},
+    readinessConfirmedAt: null, readinessConfirmedBy: null, postDefenseConfirmedAt: null, postDefenseConfirmedBy: null, uroReturns: [],
+  })
+  // The section instructor becomes Instructor 1 on the new group.
+  await db.add('projectAssignments', {
+    projectId: project.id, userId: me.id, roleType: P.INSTRUCTOR_1,
+    status: 'Accepted', assignedAt: now(), assignedBy: me.id,
+  })
+  await logHistory({
+    projectId: project.id, fromStage: null, toStage: 'GROUP_FORMATION', actorId: me.id,
+    hat, action: 'GROUP_CREATED', note,
+  })
+  await logAudit({
+    actorId: me.id, hat, action: 'PROJECT_CREATED', entityType: 'projects', entityId: project.id,
+    projectId: project.id, before: null, after: { title: project.title, block: section.block },
+  })
+  return project
+}
+
+// --- Group drafts (revision 2026-10-30, flag STUDENT_GROUP_DRAFTS) -------------
+// A student with no group starts a draft for their own section and invites
+// classmates, who accept or decline. Once it holds GROUP_SIZE members who have
+// all joined, any of them submits it; the section's Instructor 1 approves it —
+// it becomes the project, at Group Formation — or returns it with remarks.
+
+const DRAFT_OPEN = ['Draft', 'Returned'] // members can still change it
+const DRAFT_LIVE = [...DRAFT_OPEN, 'Submitted'] // it still holds its members
+const draftById = (id) => (current().groupDrafts ?? []).find(d => d.id === id) ?? null
+const joinedIds = (d) => d.members.filter(m => m.status === 'Joined').map(m => m.userId)
+const c1SectionOf = (snap, block) => (snap.sections ?? []).find(s => s.block === block && s.course === COURSES.C1) ?? null
+
+/** Why this student cannot join a group now, or null. */
+function notFree(snap, userId, exceptDraftId = null) {
+  if ((snap.projectMembers ?? []).some(m => m.userId === userId)) return 'already in a project group'
+  const other = (snap.groupDrafts ?? []).find(d => d.id !== exceptDraftId && DRAFT_LIVE.includes(d.status) &&
+    d.members.some(m => m.userId === userId && m.status === 'Joined'))
+  return other ? 'already in another group draft' : null
+}
+
+function draftActor(actor, draftId) {
+  const { actor: me, snap, hat } = authorizeInstitution(actor, 'groupdraft.manage')
+  const draft = draftById(draftId)
+  if (!draft) throw new Error('That group draft no longer exists.')
+  return { me, snap, hat, draft }
+}
+
+async function auditDraft(me, hat, draft, action, before, after) {
+  await logAudit({ actorId: me.id, hat, action, entityType: 'groupDrafts', entityId: draft.id, before, after })
+}
+
+/** "No group yet — create one?": a draft with you as its first member. */
+export async function createGroupDraft(actor, _snap) {
+  const { actor: me, snap, hat } = authorizeInstitution(actor, 'groupdraft.manage')
+  if (!me.block) throw new Error('Your account has no section. Ask the System Administrator to set it.')
+  const section = c1SectionOf(snap, me.block)
+  if (!section) throw new Error(`Section ${me.block} has no Capstone 1 class this term.`)
+  const busy = notFree(snap, me.id)
+  if (busy) throw new Error(`You are ${busy}.`)
+  return perform(`groupDraft:create:${me.id}`, async () => {
+    const again = notFree(current(), me.id)
+    if (again) throw new Error(`You are ${again}.`)
+    const draft = await db.add('groupDrafts', {
+      sectionId: section.id, block: section.block, program: section.program, term: section.term,
+      createdBy: me.id, createdAt: now(), status: 'Draft',
+      members: [{ userId: me.id, status: 'Joined', at: now() }],
+      submittedAt: null, submittedBy: null, decidedAt: null, decidedBy: null, remarks: '', projectId: null,
     })
-    // The section instructor becomes Instructor 1 on the new group.
-    await db.add('projectAssignments', {
-      projectId: project.id, userId: me.id, roleType: P.INSTRUCTOR_1,
-      status: 'Accepted', assignedAt: now(), assignedBy: me.id,
+    await auditDraft(me, hat, draft, 'GROUP_DRAFT_CREATED', null, { block: section.block })
+    return draft
+  })
+}
+
+/** A joined member invites a classmate from the same section. */
+export async function inviteToGroupDraft(actor, _snap, draftId, userId) {
+  const { me, snap, hat, draft } = draftActor(actor, draftId)
+  if (!joinedIds(draft).includes(me.id)) throw new Error('Only members of this group can invite.')
+  if (!DRAFT_OPEN.includes(draft.status)) throw new Error('This group has been submitted; it cannot change now.')
+  const student = (snap.users ?? []).find(u => u.id === userId)
+  if (!student || accountType(student.email) !== 'Student' || student.status !== ACCOUNT_STATUS.ACTIVE) {
+    throw new Error('Only active student accounts can be invited.')
+  }
+  if (student.block !== draft.block) throw new Error(`${student.name} is not in section ${draft.block}.`)
+  if (draft.members.some(m => m.userId === userId)) throw new Error(`${student.name} is already in this group.`)
+  const busy = notFree(snap, userId, draft.id)
+  if (busy) throw new Error(`${student.name} is ${busy}.`)
+  if (draft.members.length >= FLAGS.GROUP_SIZE) throw new Error(`A group holds ${FLAGS.GROUP_SIZE} students.`)
+  return perform(`groupDraft:${draftId}`, async () => {
+    const fresh = draftById(draftId)
+    if (fresh.members.length >= FLAGS.GROUP_SIZE) throw new Error(`A group holds ${FLAGS.GROUP_SIZE} students.`)
+    const members = [...fresh.members, { userId, status: 'Invited', at: now(), invitedBy: me.id }]
+    await db.update('groupDrafts', draftId, { members })
+    await auditDraft(me, hat, fresh, 'GROUP_DRAFT_INVITED', null, { userId })
+    await notify([userId], {
+      projectId: null, type: 'Group invitation', event: 'Invited to a group',
+      title: `${me.name} invited you to their capstone group`,
+      body: `Open the app to accept or decline. Section ${draft.block}.`,
     })
-    await logHistory({
-      projectId: project.id, fromStage: null, toStage: 'GROUP_FORMATION', actorId: me.id,
-      hat, action: 'GROUP_CREATED', note: 'Group created',
+  })
+}
+
+/** The invited student accepts or declines. */
+export async function respondToGroupInvite(actor, _snap, draftId, { accept }) {
+  const { me, snap, hat, draft } = draftActor(actor, draftId)
+  if (!draft.members.some(m => m.userId === me.id && m.status === 'Invited')) throw new Error('You have no invitation to this group.')
+  if (accept) {
+    if (!DRAFT_OPEN.includes(draft.status)) throw new Error('This group has been submitted already.')
+    const busy = notFree(snap, me.id, draft.id)
+    if (busy) throw new Error(`You are ${busy}. Leave it first.`)
+  }
+  return perform(`groupDraft:${draftId}`, async () => {
+    const fresh = draftById(draftId)
+    if (accept && notFree(current(), me.id, draftId)) throw new Error(`You are ${notFree(current(), me.id, draftId)}.`)
+    const members = accept
+      ? fresh.members.map(m => (m.userId === me.id ? { ...m, status: 'Joined', at: now() } : m))
+      : fresh.members.filter(m => m.userId !== me.id)
+    await db.update('groupDrafts', draftId, { members })
+    await auditDraft(me, hat, fresh, accept ? 'GROUP_DRAFT_JOINED' : 'GROUP_DRAFT_DECLINED', { userId: me.id, status: 'Invited' }, { userId: me.id, status: accept ? 'Joined' : 'Declined' })
+    await notify(joinedIds(fresh).filter(id => id !== me.id), {
+      projectId: null, type: 'Group invitation', event: accept ? 'Joined your group' : 'Declined your invitation',
+      title: `${me.name} ${accept ? 'joined' : 'declined'} your group`,
+      body: accept ? `Your group now has ${members.filter(m => m.status === 'Joined').length} of ${FLAGS.GROUP_SIZE} members.` : 'Invite another classmate from your section.',
     })
-    await logAudit({
-      actorId: me.id, hat, action: 'PROJECT_CREATED', entityType: 'projects', entityId: project.id,
-      projectId: project.id, before: null, after: { title: project.title, block: section.block },
+  })
+}
+
+/**
+ * A member leaves the draft, or withdraws a classmate's pending invitation
+ * (`userId`). The last member to leave closes it.
+ */
+export async function leaveGroupDraft(actor, _snap, draftId, userId = null) {
+  const { me, hat, draft } = draftActor(actor, draftId)
+  const who = userId ?? me.id
+  if (!joinedIds(draft).includes(me.id)) throw new Error('Only members of this group can change it.')
+  if (!DRAFT_OPEN.includes(draft.status)) throw new Error('This group has been submitted; it cannot change now.')
+  if (who !== me.id && !draft.members.some(m => m.userId === who && m.status === 'Invited')) {
+    throw new Error('You can withdraw an invitation, not remove a member who joined.')
+  }
+  return perform(`groupDraft:${draftId}`, async () => {
+    const fresh = draftById(draftId)
+    const members = fresh.members.filter(m => m.userId !== who)
+    const closed = !members.some(m => m.status === 'Joined')
+    await db.update('groupDrafts', draftId, { members, ...(closed ? { status: 'Cancelled' } : {}) })
+    await auditDraft(me, hat, fresh, who === me.id ? 'GROUP_DRAFT_LEFT' : 'GROUP_DRAFT_INVITE_WITHDRAWN', { userId: who }, { closed })
+  })
+}
+
+/** A full group, everyone joined, goes to the section's Instructor 1. */
+export async function submitGroupDraft(actor, _snap, draftId) {
+  const { me, snap, hat, draft } = draftActor(actor, draftId)
+  if (!joinedIds(draft).includes(me.id)) throw new Error('Only members of this group can submit it.')
+  if (!DRAFT_OPEN.includes(draft.status)) throw new Error('This group has been submitted already.')
+  const joined = joinedIds(draft).length
+  if (draft.members.length !== joined) throw new Error('Wait until everyone you invited has accepted (or withdraw the invitation).')
+  if (joined !== FLAGS.GROUP_SIZE) throw new Error(`A group needs ${FLAGS.GROUP_SIZE} members to be submitted (now ${joined}).`)
+  const section = (snap.sections ?? []).find(s => s.id === draft.sectionId)
+  return perform(`groupDraft:${draftId}`, async () => {
+    await db.update('groupDrafts', draftId, { status: 'Submitted', submittedAt: now(), submittedBy: me.id })
+    await auditDraft(me, hat, draft, 'GROUP_DRAFT_SUBMITTED', { status: draft.status }, { status: 'Submitted' })
+    await notify(section?.instructorId ? [section.instructorId] : [], {
+      projectId: null, type: 'Group approval', event: 'Group submitted for approval',
+      title: `A group from ${draft.block} is waiting for your approval`,
+      body: `${me.name} submitted a group of ${joined}. Approve it or return it from Groups & Rosters.`,
+    })
+  })
+}
+
+/** Instructor 1 approves (the draft becomes the project) or returns it with remarks. */
+export async function decideGroupDraft(actor, _snap, draftId, { approve, remarks } = {}) {
+  const { inst, actor: me, hat } = authorizeInstitution(actor, 'group.create')
+  const draft = draftById(draftId)
+  if (!draft) throw new Error('That group draft no longer exists.')
+  const section = inst.sections.find(s => s.id === draft.sectionId && s.course === COURSES.C1)
+  if (!section) throw new Error('Only the Instructor 1 of this section decides on its groups.')
+  if (draft.status !== 'Submitted') throw new Error('This group is not waiting for approval.')
+  if (!approve && !remarks?.trim()) throw new Error('Say why the group is returned.')
+  const ids = joinedIds(draft)
+  return perform(`groupDraft:${draftId}`, async () => {
+    if (!approve) {
+      await db.update('groupDrafts', draftId, { status: 'Returned', decidedAt: now(), decidedBy: me.id, remarks: remarks.trim() })
+      await auditDraft(me, hat, draft, 'GROUP_DRAFT_RETURNED', { status: 'Submitted' }, { status: 'Returned', remarks: remarks.trim() })
+      await notify(ids, {
+        projectId: null, type: 'Group approval', event: 'Group returned',
+        title: 'Your group was returned', body: `${me.name}: ${remarks.trim()} Change it and submit it again.`,
+      })
+      return null
+    }
+    const taken = ids.filter(id => (current().projectMembers ?? []).some(m => m.userId === id))
+    if (taken.length) throw new Error('A member of this group is already in another project group.')
+    const project = await newProject(me, hat, section, { note: 'Group drafted by the students and approved' })
+    for (const userId of ids) await db.add('projectMembers', { projectId: project.id, userId, joinedAt: now() })
+    await db.update('groupDrafts', draftId, { status: 'Approved', decidedAt: now(), decidedBy: me.id, remarks: remarks?.trim() ?? '', projectId: project.id })
+    await auditDraft(me, hat, draft, 'GROUP_DRAFT_APPROVED', { status: 'Submitted' }, { status: 'Approved', projectId: project.id })
+    await notify(ids, {
+      projectId: project.id, type: 'Group membership', event: 'Group approved',
+      title: 'Your group was approved', body: `${me.name} approved your group. Your project workspace is open.`,
     })
     return project
   })
@@ -371,7 +555,7 @@ export async function submitDocument(actor, _snap, projectId, input) {
       await notify((sheet?.signatories ?? []).filter(x => x.order === 1).map(x => x.userId), {
         projectId, type: 'Signature request', event: 'Approval Sheet to sign',
         title: 'Approval Sheet ready for your signature again',
-        body: `${b.project.title}: the group uploaded what the URO returned (${uroReturnOf(b).docTypes.join(', ')}). Check it and sign the new Approval Sheet.`,
+        body: `${b.project.title}: the group uploaded what the URO returned (${uroReturnOf(b).docTypes.join(', ')}). Check it, sign the new Approval Sheet outside the system and upload it.`,
       })
     }
     return doc
@@ -621,53 +805,62 @@ async function summarizeForMilestone(actor, hat, b, defenseType) {
 
 // --- Weekly logs (FM-AAC-SOC-2003) ---------------------------------------------
 
-export async function submitWeeklyLog(actor, _snap, projectId, input) {
+// The group fills in FM-AAC-SOC-2003 with the Adviser and signs it outside the
+// system, then uploads it (Figma S-06, F-01); the Adviser marks the upload as
+// reviewed or returns it with remarks (S-09, M-12/M-13). The system never
+// fills in or signs the form. A reviewed log keeps the status 'Approved' (and
+// signedBy/signedAt: who reviewed it, when) — the stage machine counts those.
+
+export async function submitWeeklyLog(actor, _snap, projectId, input = {}) {
   const { b, hat, actor: me, snap } = authorizeOn(actor, projectId, 'submitWeeklyLog')
-  if (!input.activities?.trim()) throw new Error('Describe the week’s accomplishments.')
   const last = b.weeklyLogs.at(-1)
   if (last?.status === 'Submitted') throw new Error(`Week ${last.weekNo} is still waiting for the Adviser.`)
   // A returned log is resubmitted under the same week number.
   const weekNo = last?.status === 'Returned' ? last.weekNo : (last?.weekNo ?? 0) + 1
-  return perform(`weeklyLog:${projectId}:${weekNo}`, async () => {
+  const prepare = signedCopyStep(me, projectId, FORMS.F2003.code, input, `the filled ${FORMS.F2003.code}`)
+  return perform(`weeklyLog:${projectId}:${weekNo}`, async (stored) => {
     const row = await db.add('weeklyLogs', {
       projectId, weekNo, periodStart: addDays(-7), periodEnd: now(),
-      submittedBy: me.id, submittedAt: now(), activities: input.activities,
+      submittedBy: me.id, submittedAt: now(), activities: input.note?.trim() ?? '',
+      storagePath: stored.storagePath, fileName: stored.fileName, fileSize: stored.scan.size,
+      sha256: stored.scan.sha256, contentType: stored.scan.contentType,
       status: 'Submitted', signedBy: null, signedAt: null, adviserRemarks: '',
+      resubmits: last?.status === 'Returned' ? last.id : null,
     })
     await record({
-      actor: me, hat, b, action: 'WEEKLY_LOG_SUBMITTED', entityType: 'weeklyLogs', entityId: row.id,
-      before: null, after: { weekNo, status: 'Submitted' }, note: `Week ${weekNo} log submitted`,
+      actor: me, hat, b, action: 'WEEKLY_LOG_UPLOADED', entityType: 'weeklyLogs', entityId: row.id,
+      before: null, after: { weekNo, status: 'Submitted', file: stored.fileName, sha256: stored.scan.sha256 }, note: `Week ${weekNo} log (${FORMS.F2003.code}) uploaded`,
     })
     await notify(usersWith(snap, b, 'weeklylog.sign'), {
-      projectId, type: 'Weekly log', event: 'Weekly log submitted',
+      projectId, type: 'Weekly log', event: 'Weekly log uploaded',
       title: `Week ${weekNo} log awaiting your review`,
-      body: `${me.name} submitted the week ${weekNo} log for ${b.project.title}.`,
+      body: `${me.name} uploaded the filled ${FORMS.F2003.code} for week ${weekNo} of ${b.project.title}.`,
     })
     return row
-  })
+  }, prepare)
 }
 
 export async function decideWeeklyLog(actor, _snap, projectId, logId, { approve, remarks }) {
   const log = bundle(current(), projectId)?.weeklyLogs.find(l => l.id === logId)
   const { b, hat, actor: me } = authorizeOn(actor, projectId, 'signWeeklyLog', { log })
-  if (!approve && !remarks?.trim()) throw new Error('Say why the log is returned.')
+  if (!approve && !remarks?.trim()) throw new Error('Say why the log is returned (e.g. a missing signature).')
   return perform(`signWeeklyLog:${logId}`, async () => {
     const patch = approve
       ? { status: 'Approved', signedBy: me.id, signedAt: now(), adviserRemarks: remarks ?? '' }
       : { status: 'Returned', adviserRemarks: remarks ?? '' }
     const row = await db.update('weeklyLogs', logId, patch)
     await record({
-      actor: me, hat, b, action: approve ? 'WEEKLY_LOG_SIGNED' : 'WEEKLY_LOG_RETURNED',
+      actor: me, hat, b, action: approve ? 'WEEKLY_LOG_REVIEWED' : 'WEEKLY_LOG_RETURNED',
       entityType: 'weeklyLogs', entityId: logId,
       before: { status: log.status }, after: { status: patch.status }, meta: { form: FORMS.F2003.code },
-      note: `Week ${log.weekNo} log ${approve ? 'approved and signed' : 'returned'}`,
+      note: `Week ${log.weekNo} log ${approve ? 'marked as reviewed' : 'returned'}`,
     })
     await notify(memberIds(b), {
-      projectId, type: 'Weekly log', event: approve ? 'Approved' : 'Revision requested',
-      title: approve ? 'Your weekly log was approved and signed' : 'Your weekly log was returned',
+      projectId, type: 'Weekly log', event: approve ? 'Reviewed' : 'Revision requested',
+      title: approve ? 'Your weekly log was reviewed' : 'Your weekly log was returned',
       body: approve
-        ? `${me.name} signed your ${FORMS.F2003.code} entry.`
-        : `${me.name} returned your log. ${remarks ?? ''}`.trim(),
+        ? `${me.name} marked your week ${log.weekNo} ${FORMS.F2003.code} as reviewed.`
+        : `${me.name} returned your week ${log.weekNo} log. ${remarks ?? ''} Upload a corrected copy.`.trim(),
     })
     return row
   })
@@ -798,11 +991,21 @@ function verdictTerms(verdict, snap, from = now()) {
  * on the form by the Chair alone — its revisions go back to a defense, not to
  * the panel's signatures.
  */
-function f2004Lines(b, chair, verdict) {
+/**
+ * FM-2004's lines (Figma M-19, M-16/M-17, F-04): the Panel Chair uploads the
+ * form signed by the chair and the proponents with the verdict; the Adviser
+ * verifies and the panel members confirm the revisions in the system; the
+ * Panel Chair then uploads the final copy carrying the members' signatures.
+ * A re-defense has the chair's line only.
+ */
+function f2004Lines(b, chair, verdict, copy) {
   const panel = (role, order) => assigneeIds(b, role).map(id => ({ order, role, userId: id, name: null, signedAt: null }))
   return [
-    { order: 1, role: P.PANEL_CHAIR, userId: chair.id, name: chair.name, signedAt: now() },
-    ...(verdict === VERDICTS.REDEFENSE ? [] : [...panel(P.ADVISER, 2), ...panel(P.PANEL_MEMBER, 3)]),
+    { order: 1, role: P.PANEL_CHAIR, userId: chair.id, name: chair.name, signedAt: now(), copy: copy.n },
+    ...(verdict === VERDICTS.REDEFENSE ? [] : [
+      ...panel(P.ADVISER, 2), ...panel(P.PANEL_MEMBER, 3),
+      { order: 4, role: P.PANEL_CHAIR, userId: chair.id, name: null, signedAt: null, final: true },
+    ]),
   ]
 }
 
@@ -821,8 +1024,10 @@ export async function recordVerdict(actor, _snap, projectId, input) {
   }
   // Countdown length as the System Administrator set it at the time of the verdict.
   const { revisionClass, revisionDeadline: deadline } = verdictTerms(input.verdict, snap)
+  // M-19 — the verdict goes in with FM-2004, signed outside the system by the chair and the proponents.
+  const prepare = signedCopyStep(me, projectId, FORMS.F2004.code, input, `${FORMS.F2004.code} signed by you and the proponents`)
 
-  return perform(`verdict:${defense.id}`, async () => {
+  return perform(`verdict:${defense.id}`, async (stored) => {
     await db.update('defenses', defense.id, {
       verdict: input.verdict, revisionClass, revisionDeadline: deadline, revisionStatus: 'Pending',
       recordedBy: me.id, recordedAt: now(), remarks: input.remarks.trim(),
@@ -831,17 +1036,18 @@ export async function recordVerdict(actor, _snap, projectId, input) {
 
     // The defense is over: private panel annotations are released (OQ#3 — who
     // may then read them is decided by the guard, canViewAnnotation).
-    for (const a of b.annotations.filter(x => x.visibility === 'private' && !x.releasedAt)) {
+    for (const a of b.annotations.filter(x => x.visibility === 'private' && !x.releasedAt && !x.keepPrivate)) {
       await db.update('annotations', a.id, { releasedAt: now() })
     }
 
-    const signatories = f2004Lines(b, me, input.verdict)
+    const copy = copyRecord(null, stored, me, P.PANEL_CHAIR)
+    const signatories = f2004Lines(b, me, input.verdict, copy)
     const form = await db.add('forms', {
       projectId, formType: FORMS.F2004.code, name: FORMS.F2004.name,
       status: signatories.every(x => x.signedAt) ? 'Signed' : 'Circulating', createdAt: now(),
       stage: type === 'Proposal' ? 'PROPOSAL_REVISION' : 'FINAL_REVISION',
       payload: { verdict: input.verdict, revisionClass, remarks: input.remarks.trim(), defenseType: type, defenseId: defense.id },
-      signatories,
+      signatories, copies: [copy],
     })
 
     await logAudit({
@@ -860,7 +1066,7 @@ export async function recordVerdict(actor, _snap, projectId, input) {
 
     const gate = stageByKey(b.project.currentStage).gates[0]
     await transition(me, hat, snap, b, resolveNext(gate, bundle(current(), projectId)), gate.action, `Recorded verdict: ${input.verdict}`)
-  })
+  }, prepare)
 }
 
 /**
@@ -879,7 +1085,9 @@ export async function correctVerdict(actor, _snap, projectId, input) {
   if (input.verdict === defense.verdict && input.remarks.trim() === defense.remarks) throw new Error('Nothing changed.')
   const terms = verdictTerms(input.verdict, snap, defense.recordedAt)
 
-  return perform(`correctVerdict:${defense.id}`, async () => {
+  const prepare = signedCopyStep(me, projectId, FORMS.F2004.code, input, `the corrected ${FORMS.F2004.code}`)
+
+  return perform(`correctVerdict:${defense.id}`, async (stored) => {
     const before = { verdict: defense.verdict, remarks: defense.remarks, revisionClass: defense.revisionClass, revisionDeadline: defense.revisionDeadline }
     await db.update('defenses', defense.id, {
       verdict: input.verdict, remarks: input.remarks.trim(), ...terms,
@@ -888,9 +1096,11 @@ export async function correctVerdict(actor, _snap, projectId, input) {
     await db.update('projects', projectId, { revisionClass: terms.revisionClass, revisionDeadline: terms.revisionDeadline })
     const form = b.forms.find(f => f.formType === FORMS.F2004.code && f.payload?.defenseId === defense.id)
     if (form) {
-      const signatories = f2004Lines(b, me, input.verdict)
+      // The corrected verdict needs a corrected FM-2004: the new copy replaces the chair's first line.
+      const copy = copyRecord(form, stored, me, P.PANEL_CHAIR)
+      const signatories = f2004Lines(b, me, input.verdict, copy)
       await db.update('forms', form.id, {
-        signatories, status: signatories.every(x => x.signedAt) ? 'Signed' : 'Circulating',
+        signatories, copies: [...(form.copies ?? []), copy], status: signatories.every(x => x.signedAt) ? 'Signed' : 'Circulating',
         payload: { ...form.payload, verdict: input.verdict, revisionClass: terms.revisionClass, remarks: input.remarks.trim(), corrected: true },
       })
     }
@@ -904,7 +1114,7 @@ export async function correctVerdict(actor, _snap, projectId, input) {
       title: `${defense.type} defense verdict corrected: ${input.verdict}`,
       body: `${me.name} corrected the verdict (was ${defense.verdict}): ${input.reason.trim()}. Revisions are now due ${new Date(terms.revisionDeadline).toLocaleDateString()}. ${input.remarks.trim()}`,
     })
-  })
+  }, prepare)
 }
 
 /**
@@ -941,6 +1151,42 @@ export async function flagOverdueRevisions(at = Date.now()) {
 }
 
 // --- Forms and signatures -----------------------------------------------------
+
+/**
+ * A signed form's file, as the caller gives it: `input.file` (a File — the
+ * local build, and direct writes) or `input.upload` ({ storagePath, fileName },
+ * already in the file store — the Firebase build through `act`). Checked before
+ * anything is written; returns the `prepare` step for perform(), which stores
+ * or verifies the bytes under the request's key.
+ */
+function signedCopyStep(me, projectId, formType, input, what = 'the signed form') {
+  const upload = input?.upload
+  if (upload?.storagePath != null) {
+    if (!isFormFilePathOf(projectId, upload.storagePath)) throw new Error('That file is not one of this project’s uploads.')
+    if (copyUsed(upload.storagePath)) throw new Error('That file is already recorded. Upload a new copy.')
+    return async () => {
+      const scan = await files.verifyForm(upload.storagePath, { projectId, uploadedBy: me.id, fileName: upload.fileName })
+      return { storagePath: upload.storagePath, fileName: String(upload.fileName).trim(), scan }
+    }
+  }
+  const problem = formFileProblem(input?.file)
+  if (problem) throw new Error(problem === 'Attach the signed form.' ? `Attach ${what}.` : problem)
+  return () => uploadFormFile(files, {
+    projectId, formType, userId: me.id, file: input.file, onProgress: input.onProgress, signal: input.signal,
+  })
+}
+
+const copyUsed = (storagePath) =>
+  (current().forms ?? []).some(f => (f.copies ?? []).some(c => c.storagePath === storagePath)) ||
+  (current().weeklyLogs ?? []).some(l => l.storagePath === storagePath)
+
+/** The copy record kept on the form: who uploaded it, as what, and the file. */
+const copyRecord = (form, stored, me, role) => ({
+  n: (latestCopy(form)?.n ?? 0) + 1,
+  storagePath: stored.storagePath, fileName: stored.fileName,
+  fileSize: stored.scan.size, sha256: stored.scan.sha256, contentType: stored.scan.contentType,
+  uploadedBy: me.id, role, uploadedAt: now(),
+})
 
 function approvalSheetSignatories(b, snap) {
   const line = (order, role, userId, viaGate = false) => ({ order, role, userId, name: null, signedAt: null, viaGate })
@@ -984,19 +1230,25 @@ async function issueApprovalSheet(actor, hat, snap, b, { reissueOf = null } = {}
   return form
 }
 
-async function writeSignature(actor, hat, form, lineMatch) {
-  let signedRole = null
-  const signatories = form.signatories.map(s => {
-    if (signedRole || s.signedAt || !lineMatch(s)) return s
-    signedRole = s.role
-    return { ...s, userId: actor.id, name: actor.name, signedAt: now() }
-  })
-  if (!signedRole) throw new Error('You have no pending line on this form.')
+async function writeSignature(actor, hat, form, lineMatch, stored = null) {
+  const line = form.signatories.find(s => !s.signedAt && lineMatch(s))
+  if (!line) throw new Error('You have no pending line on this form.')
+  const signedRole = line.role
+  // An 'upload' line is signed outside the system: its record is the copy.
+  const upload = lineMethod(form, line) === 'upload'
+  if (upload && !stored) throw new Error(`Attach the ${form.formType} you signed.`)
+  const copy = upload ? copyRecord(form, stored, actor, signedRole) : null
+  const signatories = form.signatories.map(s => (
+    s === line ? { ...s, userId: actor.id, name: actor.name, signedAt: now(), ...(copy ? { copy: copy.n } : {}) } : s
+  ))
   const complete = signatories.every(s => s.signedAt)
-  await db.update('forms', form.id, { signatories, status: complete ? 'Signed' : 'Circulating' })
+  const copies = copy ? [...(form.copies ?? []), copy] : (form.copies ?? [])
+  await db.update('forms', form.id, { signatories, copies, status: complete ? 'Signed' : 'Circulating' })
   await logAudit({
-    actorId: actor.id, hat: hat ?? signedRole, action: 'SIGNATURE_APPLIED', entityType: 'forms', entityId: form.id,
-    projectId: form.projectId, before: { line: signedRole, signed: false }, after: { line: signedRole, signed: true, formComplete: complete },
+    actorId: actor.id, hat: hat ?? signedRole, action: upload ? 'SIGNED_COPY_UPLOADED' : 'SIGNATURE_CONFIRMED',
+    entityType: 'forms', entityId: form.id, projectId: form.projectId,
+    before: { line: signedRole, signed: false },
+    after: { line: signedRole, signed: true, formComplete: complete, ...(copy ? { copy: copy.n, file: copy.fileName, sha256: copy.sha256 } : {}) },
     meta: { formType: form.formType },
   })
 
@@ -1007,7 +1259,9 @@ async function writeSignature(actor, hat, form, lineMatch) {
     await notify(nextSigners, {
       projectId: form.projectId, type: 'Signature request', event: `${form.formType} to sign`,
       title: `${form.formType} is ready for your signature`,
-      body: `${actor.name} signed as ${signedRole}.`,
+      body: upload
+        ? `${actor.name} uploaded the copy signed as ${signedRole}. Download it, sign it outside the system and upload it.`
+        : `${actor.name} confirmed as ${signedRole}.`,
     })
   }
   return { signatories, complete, signedRole }
@@ -1022,16 +1276,28 @@ async function completeRevisions(b, type) {
   return { revisionClass: null, revisionDeadline: null, revisionStatus: null }
 }
 
-export async function signForm(actor, _snap, projectId, formId) {
+/**
+ * A signatory's turn on a form (Forms tab). An 'upload' line takes the copy
+ * they signed outside the system (`input.file`, or `input.upload` in the
+ * Firebase build); a 'confirm' line is recorded in the system (FM-2004: the
+ * Adviser verifies, the panel members confirm the revisions).
+ */
+export async function signForm(actor, _snap, projectId, formId, input = {}) {
   const form = await db.get('forms', formId) // read fresh — another signature may have landed
   if (!form || form.projectId !== projectId) throw new Error('Form not found')
   const { b, actor: me, snap } = authorizeOn(actor, projectId, 'signForm', { form })
-  const line = form.signatories.find(s => s.userId === me.id && !s.signedAt)
-  return perform(`signForm:${formId}:${me.id}`, async () => {
-    const r = await writeSignature(me, line.role, form, s => s.userId === me.id && s.order === line.order)
+  const line = form.signatories.find(s => s.userId === me.id && !s.signedAt && canSign(form, me, b).line === s)
+    ?? form.signatories.find(s => s.userId === me.id && !s.signedAt)
+  const upload = lineMethod(form, line) === 'upload'
+  const prepare = upload ? signedCopyStep(me, projectId, form.formType, input, `the ${form.formType} you signed`) : undefined
+  return perform(`signForm:${formId}:${me.id}`, async (stored) => {
+    const r = await writeSignature(me, line.role, form, s => s.userId === me.id && s.order === line.order, stored)
     await logHistory({
       projectId, fromStage: b.project.currentStage, toStage: b.project.currentStage, actorId: me.id,
-      hat: r.signedRole, action: 'SIGNATURE_APPLIED', note: `Signed ${form.formType} as ${r.signedRole}`,
+      hat: r.signedRole, action: upload ? 'SIGNED_COPY_UPLOADED' : 'SIGNATURE_CONFIRMED',
+      note: upload ? `Uploaded ${form.formType} signed as ${r.signedRole}`
+        : form.formType === FORMS.F2004.code ? `Confirmed the revisions on ${form.formType} as ${r.signedRole}`
+          : `Confirmed ${form.formType} as ${r.signedRole}`,
     })
     // S9.3b — once the whole panel has signed, the next line is the Program
     // Chair/Coordinator's endorsement, signed through a workflow step: email them.
@@ -1066,6 +1332,37 @@ export async function signForm(actor, _snap, projectId, formId) {
       })
     }
     return r
+  }, prepare)
+}
+
+/**
+ * FM-2004, M-17 "Not yet confirmed": a panel member records that the required
+ * revisions are not all addressed. The line stays open; the Panel Chair sees
+ * only that this member has not confirmed. The note, if any, is a private note
+ * on the revised manuscript that only its author ever reads (never released).
+ */
+export async function holdRevisions(actor, _snap, projectId, formId, { note } = {}) {
+  const form = await db.get('forms', formId)
+  if (!form || form.projectId !== projectId) throw new Error('Form not found')
+  const { b, actor: me } = authorizeOn(actor, projectId, 'signForm', { form })
+  const line = form.signatories.find(s => s.userId === me.id && !s.signedAt)
+  if (form.formType !== FORMS.F2004.code || line?.role !== P.PANEL_MEMBER) throw new Error('Only a panel member holds back the revisions on FM-AAC-SOC-2004.')
+  const revised = latestOf(b, DOC_TYPES.REVISED_MANUSCRIPT)
+  return perform(`holdRevisions:${formId}:${me.id}`, async () => {
+    const signatories = form.signatories.map(s => (s === line ? { ...s, heldAt: now() } : s))
+    await db.update('forms', form.id, { signatories })
+    if (note?.trim() && revised) {
+      await db.add('annotations', {
+        projectId, documentId: revised.id, documentVersion: revised.versionNumber, authorId: me.id, authorRole: P.PANEL_MEMBER,
+        anchor: anchorOf(null, 'Revision check (FM-AAC-SOC-2004)'), position: null, category: 'Revision check', text: note.trim(),
+        visibility: 'private', keepPrivate: true, releasedAt: null, createdAt: now(),
+      })
+    }
+    await record({
+      actor: me, hat: P.PANEL_MEMBER, b, action: 'REVISIONS_NOT_CONFIRMED', entityType: 'forms', entityId: form.id,
+      before: { line: line.role, confirmed: false }, after: { line: line.role, confirmed: false, heldAt: now() },
+      note: 'A panel member has not confirmed the revisions yet', privateTo: me.id,
+    })
   })
 }
 
@@ -1083,7 +1380,23 @@ export async function runGate(actor, _snap, projectId, requested) {
   const blocked = liveGate.requires(b, me)
   if (blocked) throw new Error(blocked)
 
-  return perform(`gate:${projectId}:${gate.action}:${me.id}`, async () => {
+  // F-05/F-06 — the Adviser's outcome; Not Recommended keeps the group here.
+  const recommend = gate.action === 'RECOMMEND_FINAL_DEFENSE'
+  const notRecommended = recommend && requested?.outcome === 'Not Recommended'
+  if (notRecommended && !requested?.reasons?.trim()) throw new Error('Write the reasons for not recommending the group.')
+  // A gate that carries a signature on an 'upload' line takes the copy the
+  // actor signed outside the system (M-06, M-21, M-23); so does FM-2005.
+  const signsByUpload = (() => {
+    if (!gate.signs) return false
+    const form = formOf(b, gate.signs)
+    const line = form?.signatories.find(x => x.viaGate && x.role === hat && !x.signedAt)
+    return Boolean(line) && lineMethod(form, line) === 'upload'
+  })()
+  const prepare = recommend || signsByUpload
+    ? signedCopyStep(me, projectId, recommend ? FORMS.F2005.code : gate.signs, requested, `the ${recommend ? FORMS.F2005.code : gate.signs} you signed`)
+    : undefined
+
+  return perform(`gate:${projectId}:${gate.action}:${me.id}`, async (stored) => {
     const patch = {}
 
     if (gate.action === 'ROUTE_ADVISER') {
@@ -1126,23 +1439,44 @@ export async function runGate(actor, _snap, projectId, requested) {
 
     if (gate.action === 'CLOSE_PROPOSAL_REVISION') Object.assign(patch, await completeRevisions(b, 'Proposal'))
 
-    if (gate.action === 'RECOMMEND_FINAL_DEFENSE') {
+    if (recommend) {
+      const copy = copyRecord(null, stored, me, P.ADVISER)
+      const coordinator = holdersOf(snap, G.COORDINATOR).find(u => (u.programScope ?? []).includes(b.project.program))
+      const outcome = notRecommended ? 'Not Recommended' : 'Recommended'
       const form = await db.add('forms', {
         projectId, formType: FORMS.F2005.code, name: FORMS.F2005.name,
-        status: 'Signed', createdAt: now(), stage: null, payload: {},
-        signatories: [{ order: 1, role: P.ADVISER, userId: me.id, name: me.name, signedAt: now() }],
+        status: notRecommended ? 'Not Recommended' : 'Circulating', createdAt: now(), stage: null,
+        payload: { outcome, ...(notRecommended ? { reasons: requested.reasons.trim() } : {}) },
+        copies: [copy],
+        signatories: [
+          { order: 1, role: P.ADVISER, userId: me.id, name: me.name, signedAt: now(), copy: copy.n },
+          // M-21 — the Program Chair/Coordinator signs "Noted by" when endorsing.
+          ...(notRecommended ? [] : [{ order: 2, role: G.COORDINATOR, userId: coordinator?.id ?? null, name: null, signedAt: null, viaGate: true }]),
+        ],
       })
       await logAudit({
         actorId: me.id, hat, action: 'FORM_SUBMITTED', entityType: 'forms', entityId: form.id, projectId,
-        before: null, after: { formType: FORMS.F2005.code },
+        before: null, after: { formType: FORMS.F2005.code, outcome, copy: copy.n, file: copy.fileName },
       })
+      if (notRecommended) {
+        await record({
+          actor: me, hat, b, action: 'NOT_RECOMMENDED', entityType: 'forms', entityId: form.id,
+          before: null, after: { outcome }, note: `${FORMS.F2005.code}: not recommended for final defense`,
+        })
+        await notify([...memberIds(b), ...usersWith(snap, b, 'milestone.confirm')], {
+          projectId, type: 'Recommendation', event: 'Not recommended for final defense',
+          title: `${b.project.title}: not recommended for final defense yet`,
+          body: `${me.name} did not recommend the group for the final defense. ${requested.reasons.trim()} The group stays in Implementation; the form is in the Forms tab.`,
+        })
+        return b.project.currentStage
+      }
     }
 
     // Gates that carry a signature sign the actor's office line on the form.
     if (gate.signs) {
       const form = await db.get('forms', formOf(b, gate.signs)?.id)
       if (!form) throw new Error(`The ${gate.signs} has not been issued.`)
-      const { complete } = await writeSignature(me, hat, form, s => s.viaGate && s.role === hat)
+      const { complete } = await writeSignature(me, hat, form, s => s.viaGate && s.role === hat, signsByUpload ? stored : null)
 
       if (gate.action === 'FINAL_APPROVE' && !complete) {
         // The other executive still has to sign; the project stays here.
@@ -1199,10 +1533,10 @@ export async function runGate(actor, _snap, projectId, requested) {
     } : gate.action === 'URO_VERIFY' ? {
       type: 'Clearance', event: 'Fully cleared project endorsed',
       title: `${b.project.title} is cleared for final approval`,
-      body: `${me.name} verified the Editor’s Certificate, the Plagiarism Clearance Certificate and the manuscript, and signed the Approval Sheet for the University Research Office.`,
+      body: `${me.name} verified the Editor’s Certificate, the Plagiarism Clearance Certificate and the manuscript${FLAGS.URO_SIGNS_APPROVAL_SHEET ? ' for the University Research Office' : ''}. Download the latest Approval Sheet, sign it outside the system and upload it.`,
     } : null
     return transition(me, hat, snap, b, resolveNext(liveGate, b), gate.action, gate.label, announce)
-  })
+  }, prepare)
 }
 
 // --- Accounts ------------------------------------------------------------------
@@ -1279,7 +1613,11 @@ export async function verifyEmail(verifyToken) {
 /** Firebase build: Firebase Auth reports the address verified at sign-in. */
 export async function confirmProviderVerification(email) {
   const user = (current().users ?? []).find(u => normalizeEmail(u.email) === normalizeEmail(email))
-  if (!user || user.emailVerified) return user ?? null
+  if (!user) return null
+  // Flag ACCOUNT_ACTIVATION = 'email': an account verified while activation
+  // still waited on the System Administrator is activated now. A suspended
+  // account stays suspended.
+  if (user.emailVerified && !(FLAGS.ACCOUNT_ACTIVATION === 'email' && user.status === ACCOUNT_STATUS.INACTIVE)) return user
   await perform(`verify:${user.id}`, () => markVerified(user, 'Firebase Auth'))
   return (current().users ?? []).find(u => u.id === user.id)
 }

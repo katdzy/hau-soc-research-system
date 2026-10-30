@@ -24,6 +24,7 @@ import {
   GLOBAL_ROLES as G, PROJECT_ROLES as P, DOC_TYPES, DOC_STATUS, COURSES, programByCode, parseSection, yearLevelOf,
 } from '../domain/constants.js'
 import { applyStage, ALTERNATE_TOPICS } from './stageBuilder.js'
+import EXTRA_STUDENTS from './extraStudents.json' with { type: 'json' }
 import {
   NPC_FACULTY, NPC_STUDENTS, NPC_SECTIONS, NPC_PROJECTS, NPC_MEMBERS, NPC_ROLES, NPC_STAGES,
 } from './npcs.js'
@@ -77,6 +78,9 @@ const USERS = [
   // --- NPC accounts (npcs.js): three groups of four per program ----------------
   ...NPC_FACULTY,
   ...NPC_STUDENTS,
+
+  // --- Ungrouped students for group drafting (extraStudents.json) --------------
+  ...EXTRA_STUDENTS.students.map(x => student(x.id, x.name, x.email, x.idNumber, x.block)),
 ]
 
 // WD-401 Capstone 1 — Prof. Bravo teaches it, which lets Bravo create its

@@ -21,6 +21,7 @@ import { STAGES } from '../domain/stages.js'
 import { FLAGS } from '../domain/flags.js'
 import { revisionDaysOf } from '../domain/settings.js'
 import { GLOBAL_ROLES as G, PROJECT_ROLES as P, DOC_TYPES, DOC_STATUS } from '../domain/constants.js'
+import { signed } from './pdfFixture.js'
 
 const WD = 'Bachelor of Science Major in Information Technology with area of specialization in Web Development'
 const snap = () => db.snapshot()
@@ -34,8 +35,7 @@ const audit = (action) => snap().auditLogs.filter(l => l.action === action)
 async function newActiveAccount(email, name = 'Prof. Quinn Test') {
   const u = await registerAccount(null, { name, email })
   const mail = snap().outbox.find(m => m.event === 'Account verification' && m.to?.[0] === u.email)
-  await verifyEmail(mail.link.token)
-  await setAccountStatus(as('a_sierra'), null, u.id, 'Active')
+  await verifyEmail(mail.link.token) // activates (ACCOUNT_ACTIVATION = 'email')
   return user(u.id)
 }
 
@@ -51,13 +51,14 @@ describe('S0.1–S0.2 registration', () => {
     const mail = snap().outbox.find(m => m.to?.[0] === u.email)
     expect(mail).toMatchObject({ event: 'Account verification', link: { kind: 'verify' } })
     await verifyEmail(mail.link.token)
-    expect(user(u.id)).toMatchObject({ emailVerified: true, status: 'Inactive', globalRoles: [G.STUDENT] })
+    expect(user(u.id)).toMatchObject({ emailVerified: true, status: 'Active', globalRoles: [G.STUDENT] })
   })
 
   it('a faculty address verifies to the Faculty base identity with no global permission (NEW-1)', async () => {
     const u = await newActiveAccount('quinn@hau.edu.ph')
     expect(u.globalRoles).toEqual([G.FACULTY])
-    expect([...resolveInstitution(u, snap()).grants.keys()]).toEqual([])
+    // Every active account browses the archive's metadata (S-17); nothing else.
+    expect([...resolveInstitution(u, snap()).grants.keys()]).toEqual(['archive.browse'])
     for (const p of snap().projects) expect(canView(u, b(p.id))).toBe(false)
   })
 
@@ -216,7 +217,7 @@ describe('global settings — revision countdown', () => {
     })
 
     const t0 = Date.now()
-    await recordVerdict(as('f_alpha'), null, 'p_g2', { verdict: FLAGS.VERDICT_VALUES.MINOR, remarks: 'Revise chapter 3.' })
+    await recordVerdict(as('f_alpha'), null, 'p_g2', { file: signed(), verdict: FLAGS.VERDICT_VALUES.MINOR, remarks: 'Revise chapter 3.' })
     const days = (new Date(snap().projects.find(p => p.id === 'p_g2').revisionDeadline) - t0) / 864e5
     expect(days).toBeGreaterThan(9.99)
     expect(days).toBeLessThan(10.01)
@@ -263,7 +264,7 @@ describe('T20 and the rest of "must not" — the System Administrator never acts
 
   it('forced service calls are rejected: verdict, gate, signature, assignment, annotation, review', async () => {
     const admin = as('a_sierra')
-    await expect(recordVerdict(admin, null, 'p_g2', { verdict: FLAGS.VERDICT_VALUES.MINOR, remarks: 'Revise chapter 3.' })).rejects.toThrow()
+    await expect(recordVerdict(admin, null, 'p_g2', { file: signed(), verdict: FLAGS.VERDICT_VALUES.MINOR, remarks: 'Revise chapter 3.' })).rejects.toThrow()
     await expect(runGate(admin, null, 'p_g4', { action: 'ENDORSE_ROSTER' })).rejects.toThrow()
     await expect(assignRole(admin, null, 'p_g2', 'f_foxtrot', P.PANEL_MEMBER)).rejects.toThrow()
     const doc = b('p_g1').documents.find(d => d.docType === DOC_TYPES.TOPIC_PROPOSAL)
@@ -272,8 +273,8 @@ describe('T20 and the rest of "must not" — the System Administrator never acts
 
     await load(scenarioStore('T10'))
     const sheet = snap().forms.find(f => f.projectId === 'p_g3' && f.formType === 'Approval Sheet')
-    await expect(signForm(as('a_sierra'), null, 'p_g3', sheet.id)).rejects.toThrow()
-    await expect(runGate(as('a_sierra'), null, 'p_g3', { action: 'ENDORSE_TO_URO' })).rejects.toThrow()
+    await expect(signForm(as('a_sierra'), null, 'p_g3', sheet.id, { file: signed() })).rejects.toThrow()
+    await expect(runGate(as('a_sierra'), null, 'p_g3', { action: 'ENDORSE_TO_URO', file: signed() })).rejects.toThrow()
     expect(audit('SIGNATURE_APPLIED').filter(l => l.actorId === 'a_sierra')).toEqual([])
   })
 

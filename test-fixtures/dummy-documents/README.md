@@ -109,11 +109,14 @@ Negative case: `https://x` is rejected ("Enter the full link…").
 | `blank-forms/FM-AAC-SOC-2003_MonitoringForm_BLANK.pdf` | — | — | Any (printable) | — (form) | Capstone-Thesis Monitoring Form |
 | `blank-forms/FM-AAC-SOC-2004_RevisionForm_BLANK.pdf` | — | — | Any (printable) | — (form) | Capstone Revision Form |
 | `blank-forms/FM-AAC-SOC-2005_RecommendationForm_BLANK.pdf` | — | — | Any (printable) | — (form) | Capstone Recommendation Form |
+| `blank-forms/ApprovalSheet_BLANK.pdf` | — | — | Any (printable) | — (form) | Approval Sheet |
 
 ## Forms in the app vs these PDFs
 
-The app issues FM-AAC-SOC-2004, FM-AAC-SOC-2005 and the Approval Sheet as digital
-forms and records weekly logs (FM-AAC-SOC-2003) as entries, so the form PDFs are
-references for what each role fills in and signs — they are not uploaded. The
-student uploads are the topic proposal, concept papers, manuscripts, deployment
-information and the two certificates.
+Forms are never filled in or signed inside the app. Each signatory downloads the
+latest copy (or the blank form from `blank-forms/`, which the app serves as its
+blank form library), signs it outside the system and uploads the signed copy — a
+PDF, or a JPG/PNG scan or photo. The filled FM-AAC-SOC-2003, 2004 and 2005 PDFs
+and the Approval Sheets above can be uploaded as those signed copies when testing.
+The student document uploads are the topic proposal, concept papers, manuscripts,
+deployment information and the two certificates.

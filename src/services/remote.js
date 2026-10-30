@@ -16,6 +16,12 @@
 
 export const REMOTE = {
   createProject: 'actor',
+  createGroupDraft: 'actor',
+  inviteToGroupDraft: 'actor',
+  respondToGroupInvite: 'actor',
+  leaveGroupDraft: 'actor',
+  submitGroupDraft: 'actor',
+  decideGroupDraft: 'actor',
   addMember: 'actor',
   removeMember: 'actor',
   assignRole: 'actor',
@@ -33,6 +39,7 @@ export const REMOTE = {
   recordVerdict: 'actor',
   correctVerdict: 'actor',
   signForm: 'actor',
+  holdRevisions: 'actor',
   runGate: 'actor',
   setGlobalRoles: 'actor',
   setAccountStatus: 'actor',

@@ -13,6 +13,7 @@
  */
 import { db } from '../backend/index.js'
 import { firebaseApp } from '../backend/firebaseAdapter.js'
+import { emulatorHost } from '../backend/emulatorHost.js'
 import { resolveActor } from './core.js'
 
 const VAPID_KEY = import.meta.env.VITE_FIREBASE_VAPID_KEY
@@ -30,7 +31,7 @@ export async function call(name, data) {
   const { getFunctions, httpsCallable, connectFunctionsEmulator } = await import('firebase/functions')
   if (!functions) {
     functions = getFunctions(app)
-    if (import.meta.env.VITE_USE_EMULATORS === 'true') connectFunctionsEmulator(functions, '127.0.0.1', 5001)
+    if (import.meta.env.VITE_USE_EMULATORS === 'true') connectFunctionsEmulator(functions, emulatorHost(), 5001)
   }
   return httpsCallable(functions, name)(data)
 }

@@ -9,10 +9,11 @@ import { rowsIn, contextByKey } from '../domain/workspaces.js'
 import { sectionNow, courseOfStage } from '../domain/stages.js'
 import { GLOBAL_ROLES as G, PROJECT_ROLES as P, PANEL_ROLES, COURSES, programCode } from '../domain/constants.js'
 import {
-  ProjectCell, Feed, OwedFeed, DefenseTable, QueueSection, BlockDesk, Capstone2Facts, PanelFacts, ProgramSummary, RecordsSearch,
+  ProjectCell, Feed, OwedFeed, DefenseTable, QueueSection, BlockDesk, Capstone2Facts, PanelFacts, ProgramSummary, RecordsSearch, ProjectDirectory,
   statusOf, stepOf, itemLink, upcomingDefenses, stageOrder, latestDoc,
 } from './dashboards/parts.jsx'
 import { clearedEntries } from './dashboards/Desks.jsx'
+import { LOG_LABEL } from '../components/panels/LogsPanel.jsx'
 
 // The pages behind each context's rail (Figma 01 · Dashboards, 03 · Screens
 // per user). Every list is built from the worklist — the projects the guard
@@ -78,7 +79,7 @@ const logsCell = (r) => {
   const logs = r.bundle.weeklyLogs
   if (!logs.length) return <span className="faint">—</span>
   const waiting = logs.filter(l => l.status === 'Submitted').length
-  return <>{logs.filter(l => l.status === 'Approved').length} of {logs.length} approved{waiting > 0 && <div className="tone-warn">{waiting} to sign</div>}</>
+  return <>{logs.filter(l => l.status === 'Approved').length} of {logs.length} reviewed{waiting > 0 && <div className="tone-warn">{waiting} to review</div>}</>
 }
 
 // --- Adviser -----------------------------------------------------------------------------
@@ -103,7 +104,7 @@ export function WeeklyLogs() {
   if (!rows) return <Restricted>This page lists your advisees’ weekly consultation logs.</Restricted>
   const withLogs = rows.filter(r => r.bundle.weeklyLogs.length || courseOfStage(r.project.currentStage) === COURSES.C2)
   return (
-    <Page title="Weekly logs" lede="Filled FM-AAC-SOC-2003 logs your advisee groups upload during Capstone 2. Open a group to approve and sign them.">
+    <Page title="Weekly logs" lede="Filled FM-AAC-SOC-2003 forms your advisee groups upload during Capstone 2. Open a group to mark each upload as reviewed or return it.">
       <Section title="By group">
         {withLogs.length === 0 ? <Empty>None of your advisees has reached weekly logging yet.</Empty> : (
           <div className="table-scroll"><table className="cards">
@@ -114,9 +115,9 @@ export function WeeklyLogs() {
                 return (
                   <tr key={r.project.id}>
                     <td className="card-title"><ProjectCell r={r} tab="logs" /></td>
-                    <td className="small" data-label="Last log">{last ? <>Week {last.weekNo} · {last.status}<div className="faint">{fmtDate(last.submittedAt)}</div></> : <span className="faint">None yet</span>}</td>
+                    <td className="small" data-label="Last log">{last ? <>Week {last.weekNo} · {LOG_LABEL[last.status] ?? last.status}<div className="faint">{fmtDate(last.submittedAt)}</div></> : <span className="faint">None yet</span>}</td>
                     <td className="small" data-label="Progress">{logsCell(r)}</td>
-                    <td className="tight"><Link className="btn small" to={itemLink(r, 'logs')}>Open logs</Link></td>
+                    <td className="tight"><Link className="btn small" to={itemLink(r, 'logs')}>{last?.status === 'Submitted' ? 'Review this upload' : 'Open logs'}</Link></td>
                   </tr>
                 )
               })}
@@ -167,7 +168,7 @@ export function Completed() {
   if (!current || current.global) return <Restricted>This page lists the completed groups you worked with.</Restricted>
   const done = inContext.filter(r => r.project.currentStage === 'ARCHIVED')
   return (
-    <Page title="Archive" lede={`Completed groups you worked with as ${current.heading}. The school’s records archive is kept by the Dean and Associate Dean.`}>
+    <Page title="Completed groups" lede={`Completed groups you worked with as ${current.heading}. Every completed project is also listed in the Archive.`}>
       <Section title={`${done.length} completed group${done.length === 1 ? '' : 's'}`}>
         {done.length === 0 ? <Empty>None of your groups has completed yet.</Empty> : (
           <div className="table-scroll"><table className="cards">
@@ -230,7 +231,7 @@ export function Rosters() {
   const ids = new Set(sections.map(s => s.id))
   const elsewhere = rows.filter(r => !ids.has(r.project.sectionId))
   return (
-    <Page title="Groups & rosters" lede="Create the project groups for your sections from the block roster, then forward them for adviser assignment. Students do not form their own groups.">
+    <Page title="Groups & rosters" lede="Approve the groups your students draft (or create one for students left without a group), then forward them for adviser assignment.">
       {sections.map(s => <BlockDesk key={s.id} section={s} rows={rows} />)}
       {elsewhere.length > 0 && (
         <Section title="Other groups where you are Instructor 1">
@@ -353,6 +354,7 @@ export function School() {
       <Section title="Open to you now">
         <GroupTable rows={rows} hats={[G.DEAN, G.ASSOCIATE_DEAN]} empty="No project is at one of your steps right now." />
       </Section>
+      <ProjectDirectory title="All thesis and capstone projects" canOpen={(p) => rows.some(r => r.project.id === p.id)} />
     </Page>
   )
 }

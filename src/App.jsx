@@ -7,6 +7,7 @@ import Dashboard from './pages/Dashboard.jsx'
 import Projects from './pages/Projects.jsx'
 import ProjectWorkspace from './pages/ProjectWorkspace.jsx'
 import Records from './pages/Records.jsx'
+import BlankForms from './pages/BlankForms.jsx'
 import Reports from './pages/Reports.jsx'
 import { AccountsPage, CaacPage, SettingsPage } from './pages/Admin.jsx'
 import Audit from './pages/Audit.jsx'
@@ -39,6 +40,7 @@ export default function App() {
         {/* Notifications are email only; an old link lands on the worklist. */}
         <Route path="notifications" element={<Navigate to="/" replace />} />
         <Route path="records" element={<Records />} />
+        <Route path="forms" element={<BlankForms />} />
         <Route path="reports" element={<Reports />} />
         <Route path="admin" element={<Navigate to="/admin/accounts" replace />} />
         <Route path="admin/accounts" element={<AccountsPage />} />

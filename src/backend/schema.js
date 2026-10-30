@@ -39,6 +39,9 @@ export const COLLECTIONS = [
   'auditLogs',
   'permissionOverrides',
   'settings',
+  // Groups students draft before Instructor 1 approves them (revision
+  // 2026-10-30, replacing Decision 17). An approved draft becomes a project.
+  'groupDrafts',
   // One row per email (R6c). The prototype never sends them; the dev tools show
   // them as the outbox. Each row also shows as a device notification for its
   // recipients (DEVICE_NOTIFICATIONS, revision 2026-10-07) — no in-app list.

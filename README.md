@@ -167,10 +167,39 @@ docker compose up          # app on :5180, Emulator UI on :4000
 ```
 
 The app container ignores `.env` for the backend and points at the emulators (project
-`demo-local`), so it never touches the live project. Source is mounted, so edits hot-reload;
-rerun `docker compose up --build -V` only after changing `package.json` or a Dockerfile.
+`demo-local`), so it never touches the live project. Source is mounted, so edits hot-reload.
+Dependencies live in Docker volumes and reinstall on their own when `package.json` or a lock
+file changes; rerun `docker compose up --build` only after changing a Dockerfile.
 Emulator data is saved to `.emulator-data/` on a clean stop (`docker compose down` or Ctrl+C)
 and reloaded next time; delete the folder to start from the seed again.
+
+**On another PC (Windows, macOS or Linux)** — the only thing to install is
+[Docker Desktop](https://www.docker.com/products/docker-desktop/) (on Windows, with the WSL 2
+backend). No Node, no firebase CLI, no `.env`:
+
+```bash
+git clone <repo> && cd hau-soc-research-system
+docker compose up --build    # first start builds the images: several minutes
+```
+
+Then open http://localhost:5180 (Emulator UI: http://localhost:4000). Other machines on the
+same network can open `http://<this PC's IP>:5180`; the app finds the emulators on whichever
+host served the page. Uploads need a secure context, though, so test file uploads on the PC
+running Docker (localhost).
+
+If something is off:
+
+- **A port is "not available" / "access forbidden" (Windows).** Hyper-V reserves port ranges
+  that can include 4000–9199. `netsh interface ipv4 show excludedportrange protocol=tcp`
+  lists them; restarting Windows (or `net stop winnat` then `net start winnat` as
+  administrator) usually frees them. Another program on 5180, 4000, 8080, 9099, 9199 or 5001
+  causes the same error.
+- **"The server did not answer"** — `docker compose ps` should list `emulators` as healthy;
+  `docker compose logs emulators` shows why it is not.
+- **Start completely over** (images, dependencies, emulator data):
+  `docker compose down -v`, delete `.emulator-data/`, then `docker compose up --build`.
+- Clone outside OneDrive-synced folders; on Windows, a clone inside the WSL file system
+  (`\\wsl$\…`) also starts and hot-reloads noticeably faster than one on `C:\`.
 
 The emulators load the open rules in `emulator/` by default, because `firestore.rules` denies
 every client write (writes belong to Cloud Functions, which do not exist yet). To exercise the

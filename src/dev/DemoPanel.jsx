@@ -41,7 +41,7 @@ const FAMILIES = [
 const ABOUT = {
   student: 'Uploads the group’s documents, weekly logs and signed forms; sees deadlines, schedules and verdicts.',
   'instructor-1': 'Runs a Capstone 1 section: creates the groups, checks drafts after the adviser, moves groups on to Capstone 2.',
-  adviser: 'Reviews and returns drafts, signs weekly logs, verifies revisions and recommends the group for final defense.',
+  adviser: 'Reviews and returns drafts, reviews uploaded weekly logs, verifies revisions and recommends the group for final defense.',
   'panel-chair': 'Leads the defense panel and records the official verdict.',
   'panel-member': 'Reads the latest manuscript before the defense and keeps private notes.',
   'instructor-2': 'Runs Capstone 2: confirms milestones and readiness, and publishes the final defense schedule.',

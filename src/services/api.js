@@ -19,9 +19,11 @@
 import * as local from './actions.js'
 import { REMOTE, writePathOf } from './remote.js'
 import { db, files } from '../backend/index.js'
-import { uploadSubmissionFile } from './submissionFile.js'
+import { uploadSubmissionFile, uploadFormFile } from './submissionFile.js'
+import { FORMS } from '../domain/constants.js'
 import { getSessionUserId } from '../state/session.js'
 import { call } from './push.js'
+import { emulatorHost } from '../backend/emulatorHost.js'
 
 const EMULATORS = import.meta.env.VITE_USE_EMULATORS === 'true'
 
@@ -39,7 +41,7 @@ export function actErrorMessage(e, { emulators = false } = {}) {
   const text = raw.replace(/\s*\[\d+\]$/, '').trim()
   if (UNREACHABLE.has(e?.code) || (e?.code === 'functions/internal' && status === 0)) {
     return emulators
-      ? 'The server did not answer: nothing replied on the Functions emulator (127.0.0.1:5001). Check that `docker compose ps` shows the emulators healthy, and that no other program on this computer uses port 5001.'
+      ? 'The server did not answer: nothing replied on the Functions emulator (' + emulatorHost() + ':5001). Check that `docker compose ps` shows the emulators healthy, and that no other program on this computer uses port 5001.'
       : 'The server cannot be reached. Check your connection and try again.'
   }
   // A crash the function did not turn into a message of its own.
@@ -85,7 +87,28 @@ export function remoteActions({ send, files: store, check = local.checkSubmissio
       return send('submitDocument', [projectId, plain({ ...rest, storagePath, fileName })])
     })
 
-  return wrapped
+  // A form signed outside the system travels the same way: the browser puts
+  // the copy in the file store, the server checks it (verifyForm) and records
+  // it. `formTypeOf` names the form, which storage.rules require.
+  const withSignedCopy = (name, formTypeOf) => (actor, _snap, projectId, ...args) => {
+    const input = args.at(-1)
+    if (!(input?.file instanceof Blob)) return wrapped[name](actor, _snap, projectId, ...args)
+    return once(`${name}:${projectId}:upload`, async () => {
+      const { file, onProgress, signal, ...rest } = input
+      const { storagePath, fileName } = await uploadFormFile(store, {
+        projectId, formType: formTypeOf(...args), userId: actor.id, file, onProgress, signal,
+      })
+      return send(name, [projectId, ...plain([...args.slice(0, -1), { ...rest, upload: { storagePath, fileName } }])])
+    })
+  }
+  return {
+    ...wrapped,
+    signForm: withSignedCopy('signForm', (_formId, input) => input.formType),
+    recordVerdict: withSignedCopy('recordVerdict', () => FORMS.F2004.code),
+    correctVerdict: withSignedCopy('correctVerdict', () => FORMS.F2004.code),
+    submitWeeklyLog: withSignedCopy('submitWeeklyLog', () => FORMS.F2003.code),
+    runGate: withSignedCopy('runGate', (gate) => gate.signs ?? FORMS.F2005.code),
+  }
 }
 
 async function sendToAct(name, args) {
@@ -107,6 +130,12 @@ const remote = writePath === 'functions' ? remoteActions({ send: sendToAct, file
 const pick = (name) => remote?.[name] ?? local[name]
 
 export const createProject = pick('createProject')
+export const createGroupDraft = pick('createGroupDraft')
+export const inviteToGroupDraft = pick('inviteToGroupDraft')
+export const respondToGroupInvite = pick('respondToGroupInvite')
+export const leaveGroupDraft = pick('leaveGroupDraft')
+export const submitGroupDraft = pick('submitGroupDraft')
+export const decideGroupDraft = pick('decideGroupDraft')
 export const addMember = pick('addMember')
 export const removeMember = pick('removeMember')
 export const assignRole = pick('assignRole')
@@ -124,6 +153,7 @@ export const scheduleDefense = pick('scheduleDefense')
 export const recordVerdict = pick('recordVerdict')
 export const correctVerdict = pick('correctVerdict')
 export const signForm = pick('signForm')
+export const holdRevisions = pick('holdRevisions')
 export const runGate = pick('runGate')
 export const setGlobalRoles = pick('setGlobalRoles')
 export const setAccountStatus = pick('setAccountStatus')

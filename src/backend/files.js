@@ -23,6 +23,7 @@
 // CORS — see storage.cors.json.
 
 import { firebaseApp } from './firebaseAdapter.js'
+import { emulatorHost } from './emulatorHost.js'
 
 export { filePath } from './filePath.js'
 
@@ -31,6 +32,7 @@ const fail = (code, message, cause) => Object.assign(new Error(message), { code,
 const cancelled = () => fail('cancelled', 'Upload cancelled. Nothing was submitted.')
 
 const unverifiable = async () => { throw fail('unverifiable', 'Attach the PDF file.') }
+const unverifiableForm = async () => { throw fail('unverifiable', 'Attach the signed form.') }
 
 // Object URLs for files already fetched: a document is opened often (viewer,
 // AI summary) and its bytes never change. A few at a time — each one holds the
@@ -93,6 +95,7 @@ function localError(e) {
 
 export const localFiles = {
   verify: unverifiable,
+  verifyForm: unverifiableForm,
   forget,
 
   async put(path, blob, { onProgress, signal } = {}) {
@@ -135,7 +138,7 @@ async function cloud() {
   if (storage) return storage
   const [app, mod] = await Promise.all([firebaseApp(), import('firebase/storage')])
   const s = mod.getStorage(app)
-  if (import.meta.env.VITE_USE_EMULATORS === 'true') mod.connectStorageEmulator(s, '127.0.0.1', 9199)
+  if (import.meta.env.VITE_USE_EMULATORS === 'true') mod.connectStorageEmulator(s, emulatorHost(), 9199)
   s.maxUploadRetryTime = UPLOAD_RETRY_MS
   storage = { s, ...mod }
   return storage
@@ -159,15 +162,16 @@ function cloudError(e) {
 
 export const firebaseFiles = {
   verify: unverifiable,
+  verifyForm: unverifiableForm,
   forget,
 
-  async put(path, blob, { metadata = {}, onProgress, signal } = {}) {
+  async put(path, blob, { contentType = 'application/pdf', metadata = {}, onProgress, signal } = {}) {
     if (signal?.aborted) throw cancelled()
     const { s, ref, uploadBytesResumable } = await cloud()
     // The first upload loads the SDK; a Cancel pressed meanwhile counts too.
     if (signal?.aborted) throw cancelled()
     const task = uploadBytesResumable(ref(s, path), blob, {
-      contentType: 'application/pdf',
+      contentType,
       customMetadata: metadata,
     })
     const stop = () => task.cancel()

@@ -2,7 +2,7 @@
 // all-or-nothing write → audit → history → notification/outbox).
 
 import { describe, it, expect, beforeAll, beforeEach } from 'vitest'
-import { pdfFile } from './pdfFixture.js'
+import { pdfFile, signed } from './pdfFixture.js'
 import { db } from '../backend/index.js'
 import { buildSeed } from '../backend/seed.js'
 import { scenarioStore } from '../dev/scenarios.js'
@@ -10,7 +10,7 @@ import { setSessionUserId } from '../state/session.js'
 import { bundle } from '../services/core.js'
 import {
   submitDocument, unassignRole, decideWeeklyLog, flagOverdueRevisions, registerAccount, verifyEmail,
-  setAccountStatus, runGate, recordVerdict,
+  setAccountStatus, runGate, recordVerdict, confirmProviderVerification,
 } from '../services/actions.js'
 import { canView } from '../domain/guard.js'
 import { DOC_TYPES, DOC_STATUS, PROJECT_ROLES as P, GLOBAL_ROLES as G } from '../domain/constants.js'
@@ -63,7 +63,7 @@ describe('write path', () => {
       decideWeeklyLog(me, null, 'p_g1', log.id, { approve: true }),
     ])
     expect(results.filter(r => r.status === 'fulfilled').length).toBe(1)
-    expect(snap().auditLogs.filter(l => l.action === 'WEEKLY_LOG_SIGNED').length).toBe(1)
+    expect(snap().auditLogs.filter(l => l.action === 'WEEKLY_LOG_REVIEWED').length).toBe(1)
     expect(snap().weeklyLogs.find(l => l.id === log.id).status).toBe('Approved')
   })
 
@@ -92,9 +92,9 @@ describe('write path', () => {
   it('a verdict writes a history entry and rolls back completely if it fails midway', async () => {
     const me = as('f_alpha')
     const before = JSON.stringify(snap().defenses)
-    await expect(recordVerdict(me, null, 'p_g2', { verdict: 'Not a verdict' })).rejects.toThrow()
+    await expect(recordVerdict(me, null, 'p_g2', { file: signed(), verdict: 'Not a verdict' })).rejects.toThrow()
     expect(JSON.stringify(snap().defenses)).toBe(before)
-    await recordVerdict(me, null, 'p_g2', { verdict: 'Passed with Minor Revisions', remarks: 'Tighten the scope.' })
+    await recordVerdict(me, null, 'p_g2', { file: signed(), verdict: 'Passed with Minor Revisions', remarks: 'Tighten the scope.' })
     expect(snap().projects.find(p => p.id === 'p_g2').currentStage).toBe('PROPOSAL_REVISION')
   })
 })
@@ -102,7 +102,7 @@ describe('write path', () => {
 describe('guard cannot be bypassed', () => {
   it('rejects a call made as someone other than the signed-in user', async () => {
     setSessionUserId('s_kilo')
-    await expect(recordVerdict(user('f_alpha'), null, 'p_g2', { verdict: 'Passed with Minor Revisions' }))
+    await expect(recordVerdict(user('f_alpha'), null, 'p_g2', { file: signed(), verdict: 'Passed with Minor Revisions' }))
       .rejects.toThrow(/signed-in account/)
   })
 
@@ -110,7 +110,7 @@ describe('guard cannot be bypassed', () => {
     as('s_kilo')
     const forged = { ...user('s_kilo'), globalRoles: ['Dean', 'System Administrator'] }
     const fakeSnap = { ...snap(), projectAssignments: [{ projectId: 'p_g2', userId: 's_kilo', roleType: P.PANEL_CHAIR }] }
-    await expect(recordVerdict(forged, fakeSnap, 'p_g2', { verdict: 'Re-defense' })).rejects.toThrow(/not available/)
+    await expect(recordVerdict(forged, fakeSnap, 'p_g2', { file: signed(), verdict: 'Re-defense' })).rejects.toThrow(/not available/)
   })
 
   it('refuses a gate from another stage even with a forged gate object', async () => {
@@ -127,7 +127,7 @@ describe('guard cannot be bypassed', () => {
 })
 
 describe('accounts (S0, flags ACCOUNT_ACTIVATION + FACULTY_BASE_IDENTITY)', () => {
-  it('register → verify email → admin activates', async () => {
+  it('register → verify email activates (ACCOUNT_ACTIVATION = email); the admin can suspend', async () => {
     const u = await registerAccount(null, { name: 'New Faculty', email: '  New.Faculty@HAU.edu.ph ' })
     expect(u).toMatchObject({ email: 'new.faculty@hau.edu.ph', status: 'Inactive', emailVerified: false, globalRoles: [] })
     const mail = snap().outbox.find(m => m.event === 'Account verification')
@@ -136,14 +136,23 @@ describe('accounts (S0, flags ACCOUNT_ACTIVATION + FACULTY_BASE_IDENTITY)', () =
     const admin = as('a_sierra')
     await expect(setAccountStatus(admin, null, u.id, 'Active')).rejects.toThrow(/not verified/)
     await verifyEmail(mail.link.token)
-    let now = user(u.id)
-    expect(now).toMatchObject({ emailVerified: true, status: 'Inactive', globalRoles: [G.FACULTY] })
+    expect(user(u.id)).toMatchObject({ emailVerified: true, status: 'Active', globalRoles: [G.FACULTY] })
     await expect(verifyEmail(mail.link.token)).rejects.toThrow(/invalid/)
 
-    await setAccountStatus(admin, null, u.id, 'Active')
-    now = user(u.id)
-    expect(now.status).toBe('Active')
-    expect(snap().auditLogs.find(l => l.action === 'ACCOUNT_STATUS_CHANGED')).toMatchObject({ before: { status: 'Inactive' }, after: { status: 'Active' }, hat: G.ADMIN })
+    await setAccountStatus(admin, null, u.id, 'Suspended')
+    expect(user(u.id).status).toBe('Suspended')
+    expect(snap().auditLogs.find(l => l.action === 'ACCOUNT_STATUS_CHANGED')).toMatchObject({ before: { status: 'Active' }, after: { status: 'Suspended' }, hat: G.ADMIN })
+    // Signing in again does not undo a suspension.
+    await confirmProviderVerification('new.faculty@hau.edu.ph')
+    expect(user(u.id).status).toBe('Suspended')
+  })
+
+  it('an account verified while activation waited on the admin is activated at its next sign-in', async () => {
+    const u = await registerAccount(null, { name: 'Waiting Faculty', email: 'waiting@hau.edu.ph' })
+    await db.update('users', u.id, { emailVerified: true, verifyToken: null })
+    expect(user(u.id).status).toBe('Inactive')
+    await confirmProviderVerification('waiting@hau.edu.ph')
+    expect(user(u.id)).toMatchObject({ status: 'Active', globalRoles: [G.FACULTY] })
   })
 
   it('rejects look-alike domains and duplicates', async () => {

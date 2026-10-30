@@ -14,6 +14,7 @@ import { assignRole, unassignRole, runGate, scheduleDefense, recordVerdict, subm
 import { worklist, officeQueues } from '../services/worklist.js'
 import { canView, canDo, viewBundle } from '../domain/guard.js'
 import { DOC_STATUS, FORMS, GLOBAL_ROLES as G, PROJECT_ROLES as P, AI_PLACEHOLDER_NOTICE } from '../domain/constants.js'
+import { signed } from './pdfFixture.js'
 
 const snap = () => db.snapshot()
 const user = (id) => snap().users.find(u => u.id === id)
@@ -141,7 +142,7 @@ describe('S7.1 / S7.2 — final defense', () => {
     expect(inQueue('f_alpha', 'Recommendations to endorse')).toEqual(['p_g3'])
     expect(canDo(user('f_charlie'), 'scheduleDefense', b('p_g3')).ok).toBe(false)
     expect(canDo(user('f_alpha'), 'assignPanel', b('p_g3')).ok).toBe(true) // S7.2
-    await runGate(as('f_alpha'), null, 'p_g3', { action: 'ENDORSE_FINAL_DEFENSE' })
+    await runGate(as('f_alpha'), null, 'p_g3', { action: 'ENDORSE_FINAL_DEFENSE', file: signed() })
     expect(canDo(user('f_charlie'), 'scheduleDefense', b('p_g3')).ok).toBe(true)
     expect(recipients('p_g3', 'Stage: Final Defense Scheduling')).toContain('f_charlie')
   })
@@ -150,7 +151,7 @@ describe('S7.1 / S7.2 — final defense', () => {
     const s = applyStage(buildSeed(), 'p_g3', 'FINAL_DEFENSE_ENDORSEMENT', { roles: SEED_ROLES.p_g3 })
     for (const [id, f] of Object.entries(s.forms)) if (f.projectId === 'p_g3' && f.formType === FORMS.F2005.code) delete s.forms[id]
     await load(s)
-    await expect(runGate(as('f_alpha'), null, 'p_g3', { action: 'ENDORSE_FINAL_DEFENSE' })).rejects.toThrow(/FM-AAC-SOC-2005/)
+    await expect(runGate(as('f_alpha'), null, 'p_g3', { action: 'ENDORSE_FINAL_DEFENSE', file: signed() })).rejects.toThrow(/FM-AAC-SOC-2005/)
   })
 })
 
@@ -159,14 +160,14 @@ describe('S9.3c — Approval Sheet endorsement (T10)', () => {
     await load(scenarioStore('T10'))
     expect(inQueue('f_alpha', 'Approval Sheets to endorse')).toEqual(['p_g3'])
     expect(canView(user('o_uniform'), b('p_g3'))).toBe(false)
-    await runGate(as('f_alpha'), null, 'p_g3', { action: 'ENDORSE_TO_URO' })
+    await runGate(as('f_alpha'), null, 'p_g3', { action: 'ENDORSE_TO_URO', file: signed() })
     expect(b('p_g3').project.currentStage).toBe('URO_VERIFICATION')
     expect(canView(user('o_uniform'), b('p_g3'))).toBe(true)
     expect(recipients('p_g3', 'Stage: URO Verification')).toContain('o_uniform')
     const sheet = b('p_g3').forms.find(f => f.formType === FORMS.APPROVAL.code)
     expect(sheet.signatories.find(x => x.role === G.COORDINATOR)).toMatchObject({ userId: 'f_alpha' })
     expect(sheet.signatories.find(x => x.role === G.COORDINATOR).signedAt).toBeTruthy()
-    await expect(runGate(as('f_alpha'), null, 'p_g3', { action: 'FINAL_APPROVE' })).rejects.toThrow()
+    await expect(runGate(as('f_alpha'), null, 'p_g3', { action: 'FINAL_APPROVE', file: signed() })).rejects.toThrow()
   })
 })
 
@@ -195,6 +196,6 @@ describe('T16 / T19 and the Must-NOT list', () => {
     await expect(submitReview(as('f_alpha'), null, 'p_g2', m.id, { decision: 'Approve' })).rejects.toThrow()
     expect(canView(user('f_alpha'), b('p_g3'))).toBe(false)
     expect(canDo(user('f_alpha'), 'readDocuments', b('p_g3')).ok).toBe(false)
-    await expect(recordVerdict(as('f_alpha'), null, 'p_g1', { verdict: 'Re-defense' })).rejects.toThrow()
+    await expect(recordVerdict(as('f_alpha'), null, 'p_g1', { file: signed(), verdict: 'Re-defense' })).rejects.toThrow()
   })
 })

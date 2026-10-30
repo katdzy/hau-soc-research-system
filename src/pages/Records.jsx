@@ -2,12 +2,15 @@ import { useMemo, useState } from 'react'
 import { Link, useSearchParams } from 'react-router-dom'
 import { useApp } from '../state/AppContext.jsx'
 import { resolveInstitution, can } from '../domain/caac.js'
-import { Section, Empty, Badge, Restricted, fmtDate, downloadCsv } from '../components/ui.jsx'
+import { Section, Empty, Badge, Restricted, fmtDate } from '../components/ui.jsx'
+import { ExportMenu } from '../components/Export.jsx'
 import { PROGRAMS, programCode, PROJECT_ROLES as P } from '../domain/constants.js'
 
 // The records-table archive: cleared projects, searchable and filterable by
 // the Dean and Associate Dean, managed by the System Administrator. It holds a
-// Pass result, never a grade, and is not public.
+// Pass result, never a grade, and is not public. Every other registered user
+// browses the same list as metadata only (Figma S-17, `archive.browse`):
+// title, members, program, adviser and year — no record link, no result.
 
 export default function Records() {
   const { snap, me } = useApp()
@@ -23,9 +26,11 @@ export default function Records() {
   const adviserOf = (p) => nameOf((snap.projectAssignments ?? []).find(a => a.projectId === p.id && a.roleType === P.ADVISER)?.userId)
   const membersOf = (p) => (snap.projectMembers ?? []).filter(m => m.projectId === p.id).map(m => nameOf(m.userId))
 
-  if (!can(inst, 'records.search') && !can(inst, 'records.manage')) {
-    return <Restricted>The records archive is searchable by the Dean and Associate Dean and managed by the System Administrator.</Restricted>
+  const full = can(inst, 'records.search') || can(inst, 'records.manage')
+  if (!full && !can(inst, 'archive.browse')) {
+    return <Restricted>The archive is open to every active, verified account.</Restricted>
   }
+  const yearOf = (p) => (p.archivedAt ? new Date(p.archivedAt).getFullYear() : '—')
 
   const q = query.trim().toLowerCase()
   const rows = archived.filter(p =>
@@ -34,19 +39,28 @@ export default function Records() {
     (!q || [p.title, p.researchArea, adviserOf(p), ...membersOf(p)].some(v => v?.toLowerCase().includes(q))))
 
   // The record, never its manuscript: no abstract, document or annotation text.
-  const exportRows = () => downloadCsv(
-    'records-archive.csv',
-    ['Project', 'Program', 'Research area', 'Term', 'Adviser', 'Students', 'Archived', 'Result'],
-    rows.map(p => [p.title, p.program, p.researchArea, p.term, adviserOf(p), membersOf(p).join('; '), fmtDate(p.archivedAt), p.archiveResult]),
-  )
+  const exportRows = full
+    ? {
+        name: 'records-archive',
+        title: 'Archive — completed projects',
+        header: ['Project', 'Program', 'Research area', 'Term', 'Adviser', 'Students', 'Archived', 'Result'],
+        rows: rows.map(p => [p.title, p.program, p.researchArea, p.term, adviserOf(p), membersOf(p).join('; '), fmtDate(p.archivedAt), p.archiveResult]),
+      }
+    : {
+        name: 'archive',
+        title: 'Archive — completed projects',
+        header: ['Title', 'Group members', 'Program', 'Adviser', 'Year'],
+        rows: rows.map(p => [p.title, membersOf(p).join('; '), p.program, adviserOf(p), yearOf(p)]),
+      }
 
   return (
     <div className="page">
       <header className="page-head">
         <h1>Archive</h1>
         <p className="lede">
-          Projects that cleared URO verification and final approval. Each carries a Pass result —
-          the system does not compute or store grades.
+          {full
+            ? 'Projects that cleared URO verification and final approval. Each carries a Pass result — the system does not compute or store grades.'
+            : 'Completed thesis and capstone projects. Metadata only — visible to every registered user.'}
         </p>
       </header>
 
@@ -65,10 +79,28 @@ export default function Records() {
 
       <Section
         title={`${rows.length} of ${archived.length} records`}
-        aside={rows.length > 0 && <button className="small" onClick={exportRows}>Export CSV</button>}
+        aside={rows.length > 0 && <ExportMenu {...exportRows} />}
       >
         {rows.length === 0 && <Empty>No archived projects match.</Empty>}
-        {rows.length > 0 && (
+        {rows.length > 0 && !full && (
+          <div className="table-scroll"><table className="cards">
+            <thead><tr><th>Title</th><th>Group members</th><th>Program</th><th>Adviser</th><th className="tight">Year</th></tr></thead>
+            <tbody>
+              {rows.map(p => (
+                <tr key={p.id}>
+                  <td className="card-title">{p.title}<div className="faint small">{p.researchArea}</div></td>
+                  <td className="small" data-label="Members">{membersOf(p).join(', ')}</td>
+                  <td className="small muted" data-label="Program" title={p.program}>
+                    <span className="card-long">{p.program}</span><span className="card-short">{programCode(p.program)}</span>
+                  </td>
+                  <td className="small" data-label="Adviser">{adviserOf(p)}</td>
+                  <td className="tight small faint" data-label="Year">{yearOf(p)}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table></div>
+        )}
+        {rows.length > 0 && full && (
           <div className="table-scroll"><table className="cards">
             <thead>
               <tr>

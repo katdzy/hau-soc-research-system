@@ -18,7 +18,7 @@ const seedOnly = (s) => s
 // so the sign-in demo panel can file each one under its group.
 export const SCENARIOS = [
   { id: 'T1', on: 'p_g1', loginAs: 'f_alpha', setup: g1('IMPLEMENTATION', { pendingLog: true }),
-    look: 'G1 → Weekly logs', expect: 'Prof. Alpha (Adviser of G1) can approve and sign the pending log, and annotate the current Revised Manuscript in G1 → Documents.' },
+    look: 'G1 → Weekly logs', expect: 'Prof. Alpha (Adviser of G1) can mark the pending log upload as reviewed, and annotate the current Revised Manuscript in G1 → Documents.' },
   { id: 'T2', on: 'p_g2', loginAs: 'f_alpha', setup: seedOnly,
     look: 'G2 → Defense', expect: 'Can record the verdict as Panel Chair; no adviser actions (no review, no log signing).' },
   { id: 'T3', on: 'p_g3', loginAs: 'f_alpha', setup: seedOnly,
@@ -50,7 +50,7 @@ export const SCENARIOS = [
   { id: 'T16', on: 'p_g1', loginAs: 'f_alpha', setup: g1('PANEL_ASSIGNMENT', { preassign: ['Panel Chair', 'Panel Member'] }),
     look: 'G1 → Overview → Faculty assignments', expect: 'Remove Prof. Charlie from the panel; G1 leaves Charlie’s dashboard; audit entry written.' },
   { id: 'T17', on: 'p_g1', loginAs: 'f_alpha', setup: g1('IMPLEMENTATION', { pendingLog: true }),
-    look: 'G1 → Weekly logs', expect: 'Double-click "Approve and sign": one approval recorded.' },
+    look: 'G1 → Weekly logs', expect: 'Double-click "Mark as reviewed": one review recorded.' },
   { id: 'T18', on: 'p_g3', loginAs: 's_quebec', setup: g3('FINAL_REVISION', { revisionDeadlineDays: -1 }),
     look: 'Worklist / Dev tools → Outbox', expect: 'Overdue flag on the worklist and an "Overdue Revision" email in the outbox.' },
   { id: 'T19', on: 'p_g1', loginAs: 'f_alpha', setup: g1('PANEL_ASSIGNMENT'),

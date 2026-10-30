@@ -10,7 +10,13 @@
 #
 # The app talks to the emulators, never to the live project: the environment
 # below overrides whatever .env says, and "demo-local" is a demo- project ID,
-# which the Firebase SDKs refuse to send to production.
+# which the Firebase SDKs refuse to send to production. Nothing else is needed
+# on the machine (Windows, macOS or Linux): no .env, no Node, no firebase CLI.
+#
+# Dependencies live in the named volumes at the bottom, filled by the image and
+# reinstalled by scripts/docker/deps.sh whenever package.json or a lock changes,
+# so `git pull` + `docker compose up` is enough. To start over from scratch:
+#   docker compose down -v && docker compose up --build
 
 services:
   # --- React / Vite dev server ------------------------------------------------
@@ -23,8 +29,8 @@ services:
     volumes:
       # Source is mounted, so edits hot-reload without rebuilding the image.
       - .:/app
-      # node_modules stays in the container (Linux builds, not the Mac's).
-      - /app/node_modules
+      # node_modules stays in a volume (Linux builds, not the host's).
+      - node_modules:/app/node_modules
     environment:
       NODE_ENV: development
       # Docker Desktop on macOS does not always forward file events into the
@@ -52,13 +58,14 @@ services:
     build:
       context: .
       dockerfile: Dockerfile
-    # First run on a fresh clone installs functions/ dependencies, then watches.
-    # CRs are stripped first: a Windows checkout may have given the script CRLF
-    # line endings, which sh refuses ("set: illegal option -").
+    # Brings the dependency volumes up to date, then watches. CRs are stripped
+    # first: a Windows checkout may have given the script CRLF line endings,
+    # which sh refuses ("set: illegal option -").
     command: ["sh", "-c", "tr -d '\\r' < scripts/functions/dev.sh | sh"]
     volumes:
       - .:/app
-      - /app/node_modules
+      - node_modules:/app/node_modules
+      - functions_node_modules:/app/functions/node_modules
     healthcheck:
       test: ["CMD", "sh", "-c", "test -f /app/functions/lib/app.js && test -d /app/functions/node_modules/firebase-admin"]
       interval: 2s
@@ -82,6 +89,8 @@ services:
       - "5001:5001"   # Functions (act, claims, delivery — outbound mail and push are skipped here)
     volumes:
       - .:/app
+      # The Functions emulator loads firebase-admin / firebase-functions from here.
+      - functions_node_modules:/app/functions/node_modules
     environment:
       # FIREBASE_CONFIG=firebase.json docker compose up  → load the real
       # firestore.rules / storage.rules (reads then need a real signed-in
@@ -103,3 +112,7 @@ services:
       timeout: 5s
       retries: 30
       start_period: 20s
+
+volumes:
+  node_modules:
+  functions_node_modules:

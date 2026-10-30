@@ -3,7 +3,7 @@
 // the §4 "Never" list, and the student side of T4, T13, T14, T18.
 
 import { describe, it, expect, beforeAll, beforeEach } from 'vitest'
-import { pdfFile, otherFile } from './pdfFixture.js'
+import { pdfFile, otherFile, signed } from './pdfFixture.js'
 import { db } from '../backend/index.js'
 import { buildSeed, SEED_ROLES } from '../backend/seed.js'
 import { applyStage } from '../backend/stageBuilder.js'
@@ -13,7 +13,7 @@ import { bundle } from '../services/core.js'
 import * as actions from '../services/actions.js'
 import {
   submitDocument, submitReview, submitWeeklyLog, runGate, flagOverdueRevisions, createProject, addAnnotation,
-  recordVerdict,
+  recordVerdict, decideWeeklyLog,
 } from '../services/actions.js'
 import { groupDue, worklist } from '../services/worklist.js'
 import { canView, canDo, viewBundle, allowedActions, canViewAnnotation } from '../domain/guard.js'
@@ -144,11 +144,17 @@ describe('S4–S9 — uploads at each stage', () => {
     const me = as('s_kilo')
     expect(groupDue(b('p_g1'), resolveContext(user('s_kilo'), b('p_g1'))).map(t => t.label))
       .toEqual(['Upload your manuscript draft', 'Submit the deployment information']) // week 1 log is recent
-    await expect(submitWeeklyLog(me, null, 'p_g1', { activities: '  ' })).rejects.toThrow(/Describe/)
-    const log = await submitWeeklyLog(me, null, 'p_g1', { activities: 'Built the ordering module.' })
-    expect(log).toMatchObject({ weekNo: 2, status: 'Submitted' })
-    expect(lastMail()).toMatchObject({ event: 'Weekly log submitted', userIds: ['f_alpha'] })
-    await expect(submitWeeklyLog(as('s_lima'), null, 'p_g1', { activities: 'Again' })).rejects.toThrow(/still waiting/)
+    // F-01: the filled FM-AAC-SOC-2003 itself — a PDF, or a JPG/PNG scan or photo.
+    await expect(submitWeeklyLog(me, null, 'p_g1', { note: 'No file' })).rejects.toThrow(/Attach the filled FM-AAC-SOC-2003/)
+    await expect(submitWeeklyLog(me, null, 'p_g1', { file: otherFile('log.docx') })).rejects.toThrow(/PDF, or a JPG or PNG/)
+    await expect(submitWeeklyLog(me, null, 'p_g1', { file: otherFile('log.jpg', 'image/jpeg') })).rejects.toThrow(/not really a JPG/)
+    const log = await submitWeeklyLog(me, null, 'p_g1', { file: signed('FM-AAC-SOC-2003_week2.pdf'), note: 'Built the ordering module.' })
+    expect(log).toMatchObject({ weekNo: 2, status: 'Submitted', fileName: 'FM-AAC-SOC-2003_week2.pdf', contentType: 'application/pdf' })
+    expect(lastMail()).toMatchObject({ event: 'Weekly log uploaded', userIds: ['f_alpha'] })
+    const png = new File([new Uint8Array([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a, 1, 2, 3])], 'scan.png', { type: 'image/png' })
+    await decideWeeklyLog(as('f_alpha'), null, 'p_g1', log.id, { approve: false, remarks: 'Missing a signature.' })
+    expect(await submitWeeklyLog(as('s_kilo'), null, 'p_g1', { file: png })).toMatchObject({ weekNo: 2, contentType: 'image/png', resubmits: log.id })
+    await expect(submitWeeklyLog(as('s_lima'), null, 'p_g1', { file: signed(), note: 'Again' })).rejects.toThrow(/still waiting/)
 
     as('s_kilo')
     await submitDocument(me, null, 'p_g1', { docType: T.FINAL_MANUSCRIPT, ...pdf() })
@@ -161,7 +167,7 @@ describe('S4–S9 — uploads at each stage', () => {
 
   it('NEW-9 — the weekly log is a Capstone 2 feature: rejected before Implementation', async () => {
     await at('p_g1', 'PROPOSAL_DEVELOPMENT')
-    await expect(submitWeeklyLog(as('s_kilo'), null, 'p_g1', { activities: 'Consultation' })).rejects.toThrow()
+    await expect(submitWeeklyLog(as('s_kilo'), null, 'p_g1', { file: signed(), note: 'Consultation' })).rejects.toThrow()
     expect(canDo(user('s_kilo'), 'exportWeeklyLogs', b('p_g1')).ok).toBe(false)
   })
 
@@ -252,7 +258,7 @@ describe('what the student sees', () => {
   })
 
   it('a verdict shows the group the verdict, the remarks and a deadline', async () => {
-    await recordVerdict(as('f_alpha'), null, 'p_g2', { verdict: 'Passed with Major Revisions', remarks: 'Redo chapter 3.' })
+    await recordVerdict(as('f_alpha'), null, 'p_g2', { file: signed(), verdict: 'Passed with Major Revisions', remarks: 'Redo chapter 3.' })
     const view = viewBundle(user('s_november'), b('p_g2'))
     expect(view.defenses.at(-1)).toMatchObject({ verdict: 'Passed with Major Revisions', remarks: 'Redo chapter 3.', revisionStatus: 'Pending' })
     expect(view.project.revisionDeadline).toBeTruthy()
@@ -288,7 +294,7 @@ describe('Must NOT (§4 Student "Never")', () => {
     const me = as('s_kilo')
     await expect(submitReview(me, null, 'p_g1', 'd_g1_topic', { decision: DECISIONS.APPROVE, approvedTopic: 'x' })).rejects.toThrow()
     await expect(runGate(me, null, 'p_g1', { action: 'REGISTER_TOPIC' })).rejects.toThrow()
-    await expect(recordVerdict(as('s_november'), null, 'p_g2', { verdict: 'Re-defense' })).rejects.toThrow()
+    await expect(recordVerdict(as('s_november'), null, 'p_g2', { file: signed(), verdict: 'Re-defense' })).rejects.toThrow()
     await expect(createProject(as('s_whiskey'), null, { title: 'Our own group', sectionId: 'sec_wd401' })).rejects.toThrow()
   })
 
@@ -303,7 +309,7 @@ describe('Must NOT (§4 Student "Never")', () => {
     const kilo = as('s_kilo') // G1, Topic Proposal
     await expect(submitDocument(kilo, null, 'p_g1', { docType: T.REVISED_MANUSCRIPT, ...pdf() })).rejects.toThrow(/not accepted/)
     await expect(submitDocument(kilo, null, 'p_g1', { docType: T.EDITORS_CERTIFICATE, ...pdf() })).rejects.toThrow(/not accepted/)
-    await expect(submitWeeklyLog(kilo, null, 'p_g1', { activities: 'x' })).rejects.toThrow()
+    await expect(submitWeeklyLog(kilo, null, 'p_g1', { file: signed(), note: 'x' })).rejects.toThrow()
   })
 
   it('T14 — the student with no group sees no project anywhere', () => {

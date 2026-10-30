@@ -6,6 +6,8 @@ import { Section, firstName } from '../components/ui.jsx'
 import { accountType } from '../domain/constants.js'
 import { DeskHead } from './dashboards/parts.jsx'
 import StudentDesk from './dashboards/StudentDesk.jsx'
+import { GroupDraftCard } from '../components/GroupDraft.jsx'
+import { FLAGS } from '../domain/flags.js'
 import {
   AdviserDesk, PanelDesk, Instructor1Desk, Instructor2Desk, CoordinatorDesk, DeanDesk, UroDesk, AdminDesk,
 } from './dashboards/Desks.jsx'
@@ -65,13 +67,18 @@ function NoContext() {
   return (
     <div className="page">
       <DeskHead sub={`Good day, ${firstName(me.name)}. ${student ? 'You are not in a project group yet.' : 'You hold no role on a project yet.'}`} />
+      {student && FLAGS.STUDENT_GROUP_DRAFTS && <GroupDraftCard />}
       <Section title="What happens next">
         <p className="measure m-0">
           {student
-            ? <>Students don’t form their own groups. The Instructor 1 of your section
-              {me.block ? ` (${me.block})` : ''} creates the groups and adds you to one. Your group’s
-              workspace, stage, adviser and deadlines appear here once they do, and you’ll get an
-              email at {me.email}.</>
+            ? FLAGS.STUDENT_GROUP_DRAFTS
+              ? <>Once the Instructor 1 of your section{me.block ? ` (${me.block})` : ''} approves your group, its
+                workspace, stage, adviser and deadlines appear here. Instructor 1 can also place you in a group.
+                You’ll get an email at {me.email} at each step.</>
+              : <>Students don’t form their own groups. The Instructor 1 of your section
+                {me.block ? ` (${me.block})` : ''} creates the groups and adds you to one. Your group’s
+                workspace, stage, adviser and deadlines appear here once they do, and you’ll get an
+                email at {me.email}.</>
             : <>Your account is active. Advising, panel and instructor roles are given per project by the
               Program Chair/Coordinator or an Instructor 1; each one appears here, and under “Acting as”,
               once it is assigned. You’ll get an email at {me.email}.</>}

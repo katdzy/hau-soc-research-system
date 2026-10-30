@@ -10,6 +10,13 @@
 - **[NEEDS CONFIRMATION → OQ#n]** = unresolved; `OQ#n` = item in `Open Questions.md`. `NEW-n` = gap found while building this map (listed in §8).
 - **Mockup default** = a placeholder so the mockup can be built now. It is *not* a team decision — swap it once the question is settled.
 
+> **Revision 2026-10-30 — forms are signed outside the system and uploaded** (team checklist `SOC_System_Checklist2.xlsx`, revised manuscript Table 1; Figma E-00/E-01, F-01–F-10, M-05/M-06, M-16–M-23). The system never fills in or signs a form. Each signatory downloads the latest copy (or the blank form from the library, F-10), signs it outside the system — all e-signatures on the PDF or all wet signatures on paper, one way per form — and uploads the signed copy (PDF, or a JPG/PNG scan or photo). The signing order and the gates below are unchanged; only *how* a line is completed changed:
+> - **FM-AAC-SOC-2003 (weekly log):** the group uploads the filled form; the Adviser marks it **reviewed** or returns it with remarks (S6.1–S6.2).
+> - **FM-AAC-SOC-2004:** the Panel Chair uploads the form signed by the chair and the proponents with the verdict (M-19); the Adviser verifies and the Panel Members confirm the revisions **in the system** (M-16/M-17, "not yet" keeps a private note); the Panel Chair then uploads the final copy carrying the members' signatures, which completes the revisions (F-04).
+> - **FM-AAC-SOC-2005:** the Adviser chooses Recommended / Not Recommended and uploads the form (F-05/F-06/F-06b; Not Recommended keeps the group in Implementation); the Program Chair/Coordinator signs "Noted by" and uploads the noted copy when endorsing (M-21).
+> - **Approval Sheet:** Adviser → Panel → Program Chair/Coordinator → Dean and AD each download the latest copy, sign and upload it (F-09, M-06); the URO clears in the system (M-09).
+> Where a row below still says "sign" or "e-sign", read it this way.
+
 ---
 
 ## 1. How to use this with Claude Code
@@ -86,8 +93,8 @@ stateDiagram-v2
   Implementation --> FinalDefense: Adviser FM-2005 + PC endorsement
   FinalDefense --> FinalDefense: re-defense
   FinalDefense --> FinalRevision: Panel Chair verdict (minor/major)
-  FinalRevision --> Clearance: Adviser + Panel sign FM-2004
-  Clearance --> Archived: URO clears, Dean + AD sign
+  FinalRevision --> Clearance: Adviser + Panel confirm, Chair uploads FM-2004
+  Clearance --> Archived: URO clears, Dean + AD upload the signed sheet
   Archived --> [*]
 ```
 
@@ -106,16 +113,18 @@ Conflicts in this machine:
 |---|---|---|---|---|---|---|
 | S0.1 | Any user | Register with `@hau.edu.ph` / `@student.hau.edu.ph` | Allowed domain | Account created, not yet active (inferred) | Sys Admin: user list / pending | Verification email with approval button |
 | S0.2 | User | Click verification button | S0.1 | Email verified | Sys Admin list updates | — |
-| S0.3 | Sys Admin | Verify/activate account; assign Global Role (Dean, AD, PC, URO) | S0.2 | `CAAC_permissions` updated; audit log | User's dashboard changes to match role | — |
+| S0.3 | Sys Admin | Assign Global Role (Dean, AD, PC, URO); suspend if needed (activation is by email verification since 2026-10-30) | S0.2 | `CAAC_permissions` updated; audit log | User's dashboard changes to match role | — |
 | S0.4 | Any user | Log in | Active account | JWT with role claims; role dashboard loads | — | — |
 
-- Self-verification vs admin approval vs both: **[NEEDS CONFIRMATION → OQ#4]**. *Mockup default:* both — email verification, then Sys Admin assigns non-student Global Roles.
+- Self-verification vs admin approval vs both: **decided 2026-10-30 (OQ#4, flag `ACCOUNT_ACTIVATION = 'email'`)** — email verification alone activates the account (students as Student, faculty as Faculty with no permission). The Sys Admin no longer activates accounts; they still assign Global Roles and can suspend an account.
 - `authTriggers.js` assigns permissions on registration (inferred: `@student` → Student; `@hau.edu.ph` → Faculty with no global role until S0.3).
 - Blocked: non-HAU domain → rejected at registration (negative test).
 
 ---
 
 ### S1 — Group Formation (Thesis/Capstone 1)
+
+> **Revision 2026-10-30 (replaces Decision 17, flag `STUDENT_GROUP_DRAFTS`):** after their first sign-in, students draft their own group. A student with no group starts a draft from the dashboard ("No group yet — create one?") and invites classmates from the same section; each invitee accepts or declines. A student belongs to one draft at a time. When the draft holds `GROUP_SIZE` (4) joined members, any of them submits it to the section's Instructor 1, who **approves** it — it becomes the project at Group Formation, with Instructor 1 assigned — or **returns** it with remarks for the group to change and resubmit. Instructor 1 can still create a group directly (S1.1 below), e.g. for students left without one. Emails: invitation, joined/declined, submitted (to Instructor 1), approved/returned.
 
 | ID | Actor | Action | Precondition | Result | Reflects on | Email |
 |---|---|---|---|---|---|---|
@@ -182,7 +191,7 @@ Open points:
 | S5.4 | System | Generate Gemini summary of the complete manuscript, with disclosure label | S5.3, proposal milestone | `AI_SUMMARY` | **Who sees it → OQ#2** | — |
 | S5.5 | Panel Member / Chair | Private annotations | S5.3 | Annotation (private) | Author only — not other panelists, not students, not Adviser (inferred) | — |
 | S5.6 | Panel Chair | Record verdict via FM-AAC-SOC-2004 (inferred for proposal) | Defense held | Verdict + revision deadline | Students: verdict, required revisions, countdown | Students (inferred) |
-| S5.7 | Student → Adviser → Panel | Revise, Adviser verifies, Panel verifies and signs FM-2004 (inferred) | S5.6 | Revisions completed | Each party's queue in turn | Each next actor (inferred) |
+| S5.7 | Student → Adviser → Panel | Revise, Adviser verifies, Panel confirms; the Panel Chair uploads the signed FM-2004 (revision 2026-10-30) | S5.6 | Revisions completed | Each party's queue in turn | Each next actor (inferred) |
 | S5.8 | Instructor 1 | Approve routing to Capstone 2 | S5.7 | Stage → Implementation; Instructor 2 attached **[who assigns I2 → OQ#5]** | I2: project appears. I1: read-only or gone? **[NEW-6]** | I2 (inferred) |
 
 - S5.2: Table 1 gives defense scheduling to **Instructor 2 + PC** "for proposal and final defenses", but Instructor 2 belongs to Capstone 2; DFD 6.0 says the PC enters the "title defense" schedule. **[CONFLICTING → NEW-2, OQ#7]** — *Mockup default:* PC schedules the proposal defense.
@@ -196,13 +205,13 @@ Open points:
 
 | ID | Actor | Action | Precondition | Result | Reflects on | Email |
 |---|---|---|---|---|---|---|
-| S6.1 | Student | Submit weekly accomplishment (FM-AAC-SOC-2003) | Stage Implementation | `WEEKLY_ACCOMPLISHMENT` Submitted | Adviser: "Logs to sign" badge | Adviser |
-| S6.2 | Adviser | Approve + e-sign, or return | S6.1 | Approved (+ signature) / Returned | Student: log status; I2: progress view (inferred) | Student (inferred) |
+| S6.1 | Student | Upload the filled weekly log (FM-AAC-SOC-2003) | Stage Implementation | `WEEKLY_ACCOMPLISHMENT` Submitted | Adviser: "Logs to review" badge | Adviser |
+| S6.2 | Adviser | Mark as reviewed, or return with remarks (revision 2026-10-30) | S6.1 | Reviewed / Returned | Student: log status; I2: progress view (inferred) | Student (inferred) |
 | S6.3 | Student | Upload manuscript drafts | — | `DOCUMENT` vN | Adviser queue | Adviser |
 | S6.4 | Adviser | Annotate; return | S6.3 | Version loop | Student | Student |
 | S6.5 | Instructor 2 | Confirm milestones (revised manuscript, system components) | — | Milestone flags | Student, Adviser | — |
 | S6.6 | Student | Submit deployment information | — | Not modeled in the data dictionary **[OQ#12]** | Adviser, I2 | — |
-| S6.7 | Adviser (+ I2 readiness check) | Submit digital Capstone Recommendation Form FM-AAC-SOC-2005 | Adviser and I2 verify readiness | Form signed | PC: "Recommendations to endorse" | PC |
+| S6.7 | Adviser (+ I2 readiness check) | Upload FM-AAC-SOC-2005: Recommended, or Not Recommended with reasons (revision 2026-10-30) | Adviser and I2 verify readiness | Form uploaded; Not Recommended stays here | PC: "Recommendations to endorse" | PC |
 | S6.8 | Any member | Export FM-AAC-SOC-2003 logs | Logs exist | File export | — | — |
 
 - Instructor 2 **cannot annotate** (no annotation tools in the UI; the guard rejects it).
@@ -235,7 +244,7 @@ Open points:
 | S8.1 | Student | Upload revised manuscript | Countdown running | `DOCUMENT` vN+1 | Adviser queue | Adviser (post-defense revisions) |
 | S8.2 | System | Flag overdue | Deadline passed, not completed | `revision_status` Overdue | Student + Adviser (+ I2/PC — inferred) see red flag | Overdue Revision |
 | S8.3 | Adviser | Verify revisions against panel requirements; forward to panel | S8.1 | Adviser verified | Panel: "Revisions to verify" | Panel (inferred) |
-| S8.4 | Panel Members + Chair | Verify and sign FM-AAC-SOC-2004 | S8.3 | All signed → `revision_status` Completed; stage → Clearance | Students: "Proceed to clearance" | Students (inferred) |
+| S8.4 | Panel Members + Chair | Members confirm the revisions; the Chair uploads the final signed FM-AAC-SOC-2004 | S8.3 | All signed → `revision_status` Completed; stage → Clearance | Students: "Proceed to clearance" | Students (inferred) |
 | S8.5 | Instructor 2 | Confirm post-defense course requirements | — | Confirmed | Students, Adviser | — |
 
 ---
@@ -246,11 +255,11 @@ Open points:
 |---|---|---|---|---|---|---|
 | S9.1 | Student | Upload Editor's Certificate | Adviser + Panel approved the manuscript | `DOCUMENT` Editor's Certificate | URO later (S9.4) | — |
 | S9.2 | Student | Upload Plagiarism Clearance Certificate | Same | `DOCUMENT` Plagiarism Certificate | URO later | — |
-| S9.3a | Adviser | Sign Approval Sheet | S9.1–S9.2 (inferred) | Signature 1 | Panel: "Approval Sheet to sign" | Panel (inferred) |
-| S9.3b | Panel Members + Chair | Sign Approval Sheet | S9.3a | Panel signatures | PC queue | PC ("after the whole panel signs") |
-| S9.3c | Program Chair/Coordinator | Endorse (not the final signatory) | S9.3b | Endorsed | URO queue | URO **[not stated]** |
+| S9.3a | Adviser | Sign the Approval Sheet outside the system and upload it | S9.1–S9.2 (inferred) | Signature 1 | Panel: "Approval Sheet to sign" | Panel (inferred) |
+| S9.3b | Panel Members + Chair | Each signs the latest copy and uploads it | S9.3a | Panel signatures | PC queue | PC ("after the whole panel signs") |
+| S9.3c | Program Chair/Coordinator | Sign and upload the Approval Sheet, route to the URO (not the final signatory) | S9.3b | Endorsed | URO queue | URO **[not stated]** |
 | S9.4 | URO | Verify certificates + manuscript; sign/clear ("First and Second Level" routing) | S9.3c | URO cleared | Dean + AD: project appears **for the first time in their final-approval queue** | Dean + AD ("fully cleared project endorsed") |
-| S9.5 | Dean and Associate Dean | Sign Approval Sheet; final approval | S9.4 | Stage → Archived; status Completed | Students: "Completed". Records table updated | Students (inferred) |
+| S9.5 | Dean and Associate Dean | Each uploads the signed Approval Sheet; final approval | S9.4 | Stage → Archived; status Completed | Students: "Completed". Records table updated | Students (inferred) |
 
 - URO "First and Second Level" review isn't defined anywhere. **[NEEDS CONFIRMATION → NEW-10]** — *Mockup default:* one URO verify step.
 - URO rejection path (e.g., invalid certificate → back to student)? **[NEW-7]** — *Mockup default:* "Return to group" with remarks.
@@ -293,7 +302,7 @@ Step IDs refer to §3.
 - **Emails:** PC endorsement (inferred).
 
 ### Adviser (Project-Based)
-- **Dashboard ("Advising"):** assigned groups, drafts to review, logs to sign, revisions to verify, forms to sign.
+- **Dashboard ("Advising"):** assigned groups, drafts to review, weekly logs to review, revisions to verify, forms to sign and upload.
 - **Actions:** S3.2, S3.6, S4.2, S6.2, S6.4, S6.7, S8.3, S9.3a.
 - **Can annotate; cannot edit student files.** Cannot see panelists' private notes.
 - **Emails:** weekly logs, manuscript drafts, post-defense revisions submitted.
@@ -376,7 +385,7 @@ For each one, check **both** the UI (button hidden/disabled, no data leaked) **a
 
 | # | Log in as | Do / look at | Expected |
 |---|---|---|---|
-| T1 | Prof. Alpha | G1 manuscript | Can annotate, sign logs (Adviser hat) |
+| T1 | Prof. Alpha | G1 manuscript | Can annotate, review uploaded logs (Adviser hat) |
 | T2 | Prof. Alpha | G2 | Can record verdict (Panel Chair); **no** adviser actions |
 | T3 | Prof. Alpha | G3 | Not visible as faculty; appears only in PC queues when a PC step is active |
 | T4 | Prof. Charlie | G1 notes before the defense | Private — Prof. Alpha (G1 Adviser) and G1 students can't see them |
@@ -430,12 +439,12 @@ These are dropped (Capstone 1 ideas that were reversed), out of scope in the fin
 | Don't build | Current rule | Source |
 |---|---|---|
 | OTP verification at registration | Domain-restricted registration + email verification button | Decision 12 |
-| Public "Colloquium Gallery" / public archive with abstracts | Records-table archive for Dean/AD only — **but the Dean asked for a public archive; still open** | OQ#6 |
+| Public "Colloquium Gallery" / public archive with abstracts | Records-table archive for Dean/AD (full record); since 2026-10-30 every signed-in account browses its metadata only — title, members, program, adviser, year (Figma S-17, `archive.browse`). Still not public, no abstracts | OQ#6 |
 | Grading, scores, rubric scoring | No grade computation | Decision 23 |
-| Students creating their own groups | Instructor 1 creates groups | Decision 17 |
+| ~~Students creating their own groups~~ — **allowed since 2026-10-30** | Students draft their group (invite → accept), a full group submits it, Instructor 1 approves or returns it; Instructor 1 can still create a group directly (flag `STUDENT_GROUP_DRAFTS`) | Decision 17, revised 2026-10-30 |
 | Instructor 1 / Instructor 2 as Global Roles | Project-Based Roles | Decision 15 |
 | Routing order "… → Dean → URO" | URO verifies **before** the Dean's final signature | Decision 18 |
-| "Signatures stay manual" | Digital signatures on forms | Decision 19 |
+| "Signatures stay manual" | ~~Digital signatures on forms~~ — superseded 2026-10-30: forms are signed outside the system and uploaded; the system records who uploaded which copy, in order | Decision 19, revision 2026-10-30 |
 
 ### Out of scope (finalized manuscript)
 No chat or messaging module · no in-app manuscript editing · no team task board or Kanban · no tracking of who edited what · no plagiarism-checker integration (students upload certificates) · no video uploads (external links only) · no IRB workflow · no URO co-authorship forms (FM-AAC-URO-2001, 2014–2017 — only the FM-AAC-SOC-2003 export) · no in-app consultation scheduling or logs beyond the weekly log · no faculty publication/KPI features · no native mobile app.
