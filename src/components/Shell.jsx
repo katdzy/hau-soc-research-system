@@ -1,4 +1,4 @@
-import { Suspense, lazy, useEffect, useRef, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { Link, NavLink, Outlet, matchPath, useLocation, useNavigate } from 'react-router-dom'
 import { useApp } from '../state/AppContext.jsx'
 import { actionableCount } from '../services/worklist.js'
@@ -17,7 +17,6 @@ import { writePath } from '../services/api.js'
 const link = ({ isActive }) => (isActive ? 'active' : undefined)
 
 // R9: removed from production builds.
-const DevRail = import.meta.env.DEV ? lazy(() => import('../dev/DevRail.jsx')) : null
 
 /** The office a faculty account works from; "Faculty" is only the base identity (NEW-1). */
 const officeOf = (user) => {
@@ -84,7 +83,6 @@ export default function Shell() {
   const here = location.pathname + location.search
   const railFoot = (
     <div className="rail-foot">
-      {DevRail && <Suspense fallback={null}><DevRail /></Suspense>}
       <dl className="standing">
         <div><dt>Global Role: </dt><dd>{me.globalRoles?.length ? me.globalRoles.join(', ') : 'none'}</dd></div>
         <div>

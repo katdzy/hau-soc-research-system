@@ -1,18 +1,14 @@
-import { Suspense, lazy, useState } from 'react'
+import { useState } from 'react'
 import { useApp } from '../state/AppContext.jsx'
-import { isLiveBackend } from '../backend/index.js'
+import { db, isLiveBackend } from '../backend/index.js'
 import {
-  EMAIL_DOMAINS, PROGRAM_INFO, ACCOUNT_STATUS, COURSES, accountType, normalizeEmail, sectionProblem, courseSchedule,
+  EMAIL_DOMAINS, PROGRAM_INFO, ACCOUNT_STATUS, COURSES, accountType, normalizeEmail, sectionProblem, courseSchedule, parseSection,
 } from '../domain/constants.js'
 import { Field } from '../components/ui.jsx'
 import { registerAccount, confirmProviderVerification, requestPasswordReset } from '../services/api.js'
 import crest from '../assets/soc-crest.webp'
 import { InstallApp } from '../components/Pwa.jsx'
 import { registerWithFirebase, loginWithFirebase, resetPasswordWithFirebase } from '../services/authService.js'
-
-// R9: the demo panel (persona switcher) exists only in dev builds; this branch
-// is removed from the production bundle.
-const DemoPanel = import.meta.env.DEV ? lazy(() => import('../dev/DemoPanel.jsx')) : null
 
 const DOMAINS = Object.values(EMAIL_DOMAINS).join(' and ')
 
@@ -32,7 +28,13 @@ const PROGRAM_SECTIONS = {
   CYB: ['CYB-401', 'CYB-402'],
 }
 
-export default function SignIn({ seeding = false }) {
+/** The program's sections on record (e.g. made in the test panel), then the usual ones. */
+const blocksOf = (snap, code) => [...new Set([
+  ...(snap.sections ?? []).filter(s => parseSection(s.block)?.code === code).map(s => s.block),
+  ...(PROGRAM_SECTIONS[code] ?? []),
+])].sort((a, b) => a.localeCompare(b, undefined, { numeric: true }))
+
+export default function SignIn({ empty = false }) {
   const { snap, signIn, backendName } = useApp()
   const [tab, setTab] = useState('register') // 'login' | 'register'
 
@@ -53,7 +55,7 @@ export default function SignIn({ seeding = false }) {
   const handleProgramChange = (e) => {
     const selectedProgName = e.target.value
     const progOpt = PROGRAM_OPTIONS.find(p => p.name === selectedProgName) || PROGRAM_OPTIONS[0]
-    const defaultBlock = PROGRAM_SECTIONS[progOpt.code]?.[0] || ''
+    const defaultBlock = blocksOf(snap, progOpt.code)[0] || ''
     setReg(r => ({ ...r, program: selectedProgName, block: defaultBlock }))
   }
 
@@ -103,12 +105,14 @@ export default function SignIn({ seeding = false }) {
     if (!loginPassword) { setError('Enter your password.'); return }
     setLoading(true)
     try {
-      const { emailVerified, resendVerification } = await loginWithFirebase(email, loginPassword)
+      const { user, emailVerified, resendVerification } = await loginWithFirebase(email, loginPassword)
       if (!emailVerified) {
         setUnverified({ email, resend: resendVerification })
         setError(`Verify ${email} first — check your inbox for the verification email.`)
         return
       }
+      // The records this account may read arrive after sign-in (firebaseAdapter).
+      await db.authSettled?.(user.uid)
       admit(await confirmProviderVerification(email))
     } catch (err) {
       setError(err.message || 'Sign-in failed. Check your credentials.')
@@ -199,7 +203,7 @@ export default function SignIn({ seeding = false }) {
   }
 
   const currentProgCode = PROGRAM_OPTIONS.find(p => p.name === reg.program)?.code || 'WD'
-  const availableBlocks = PROGRAM_SECTIONS[currentProgCode] || ['WD-401']
+  const availableBlocks = blocksOf(snap, currentProgCode)
 
   return (
     <div className="signin">
@@ -388,13 +392,10 @@ export default function SignIn({ seeding = false }) {
           <p className="signin-help">Trouble signing in? Contact the School of Computing office.</p>
 
           {/* A live project is never seeded from the browser (AppContext). */}
-          {seeding && (isLiveBackend
+          {empty && (isLiveBackend
             ? <p className="note mt-2">This Firebase project has no accounts yet. Seed it, or run with VITE_BACKEND=local.</p>
-            : <p className="note mt-2">Setting up demo data… this only happens once. Refresh in a moment.</p>)}
+            : import.meta.env.DEV && <p className="note mt-2">No accounts yet. Register one here, or open the test panel (bottom right) and spawn some.</p>)}
         </div>
-        {!seeding && DemoPanel && (
-          <Suspense fallback={null}><DemoPanel /></Suspense>
-        )}
       </div>
 
       {showForgotModal && (

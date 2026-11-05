@@ -99,12 +99,6 @@ td.strong { font-weight: 600; }
   font: 600 11px/18px var(--sans); text-align: center; background: var(--stop); color: #fff;
 }
 
-.admin-foot {
-  display: flex; align-items: center; justify-content: space-between; gap: var(--s2); flex-wrap: wrap;
-  margin-top: var(--s8); padding-top: var(--s2); border-top: 1px solid var(--rule);
-}
-.admin-foot p { margin: 0; }
-
 .panel-head { display: flex; justify-content: space-between; align-items: baseline; gap: var(--s2); flex-wrap: wrap; margin-bottom: var(--s2); }
 .panel-head h2 { font-size: 15px; }
 .panel.flush { padding: 0; }

@@ -6,6 +6,7 @@
   "description": "Workflow prototype — Development of a Web-Based Thesis and Capstone Project Management and Workflow Automation System for HAU-SOC",
   "scripts": {
     "dev": "vite",
+    "dev:local": "vite --mode offline",
     "build": "vite build",
     "build:functions": "node scripts/functions/build.mjs",
     "preview": "vite preview",

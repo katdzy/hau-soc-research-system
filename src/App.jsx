@@ -17,19 +17,26 @@ import {
   Routing, AdviserApprovals, Approvals, School, Completions, Clearance, Cleared,
 } from './pages/WorkViews.jsx'
 
-// R9: dev tools exist only in dev builds; this import is dropped from production.
-const DevTools = import.meta.env.DEV ? lazy(() => import('./dev/DevTools.jsx')) : null
+// R9: the test panel exists only in dev builds; this import is dropped from production.
+const TestPanel = import.meta.env.DEV ? lazy(() => import('./dev/TestPanel.jsx')) : null
 
 export default function App() {
+  return (
+    <>
+      <Screens />
+      {TestPanel && <Suspense fallback={null}><TestPanel /></Suspense>}
+    </>
+  )
+}
+
+function Screens() {
   const { me, ready, snap } = useApp()
 
   if (!ready) {
     return <div className="page"><p className="muted">Loading workspace…</p></div>
   }
 
-  const isSeeding = (snap.users ?? []).length === 0
-
-  if (!me) return <SignIn seeding={isSeeding} />
+  if (!me) return <SignIn empty={(snap.users ?? []).length === 0} />
 
   return (
     <Routes>
@@ -63,9 +70,6 @@ export default function App() {
         <Route path="completions" element={<Completions />} />
         <Route path="clearance" element={<Clearance />} />
         <Route path="cleared" element={<Cleared />} />
-        {DevTools && (
-          <Route path="dev" element={<Suspense fallback={<div className="page"><p className="muted">Loading…</p></div>}><DevTools /></Suspense>} />
-        )}
         <Route path="*" element={<Navigate to="/" replace />} />
       </Route>
     </Routes>

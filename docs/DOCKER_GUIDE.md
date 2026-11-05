@@ -48,7 +48,6 @@ docker compose up --build
 - The first run is slow. It builds the images, downloads the emulator binaries and installs the functions' dependencies.
 - Start order: `functions-build` builds the server code, then the emulators start, then the app. Each waits for the one before it to report healthy.
 - Wait for `All emulators ready!` and `Local: http://localhost:5180/` in the log, then open the app.
-- Wait for `Local: http://localhost:5180/` in the log, then open it.
 
 To run in the background:
 
@@ -121,11 +120,14 @@ docker compose exec app sh           # shell inside the app container
 ```
 
 - Edit files normally. Saving a file hot-reloads the browser, because the source folder is mounted into the container.
-- After you change `package.json` or a Dockerfile, rebuild with a fresh `node_modules` volume:
+- After `package.json` or a lock file changes (yours or from a pull), restart the stack. `functions-build` reinstalls the dependencies before the emulators and the app start:
 
 ```bash
-docker compose up --build -V
+docker compose down
+docker compose up -d
 ```
+
+- After a Dockerfile changes, rebuild the images with `docker compose up -d --build`.
 
 ## 9. Saved data
 
@@ -171,7 +173,7 @@ Don't kill the containers with `docker kill` or by closing the terminal abruptly
 | App never starts, emulators `unhealthy` | The emulators can take up to a couple of minutes on first start. Check `docker compose logs emulators`. Make sure Docker has at least 4 GB of memory. |
 | Page is blank or shows stale data | Hard-refresh. Unregister the service worker in DevTools → Application, because the PWA caches aggressively. |
 | Hot reload does nothing | Polling is already on. Restart with `docker compose restart app`. |
-| `Cannot find module` after pulling | `docker compose up --build -V` |
+| `Cannot find module` after pulling | Restart the stack with `docker compose down` and then `docker compose up -d`, so the dependencies reinstall. If it persists, start over with fresh dependencies: `docker compose down -v`, then `docker compose up -d --build`. |
 | Nothing loads, or reads fail with permission denied | You started with `FIREBASE_CONFIG=firebase.json`. Those real rules only let a real signed-in account read, so the dev panel's personas can't. Restart without it. |
 | Weird data from an earlier session | Reset the data as in section 9. |
 | Full cleanup (containers, volumes, images) | `docker compose down -v --rmi local` |

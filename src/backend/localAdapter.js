@@ -13,7 +13,8 @@ import { nowIso } from './clock.js'
 // v6: NPC students and faculty — three groups of four per program.
 // v7: No `notifications` collection — notifications are email only (`outbox`).
 // v8: projects record `adviserOffices` (NEW-5: the named office sits the approval out).
-const KEY = 'hausoc.db.v13'
+// v14: no seed — the store starts empty; the dev test panel spawns accounts.
+const KEY = 'hausoc.db.v14'
 const subscribers = new Set()
 
 const uid = (prefix) =>

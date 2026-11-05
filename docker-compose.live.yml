@@ -1,0 +1,41 @@
+# The app alone, against the LIVE Firebase project named in .env — no emulators.
+#
+#   docker compose down                                  stop the emulator stack first (same ports, same app container)
+#   docker compose -f docker-compose.live.yml up -d      start the app on http://localhost:5180
+#   docker compose -f docker-compose.live.yml down       stop it
+#
+# Everything you do here is real: registrations land in the live Firebase Auth,
+# workflow actions write live Firestore, and the project's quota is spent. The
+# test panel's People and Spawn make and sign in as real dummy logins (with the
+# key in .secrets/); Stage, checkpoints and wipe refuse a live project.
+#
+# The project's keys come from .env (bind-mounted, read by Vite); only the
+# settings below override it. `act` is not deployed, so writes go straight to
+# Firestore (APP_WRITE_PATH=functions once it is).
+
+services:
+  app:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    ports:
+      - "5180:5180"
+    volumes:
+      - .:/app
+      - node_modules:/app/node_modules
+      # Only so deps.sh can keep functions/ in step without installing into the
+      # host's folder; nothing here runs the functions.
+      - functions_node_modules:/app/functions/node_modules
+    # No functions-build container here, so the app brings the dependency
+    # volumes up to date itself before starting Vite.
+    command: ["sh", "-c", "tr -d '\\r' < scripts/docker/deps.sh | sh && npm run dev -- --host 0.0.0.0"]
+    environment:
+      NODE_ENV: development
+      CHOKIDAR_USEPOLLING: "true"
+      VITE_BACKEND: firebase
+      VITE_USE_EMULATORS: "false"
+      VITE_WRITE_PATH: ${APP_WRITE_PATH:-direct}
+
+volumes:
+  node_modules:
+  functions_node_modules:

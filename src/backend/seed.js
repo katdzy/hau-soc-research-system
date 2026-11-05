@@ -1,5 +1,7 @@
-// Demo dataset — the CAAC test personas from WORKFLOWS.md §6. Every name is a
-// placeholder. Groups sit at different stages so the §5 queues have data:
+// Test fixture — the CAAC test personas from WORKFLOWS.md §6. The app never
+// loads it (the store starts empty; the dev test panel spawns accounts); the
+// automated tests, the §7 scenario setups (dev/scenarios.js), the dummy-docs
+// generator and the live-seed script do. Every name is a placeholder. Groups sit at different stages so the §5 queues have data:
 //
 //   G1  Conceptualization     WD-401  I1 Bravo · Adviser Alpha            (early stage, 3 students)
 //   G2  Proposal Defense      WD-401  I1 Bravo · Adviser Charlie · Panel Chair Alpha · Panel Member Echo
@@ -17,8 +19,7 @@
 // Panel Assignment (S5.1), so the seed leaves G1 without one; the dev tools'
 // "Load scenario T4 / T5 / T16" put G1 at a panel stage with Charlie on it.
 //
-// Reset from Dev tools → Reset seed. If you change this file or the store
-// shape, bump the key in localAdapter.js.
+// If you change the store shape, bump the key in localAdapter.js.
 
 import {
   GLOBAL_ROLES as G, PROJECT_ROLES as P, DOC_TYPES, DOC_STATUS, COURSES, programByCode, parseSection, yearLevelOf,

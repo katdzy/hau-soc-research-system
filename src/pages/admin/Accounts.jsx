@@ -1,6 +1,5 @@
 import { useState } from 'react'
 import { useApp } from '../../state/AppContext.jsx'
-import { useAction, ActionError } from '../../components/useAction.jsx'
 import { Restricted } from '../../components/ui.jsx'
 import { PROGRAMS } from '../../domain/constants.js'
 import { resolveInstitution, can } from '../../domain/caac.js'
@@ -21,8 +20,7 @@ const COURSES = [
 
 /** Every registered account, by course. Read-only — tags are changed on the CAAC page. */
 export default function Accounts() {
-  const { snap, me, resetDemoData } = useApp()
-  const { run, error, busy } = useAction()
+  const { snap, me } = useApp()
   const [query, setQuery] = useState('')
   const [course, setCourse] = useState(COURSES[0].key)
 
@@ -109,11 +107,6 @@ export default function Accounts() {
         </tbody>
       </table></div>
 
-      <footer className="admin-foot">
-        <p className="faint small">Prototype data — restores the demo projects to their starting stages and discards anything created since.</p>
-        <button type="button" className="small danger" disabled={busy} onClick={() => run(resetDemoData)}>Reset demo data</button>
-      </footer>
-      <ActionError error={error} />
     </div>
   )
 }

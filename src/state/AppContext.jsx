@@ -1,6 +1,5 @@
-import { createContext, useContext, useEffect, useMemo, useRef, useState } from 'react'
+import { createContext, useContext, useEffect, useMemo, useState } from 'react'
 import { db, files, backendName, isLiveBackend } from '../backend/index.js'
-import { buildSeed } from '../backend/seed.js'
 import { emptyStore, COLLECTIONS } from '../backend/schema.js'
 import { getSessionUserId, setSessionUserId } from './session.js'
 import { flagOverdueRevisions } from '../services/api.js'
@@ -23,24 +22,15 @@ export function AppProvider({ children }) {
   const [snap, setSnap] = useState(blankSnapshot)
   const [ready, setReady] = useState(false)
   const [userId, setUserId] = useState(getSessionUserId)
-  const seeding = useRef(false)
 
   useEffect(() => db.subscribe((next) => { setSnap(next); setReady(true) }), [])
 
   // Firebase build: refresh the ID token whenever the rules' claims change.
   useEffect(() => { followClaims() }, [])
 
+  // The store starts empty: accounts come from registration or the dev test
+  // panel's spawner. The §6 seed (backend/seed.js) is the automated tests' fixture.
   const usersList = useMemo(() => ensureArray(snap?.users), [snap?.users])
-
-  // First run on a blank store: load the demo dataset. Never on a live
-  // project — replaceAll wipes every collection first.
-  useEffect(() => {
-    if (!ready || seeding.current || isLiveBackend) return
-    if (usersList.length === 0) {
-      seeding.current = true
-      db.replaceAll(buildSeed()).finally(() => { seeding.current = false })
-    }
-  }, [ready, usersList])
 
   // S8.2 — the overdue check. A scheduled Cloud Function in the Firebase build.
   useEffect(() => {
@@ -70,7 +60,6 @@ export function AppProvider({ children }) {
     // Dev tools only (R9) — the production UI never calls these. They replace
     // the whole store, so they refuse to run against a real Firebase project.
     replaceStore: async (store) => { refuseLive(); await db.replaceAll(store) },
-    resetDemoData: async () => { refuseLive(); await db.replaceAll(buildSeed()) },
     wipe: async () => { refuseLive(); await db.replaceAll(emptyStore()) },
   }), [snap, ready, me])
 

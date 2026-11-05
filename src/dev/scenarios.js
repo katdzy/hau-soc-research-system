@@ -1,7 +1,8 @@
-// Dev-only (R9). One-click setups for the WORKFLOWS.md §7 scenarios. Each
-// starts from a fresh seed and moves the groups the scenario needs to the
-// right stage with the stage builder. The guard unit tests use the same
-// setups, so the UI walkthrough and the tests exercise identical data.
+// The WORKFLOWS.md §7 scenario setups, for the automated tests (guard.test.js
+// and the per-role tests). Each starts from the §6 fixture (backend/seed.js)
+// and moves the groups the scenario needs to the right stage with the stage
+// builder. The app no longer loads them: its store starts empty and the test
+// panel spawns accounts instead.
 //
 // §6 and §7 do not line up on stages (T1 needs G1 in Implementation, T4/T5/T16
 // need a panel on G1, T7 needs G3 before PC endorsement), which is why these
@@ -14,8 +15,7 @@ const g1 = (stage, extra = {}) => (s) => applyStage(s, 'p_g1', stage, { roles: S
 const g3 = (stage, extra = {}) => (s) => applyStage(s, 'p_g3', stage, { roles: SEED_ROLES.p_g3, ...extra })
 const seedOnly = (s) => s
 
-// `on`: the project the scenario is about (null: accounts, audit, no project),
-// so the sign-in demo panel can file each one under its group.
+// `on`: the project the scenario is about (null: accounts, audit, no project).
 export const SCENARIOS = [
   { id: 'T1', on: 'p_g1', loginAs: 'f_alpha', setup: g1('IMPLEMENTATION', { pendingLog: true }),
     look: 'G1 → Weekly logs', expect: 'Prof. Alpha (Adviser of G1) can mark the pending log upload as reviewed, and annotate the current Revised Manuscript in G1 → Documents.' },

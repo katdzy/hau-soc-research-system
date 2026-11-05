@@ -2,10 +2,14 @@ import { defineConfig } from 'vite'
 import { configDefaults } from 'vitest/config'
 import react from '@vitejs/plugin-react'
 import { VitePWA } from 'vite-plugin-pwa'
+import { liveSpawnPlugin } from './scripts/live-spawn/devServer.mjs'
 
 export default defineConfig({
   plugins: [
     react(),
+    // Dev server on a live Firebase project only: the test panel's Spawn tab
+    // (scripts/live-spawn/devServer.mjs).
+    liveSpawnPlugin(),
     // Installable on Android (Chrome's install prompt) and iOS (Share → Add to
     // Home Screen). The service worker precaches the app shell only; Firestore,
     // Auth and Storage requests always go to the network. Off in dev so a

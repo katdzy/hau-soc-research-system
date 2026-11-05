@@ -8,11 +8,19 @@ import { COLLECTIONS } from '../backend/schema.js'
 
 const fake = vi.hoisted(() => ({
   listeners: new Map(), // collection → onNext
+  attached: 0,          // onSnapshot calls, across re-attaches
+  auth: { currentUser: null, authStateReady: async () => {} },
+  onAuth: null,         // the adapter's onAuthStateChanged callback
   commits: [],          // one entry per batch.commit(): the writes it carried
   failNextCommit: false,
 }))
 
 vi.mock('firebase/app', () => ({ initializeApp: () => ({}) }))
+vi.mock('firebase/auth', () => ({
+  getAuth: () => fake.auth,
+  connectAuthEmulator: () => {},
+  onAuthStateChanged: (_auth, fn) => { fake.onAuth = fn; return () => {} },
+}))
 vi.mock('firebase/firestore', () => {
   let n = 0
   return {
@@ -22,7 +30,7 @@ vi.mock('firebase/firestore', () => {
     connectFirestoreEmulator: () => {},
     collection: (_db, name) => ({ name }),
     doc: (_db, name, id) => ({ name, id: id ?? `auto${++n}` }),
-    onSnapshot: (ref, options, onNext) => { fake.listeners.set(ref.name, onNext ?? options); return () => {} },
+    onSnapshot: (ref, options, onNext) => { fake.attached++; fake.listeners.set(ref.name, onNext ?? options); return () => {} },
     writeBatch: () => {
       const writes = []
       return {
@@ -54,6 +62,8 @@ beforeEach(async () => {
   vi.resetModules()
   fake.listeners.clear()
   fake.commits.length = 0
+  fake.attached = 0
+  fake.auth.currentUser = null
   db = (await import('../backend/firebaseAdapter.js')).firebaseAdapter
 })
 
@@ -119,5 +129,29 @@ describe('firebase adapter', () => {
     await started()
     COLLECTIONS.forEach(c => deliver(c, []))
     await expect(db.update('projects', 'nope', { x: 1 })).rejects.toThrow('projects/nope not found')
+  })
+
+  it('attaches its listeners again when the signed-in account changes, and says when that account has loaded', async () => {
+    db.subscribe(() => {})
+    await started()
+    COLLECTIONS.forEach(c => deliver(c, []))
+    await tick()
+    expect(fake.attached).toBe(COLLECTIONS.length)
+
+    // Signing in: the signed-out listeners were refused, so they are attached again.
+    let settled = false
+    fake.onAuth({ uid: 'auth1' })
+    const waiting = db.authSettled('auth1').then(() => { settled = true })
+    expect(fake.attached).toBe(2 * COLLECTIONS.length)
+    await tick()
+    expect(settled).toBe(false)
+
+    COLLECTIONS.forEach(c => deliver(c, c === 'users' ? [{ id: 'u1', email: 'a@hau.edu.ph' }] : []))
+    await waiting
+    expect(db.snapshot().users).toEqual([{ id: 'u1', email: 'a@hau.edu.ph' }])
+
+    // The same account again (a token refresh) changes nothing.
+    fake.onAuth({ uid: 'auth1' })
+    expect(fake.attached).toBe(2 * COLLECTIONS.length)
   })
 })

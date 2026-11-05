@@ -29,6 +29,13 @@ const loaded = new Set()
 const isReady = () => loaded.size === COLLECTIONS.length
 let fb = null
 let starting = null
+// The rules decide what each account may read, and Firestore never retries a
+// listener they refused (signed out, every collection is). So the listeners
+// are attached again whenever the signed-in account changes; `authUid` is the
+// account they were last attached for, `settling` who waits for that load.
+let listeners = []
+let authUid
+const settling = new Set()
 
 // Writes made inside `transaction` are staged here and committed as one
 // batch at the end (R7). `overlay` shows them to reads in the meantime:
@@ -59,7 +66,35 @@ function publish() {
   setTimeout(() => {
     scheduled = false
     subscribers.forEach(fn => fn(mirror))
+    for (const w of settling) if (w.uid === authUid && isReady()) { settling.delete(w); w.resolve() }
   }, 0)
+}
+
+/** (Re)attach one listener per collection, for whoever is signed in now. */
+function listen() {
+  listeners.forEach(stop => stop())
+  loaded.clear()
+  // Mirror every collection locally so the UI keeps one synchronous snapshot.
+  listeners = COLLECTIONS.map(name =>
+    // Metadata changes too: a collection empty in the cache gets its first
+    // snapshot from the cache, and when the server confirms it is still empty
+    // nothing but the metadata changes — without this, that event never
+    // comes and a reload waits on the loading screen for good.
+    fb.onSnapshot(fb.collection(fb.db, name), { includeMetadataChanges: true }, (snap) => {
+      server[name] = new Map(snap.docs.map(d => [d.id, { id: d.id, ...d.data() }]))
+      rebuild(name)
+      if (!snap.metadata.fromCache || !snap.empty) loaded.add(name)
+      publish()
+    }, (err) => {
+      // A collection the rules keep from this account reads as empty rather
+      // than holding the whole app on its loading screen — and shows nothing
+      // the previous account could read.
+      console.warn(`Firestore: cannot read "${name}":`, err?.code ?? err)
+      server[name] = new Map()
+      rebuild(name)
+      loaded.add(name)
+      publish()
+    }))
 }
 
 async function start() {
@@ -88,25 +123,17 @@ async function start() {
   }
   fb = { app, db, ...firestore }
 
-  // Mirror every collection locally so the UI keeps one synchronous snapshot.
-  for (const name of COLLECTIONS) {
-    // Metadata changes too: a collection empty in the cache gets its first
-    // snapshot from the cache, and when the server confirms it is still empty
-    // nothing but the metadata changes — without this, that event never
-    // comes and a reload waits on the loading screen for good.
-    fb.onSnapshot(fb.collection(db, name), { includeMetadataChanges: true }, (snap) => {
-      server[name] = new Map(snap.docs.map(d => [d.id, { id: d.id, ...d.data() }]))
-      rebuild(name)
-      if (!snap.metadata.fromCache || !snap.empty) loaded.add(name)
-      publish()
-    }, (err) => {
-      // A collection the rules keep from this account reads as empty rather
-      // than holding the whole app on its loading screen.
-      console.warn(`Firestore: cannot read "${name}":`, err?.code ?? err)
-      loaded.add(name)
-      publish()
-    })
-  }
+  // Wait for Auth to restore a saved session, so a reload reads as that account.
+  const { auth, onAuthStateChanged } = await (await import('../services/authService.js')).getAuthInstance()
+  await auth.authStateReady()
+  authUid = auth.currentUser?.uid ?? null
+  listen()
+  onAuthStateChanged(auth, (user) => {
+    const uid = user?.uid ?? null
+    if (uid === authUid) return
+    authUid = uid
+    listen()
+  })
   return fb
 }
 
@@ -150,6 +177,20 @@ export const firebaseAdapter = {
   name: 'firebase',
   isSeeded: () => (mirror.users ?? []).length > 0,
   snapshot: () => mirror,
+
+  /**
+   * Resolves once the store has loaded for the Auth account `uid` (after a
+   * sign-in, before reading its record), or after 15 s regardless.
+   */
+  async authSettled(uid = null) {
+    await init()
+    if (authUid === uid && isReady()) return
+    await new Promise((resolve) => {
+      const w = { uid, resolve }
+      settling.add(w)
+      setTimeout(() => { settling.delete(w); resolve() }, 15_000)
+    })
+  },
 
   subscribe(fn) {
     subscribers.add(fn)
