@@ -14,6 +14,7 @@ import { fmtDateTime } from '../components/ui.jsx'
 import { readCheckpoint, writeCheckpoint, toStore } from './checkpoint.js'
 import { rolesForStage, diffStores } from './spawn.js'
 import Spawner from './Spawner.jsx'
+import { Icon, Avatar } from './icons.jsx'
 import './dev.css'
 
 /**
@@ -31,12 +32,12 @@ import './dev.css'
  */
 
 const TABS = [
-  { key: 'people', label: 'People', onLive: true },
-  { key: 'spawn', label: 'Spawn', onLive: true },
-  { key: 'stage', label: 'Stage' },
-  { key: 'outbox', label: 'Outbox', onLive: true },
-  { key: 'trail', label: 'Trail', onLive: true },
-  { key: 'rules', label: 'Rules', onLive: true },
+  { key: 'people', label: 'People', icon: 'people', onLive: true },
+  { key: 'spawn', label: 'Spawn', icon: 'spawn', onLive: true },
+  { key: 'stage', label: 'Stage', icon: 'stage' },
+  { key: 'outbox', label: 'Outbox', icon: 'mail', onLive: true },
+  { key: 'trail', label: 'Trail', icon: 'trail', onLive: true },
+  { key: 'rules', label: 'Rules', icon: 'rules', onLive: true },
 ]
 const tabsHere = isLiveBackend ? TABS.filter(t => t.onLive) : TABS
 
@@ -229,13 +230,13 @@ export default function TestPanel() {
               {!phone && (
                 <button type="button" className="tp-grip" aria-label="Move the test panel with the arrow keys"
                   onKeyDown={e => win.nudge(e, winAt)}>
-                  <svg width="10" height="16" viewBox="0 0 10 16" aria-hidden="true">
-                    {[2, 8].flatMap(x => [2, 8, 14].map(y => <circle key={`${x}${y}`} cx={x} cy={y} r="1.5" fill="currentColor" />))}
-                  </svg>
+                  <Icon name="grip" />
                 </button>
               )}
               <strong>Test panel</strong>
-              <span className="tp-pill">{isLiveBackend ? 'live Firebase' : 'local store'}</span>
+              <span className={`tp-pill${isLiveBackend ? ' is-live' : ''}`}>
+                <span className="tp-pill-dot" aria-hidden="true" />{isLiveBackend ? 'live Firebase' : 'local store'}
+              </span>
             </div>
             <div className="tp-head-actions" data-nodrag>
               {!phone && (
@@ -250,24 +251,39 @@ export default function TestPanel() {
           <div className="tp-me">
             {me ? (
               <>
-                <span className="tp-me-text" title={`${me.name} · ${me.email}`}><span className="tp-sub">Signed in as</span> <strong>{me.name}</strong>
-                  <span className="tp-sub"> · {(me.globalRoles ?? []).join(', ') || 'no Global Role'}</span></span>
-                <button type="button" className="tp-btn is-quiet" disabled={busy}
-                  onClick={() => task(async () => { await signOut(); navigate('/'); return 'Signed out.' })}>Sign out</button>
+                <Avatar name={me.name} kind={kindOf(me)} />
+                <span className="tp-me-text" title={`${me.name} · ${me.email}`}>
+                  <strong>{me.name}</strong>
+                  <span className="tp-sub">{(me.globalRoles ?? []).join(' · ') || 'No Global Role'}</span>
+                </span>
+                <button type="button" className="tp-btn is-quiet has-icon" disabled={busy}
+                  onClick={() => task(async () => { await signOut(); navigate('/'); return 'Signed out.' })}>
+                  <Icon name="signout" />Sign out
+                </button>
               </>
             ) : (
               <>
-                <span className="tp-sub">Not signed in.</span>
-                {tab !== 'people' && <button type="button" className="tp-btn is-quiet" onClick={() => setTab('people')}>Pick someone</button>}
+                <span className="tp-avatar is-empty" aria-hidden="true"><Icon name="people" /></span>
+                <span className="tp-me-text"><strong>Not signed in</strong><span className="tp-sub">Pick an account in People</span></span>
+                {tab !== 'people' && (
+                  <button type="button" className="tp-btn is-quiet has-icon" onClick={() => setTab('people')}>
+                    Pick someone<Icon name="arrow" />
+                  </button>
+                )}
               </>
             )}
           </div>
 
-          <nav className="tp-tabs" role="tablist" aria-label="Test panel sections">
+          <nav className="tp-tabs" role="tablist" aria-label="Test panel sections" style={{ '--tp-tabs': tabsHere.length }}>
             {tabsHere.map(t => (
               <button key={t.key} type="button" role="tab" id={`tp-tab-${t.key}`} aria-selected={tab === t.key}
                 aria-controls="tp-body" onClick={() => setTab(t.key)}>
-                {t.label}{t.key === 'outbox' && outboxCount > 0 && <span className="tp-count">{outboxCount}</span>}
+                <span className="tp-tab-icon">
+                  <Icon name={t.icon} size={18} />
+                  {t.key === 'outbox' && outboxCount > 0 && <span className="tp-count">{outboxCount > 99 ? '99+' : outboxCount}</span>}
+                </span>
+                <span className="tp-tab-label">{t.label}</span>
+                {t.key === 'outbox' && outboxCount > 0 && <span className="sr-only"> ({outboxCount} emails)</span>}
               </button>
             ))}
           </nav>
@@ -298,24 +314,6 @@ export default function TestPanel() {
   )
 }
 
-/** Drawn icons for the header and status line: 16px, 1.5 stroke, currentColor. */
-function Icon({ name }) {
-  const paths = {
-    widen: 'M6 4 2 8l4 4M10 4l4 4-4 4',
-    narrow: 'M2 4l4 4-4 4M14 4l-4 4 4 4',
-    close: 'M4 4l8 8M12 4l-8 8',
-    check: 'M3 8.5 6.5 12 13 4.5',
-    alert: 'M8 4.5v4.5M8 11.5v.01',
-  }
-  return (
-    <svg width="16" height="16" viewBox="0 0 16 16" aria-hidden="true" fill="none" stroke="currentColor"
-      strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
-      {name === 'alert' && <circle cx="8" cy="8" r="6.25" />}
-      <path d={paths[name]} />
-    </svg>
-  )
-}
-
 /**
  * The footer line: "Working…" while a change is in flight (a live spawn makes
  * logins and can take a few seconds), then what happened — a refusal stands
@@ -325,6 +323,7 @@ function Status({ busy, status, onDismiss }) {
   const kind = busy ? 'busy' : !status.text ? 'idle' : status.error ? 'error' : 'ok'
   return (
     <div className={`tp-status is-${kind}`} role="status" aria-live="polite" aria-busy={busy}>
+      {kind === 'idle' && <span className="tp-status-idle">Ready · <kbd>`</kbd> toggles the panel</span>}
       {kind === 'busy' && <><span className="tp-working" aria-hidden="true" /><span>Working…</span></>}
       {(kind === 'ok' || kind === 'error') && (
         <>
@@ -369,9 +368,12 @@ function LivePassword({ compact = false }) {
   return (
     <div className={`tp-password${compact ? ' is-compact' : ''}`}>
       <label className="tp-label" htmlFor="tp-live-password">Test password <span className="tp-sub">— every dummy login shares it</span></label>
-      <input id="tp-live-password" type="password" className="tp-search" value={password} autoComplete="off"
-        autoFocus={!compact && !password && finePointer()} aria-describedby="tp-live-password-hint"
-        onChange={e => { setPassword(e.target.value); session.set(e.target.value) }} />
+      <span className="tp-input-icon">
+        <Icon name="key" />
+        <input id="tp-live-password" type="password" value={password} autoComplete="off"
+          autoFocus={!compact && !password && finePointer()} aria-describedby="tp-live-password-hint"
+          onChange={e => { setPassword(e.target.value); session.set(e.target.value) }} />
+      </span>
       <p id="tp-live-password-hint" className={`tp-hint${hint && password ? ' is-error' : ''}`}>
         {hint ?? 'Set for this tab. Spawned accounts get it; People signs in with it.'}
       </p>
@@ -452,10 +454,12 @@ function LivePeople({ snap, me, task, busy, onSignedIn }) {
     <li key={u.email}>
       <button type="button" className={`tp-person${me?.email === u.email ? ' is-me' : ''}`} disabled={busy}
         onClick={() => signInAs(u)} aria-current={me?.email === u.email ? 'true' : undefined}>
+        <Avatar name={u.name} kind={kindOf(u)} />
         <span className="tp-person-text">
           <span className="tp-person-name">{u.name}</span>
           {meta && <span className="tp-sub">{meta}</span>}
         </span>
+        {me?.email === u.email ? <span className="tp-here">You</span> : <Icon name="chevron" className="tp-go" />}
       </button>
     </li>
   )
@@ -463,17 +467,18 @@ function LivePeople({ snap, me, task, busy, onSignedIn }) {
   return (
     <div className="tp-people">
       <LivePassword />
-      <input type="search" className="tp-search" value={query} onChange={e => setQuery(e.target.value)}
-        placeholder="Search name, section, role or group" aria-label="Search accounts" autoFocus={finePointer() && Boolean(session.get())} />
+      <Search value={query} onChange={setQuery} autoFocus={finePointer() && Boolean(session.get())} />
       {shown.length === 0 && <p className="tp-none">No one matches “{query}”.</p>}
-      {offices.length > 0 && <Group title="Offices">{offices.map(u => row(u, [rolesLine(u), scopeLine(u), ...hatsOf(u)].filter(Boolean).join(' · ')))}</Group>}
-      {faculty.length > 0 && <Group title="Faculty">{faculty.map(u => row(u, hatsOf(u).join(' · ') || u.email))}</Group>}
-      {blocks.map(block => (
-        <Group key={block} title={`Students · ${block}`}>
-          {students.filter(u => (u.block || '—') === block).sort((a, b) => a.name.localeCompare(b.name))
-            .map(u => row(u, hatsOf(u)[0] ?? u.email))}
-        </Group>
-      ))}
+      {offices.length > 0 && <Group title="Offices" icon="office" count={offices.length}>{offices.map(u => row(u, [rolesLine(u), scopeLine(u), ...hatsOf(u)].filter(Boolean).join(' · ')))}</Group>}
+      {faculty.length > 0 && <Group title="Faculty" icon="faculty" count={faculty.length}>{faculty.map(u => row(u, hatsOf(u).join(' · ') || u.email))}</Group>}
+      {blocks.map(block => {
+        const inBlock = students.filter(u => (u.block || '—') === block).sort((a, b) => a.name.localeCompare(b.name))
+        return (
+          <Group key={block} title={`Students · ${block}`} icon="student" count={inBlock.length}>
+            {inBlock.map(u => row(u, hatsOf(u)[0] ?? u.email))}
+          </Group>
+        )
+      })}
     </div>
   )
 }
@@ -534,11 +539,10 @@ function People({ snap, me, onPick, goSpawn }) {
 
   if (!users.length) {
     return (
-      <div className="tp-callout">
-        <p><strong>No accounts yet.</strong> Spawn some, or register one on the sign-in page — its verification
-          email lands in Outbox.</p>
-        <button type="button" className="tp-btn is-primary" onClick={goSpawn}>Go to Spawn</button>
-      </div>
+      <Empty icon="people" title="No accounts yet"
+        action={<button type="button" className="tp-btn is-primary has-icon" onClick={goSpawn}><Icon name="spawn" />Go to Spawn</button>}>
+        Spawn some, or register one on the sign-in page — its verification email lands in Outbox.
+      </Empty>
     )
   }
 
@@ -548,11 +552,13 @@ function People({ snap, me, onPick, goSpawn }) {
       <li key={u.id}>
         <button type="button" className={`tp-person${me?.id === u.id ? ' is-me' : ''}`} onClick={() => onPick(u, o.path)}
           aria-current={me?.id === u.id ? 'true' : undefined}>
+          <Avatar name={u.name} kind={kindOf(u)} />
           <span className="tp-person-text">
             <span className="tp-person-name">{u.name}</span>
             {meta && <span className="tp-sub">{meta}</span>}
           </span>
-          {o.ready > 0 && <span className="tp-due">{o.ready} to do</span>}
+          {o.ready > 0 && <span className="tp-due" title={`${o.ready} to do`}>{o.ready}<span className="sr-only"> to do</span></span>}
+          {me?.id === u.id ? <span className="tp-here">You</span> : <Icon name="chevron" className="tp-go" />}
         </button>
       </li>
     )
@@ -560,20 +566,21 @@ function People({ snap, me, onPick, goSpawn }) {
 
   return (
     <div className="tp-people">
-      <input type="search" className="tp-search" value={query} onChange={e => setQuery(e.target.value)}
-        placeholder="Search name, section, role or group" aria-label="Search accounts" autoFocus={finePointer()}
-        onKeyDown={e => { if (e.key === 'Enter' && shown[0]) onPick(shown[0], owed.get(shown[0].id)?.path ?? '/') }} />
+      <Search value={query} onChange={setQuery} autoFocus={finePointer()}
+        onEnter={() => { if (shown[0]) onPick(shown[0], owed.get(shown[0].id)?.path ?? '/') }} />
       {shown.length === 0 && <p className="tp-none">No one matches “{query}”.</p>}
-      {offices.length > 0 && <Group title="Offices">{offices.map(u => row(u, [rolesLine(u), scopeLine(u), ...hatsOf(u)].filter(Boolean).join(' · ')))}</Group>}
-      {faculty.length > 0 && <Group title="Faculty">{faculty.map(u => row(u, hatsOf(u).join(' · ') || 'No assignments'))}</Group>}
-      {blocks.map(block => (
-        <Group key={block} title={`Students · ${block}`}>
-          {students.filter(u => (u.block || '—') === block).sort((a, b) => a.name.localeCompare(b.name))
-            .map(u => row(u, hatsOf(u)[0] ?? 'No group'))}
-        </Group>
-      ))}
+      {offices.length > 0 && <Group title="Offices" icon="office" count={offices.length}>{offices.map(u => row(u, [rolesLine(u), scopeLine(u), ...hatsOf(u)].filter(Boolean).join(' · ')))}</Group>}
+      {faculty.length > 0 && <Group title="Faculty" icon="faculty" count={faculty.length}>{faculty.map(u => row(u, hatsOf(u).join(' · ') || 'No assignments'))}</Group>}
+      {blocks.map(block => {
+        const inBlock = students.filter(u => (u.block || '—') === block).sort((a, b) => a.name.localeCompare(b.name))
+        return (
+          <Group key={block} title={`Students · ${block}`} icon="student" count={inBlock.length}>
+            {inBlock.map(u => row(u, hatsOf(u)[0] ?? 'No group'))}
+          </Group>
+        )
+      })}
       {pending.length > 0 && (
-        <Group title="Waiting on verification or activation">
+        <Group title="Waiting on verification or activation" icon="alert" count={pending.length}>
           {pending.map(u => row(u, `${u.emailVerified ? 'Email verified' : 'Email not verified'} · ${u.status}`))}
         </Group>
       )}
@@ -583,14 +590,31 @@ function People({ snap, me, onPick, goSpawn }) {
 
 const scopeLine = (u) => (u.programScope ?? []).map(programCode).join(', ')
 
-function Group({ title, children }) {
+function Group({ title, icon, count, children }) {
   return (
     <section className="tp-group">
-      <h3 className="tp-group-title">{title}</h3>
+      <h3 className="tp-group-title">
+        {icon && <Icon name={icon} />}<span>{title}</span>
+        {count != null && <span className="tp-group-n">{count}</span>}
+      </h3>
       <ul className="tp-list">{children}</ul>
     </section>
   )
 }
+
+/** The People search: a field with its icon; Enter can pick the first match. */
+function Search({ value, onChange, onEnter, autoFocus }) {
+  return (
+    <span className="tp-input-icon tp-search">
+      <Icon name="search" />
+      <input type="search" value={value} onChange={e => onChange(e.target.value)} autoFocus={autoFocus}
+        placeholder="Search name, section, role or group" aria-label="Search accounts"
+        onKeyDown={e => { if (e.key === 'Enter' && onEnter) onEnter() }} />
+    </span>
+  )
+}
+
+const kindOf = (u) => (isStudent(u) ? 'student' : officeRank(u) < 99 ? 'office' : 'faculty')
 
 /* --- Stage: jump a group forward ---------------------------------------------- */
 
@@ -612,17 +636,25 @@ function Stage({ snap, me, edit, task, busy }) {
     return { store: next, note: `${groupLabel(s.projects[pid])} is now at ${stageLabel(stage)}.${added}` }
   })
 
+  const current = projects.find(p => p.id === pid)?.currentStage
+  const phases = []
+  for (const s of STAGES) {
+    const name = macroStageOf(s.key)
+    if (phases.at(-1)?.name !== name) phases.push({ name, stages: [] })
+    phases.at(-1).stages.push(s)
+  }
+
   return (
     <div className="tp-stage">
       {projects.length === 0 ? (
         <section className="tp-block">
-          <header><h3>Jump a group to a stage</h3></header>
+          <header><h3><Icon name="flag" />Jump a group to a stage</h3></header>
           <p className="tp-none">No groups yet. Form one in the app, or with Spawn → Class lists → Groups +.</p>
         </section>
       ) : (
         <section className="tp-block">
           <header>
-            <h3>Jump a group to a stage</h3>
+            <h3><Icon name="flag" />Jump a group to a stage</h3>
             <p>Rebuilds its documents, reviews, defenses, forms, logs and history so every earlier step is done and this
               stage’s own work is open. Missing advisers, panelists and offices are taken from the faculty you spawned,
               or spawned now.</p>
@@ -631,22 +663,38 @@ function Stage({ snap, me, edit, task, busy }) {
           <select id="tp-project" className="tp-select is-full" value={pid} onChange={e => setProjectId(e.target.value)}>
             {projects.map(p => <option key={p.id} value={p.id}>{groupLabel(p)} — {stageLabel(p.currentStage)}</option>)}
           </select>
-          <label className="tp-label" htmlFor="tp-stage">Stage</label>
-          <select id="tp-stage" className="tp-select is-full" value={stage} onChange={e => setStage(e.target.value)}>
-            {STAGES.map(s => <option key={s.key} value={s.key}>{macroStageOf(s.key)} · {s.label}</option>)}
-          </select>
-          <button type="button" className="tp-btn is-primary" disabled={busy || !pid} onClick={jump}>Jump</button>
+          <fieldset className="tp-stages">
+            <legend className="tp-label">Stage</legend>
+            {phases.map(ph => (
+              <div key={ph.name} className="tp-phase" role="group" aria-label={ph.name}>
+                <span className="tp-phase-name" aria-hidden="true">{ph.name}</span>
+                <div className="tp-phase-rows">
+                  {ph.stages.map(s => (
+                    <label key={s.key} className={`tp-stage-row${stage === s.key ? ' is-picked' : ''}`}>
+                      <input type="radio" name="tp-stage" value={s.key} checked={stage === s.key} onChange={() => setStage(s.key)} />
+                      <span className="tp-stage-mark" aria-hidden="true" />
+                      <span className="tp-stage-label">{s.label}</span>
+                      {current === s.key && <span className="tp-here">Now</span>}
+                    </label>
+                  ))}
+                </div>
+              </div>
+            ))}
+          </fieldset>
+          <button type="button" className="tp-btn is-primary has-icon tp-jump-go" disabled={busy || !pid} onClick={jump}>
+            {stage === current ? <><Icon name="restore" />Rebuild at {stageLabel(stage)}</> : <>Jump to {stageLabel(stage)}<Icon name="arrow" /></>}
+          </button>
         </section>
       )}
       <section className="tp-block">
         <header>
-          <h3>System jobs</h3>
+          <h3><Icon name="bolt" />System jobs</h3>
           <p>The overdue-revision check (S8.2) also runs on load and every minute.</p>
         </header>
-        <button type="button" className="tp-btn" disabled={busy} onClick={() => task(async () => {
+        <button type="button" className="tp-btn has-icon" disabled={busy} onClick={() => task(async () => {
           const n = await flagOverdueRevisions()
           return n ? `${n} revision(s) flagged overdue.` : 'No revisions are past their deadline.'
-        })}>Run overdue check</button>
+        })}><Icon name="bolt" />Run overdue check</button>
       </section>
     </div>
   )
@@ -656,25 +704,31 @@ function Stage({ snap, me, edit, task, busy }) {
 
 function Outbox({ snap, task, busy, readOnly }) {
   const mail = [...(snap.outbox ?? [])].sort((a, b) => new Date(b.at) - new Date(a.at))
-  if (!mail.length) return <p className="tp-none">No emails yet. Every email the workflow sends lands here; none is delivered.</p>
+  if (!mail.length) return <Empty icon="mail" title="No emails yet">Every email the workflow sends lands here; none is delivered.</Empty>
   return (
     <>
     {mail.length > MAIL_SHOWN && <p className="tp-hint tp-cut">The latest {MAIL_SHOWN} of {mail.length} emails.</p>}
     <ol className="tp-mail">
       {mail.slice(0, MAIL_SHOWN).map(m => (
-        <li key={m.id}>
-          <div className="tp-mail-head">
-            <strong>{m.subject}</strong>
-            <span className="tp-sub">{fmtDateTime(m.at)}</span>
+        <li key={m.id} className="tp-entry">
+          <span className="tp-entry-icon"><Icon name={m.link?.kind === 'verify' ? 'verify' : 'mail'} /></span>
+          <div className="tp-entry-body">
+            <div className="tp-entry-head">
+              <strong>{m.subject}</strong>
+              <time className="tp-sub" dateTime={m.at}>{fmtDateTime(m.at)}</time>
+            </div>
+            <div className="tp-entry-meta">
+              <span className="tp-mono tp-sub tp-to">To {(m.to ?? []).join(', ') || '—'}</span>
+              {m.event && <span className="tp-tag">{m.event}</span>}
+            </div>
+            <p className="tp-mail-text">{m.body}</p>
+            {m.link?.kind === 'verify' && !readOnly && (
+              <button type="button" className="tp-btn has-icon" disabled={busy}
+                onClick={() => task(async () => { await verifyEmail(m.link.token); return `Verified ${m.to?.[0]}.` })}>
+                <Icon name="check" />{m.link.label}
+              </button>
+            )}
           </div>
-          <div className="tp-mono tp-sub">To {(m.to ?? []).join(', ') || '—'} · {m.event}</div>
-          <p>{m.body}</p>
-          {m.link?.kind === 'verify' && !readOnly && (
-            <button type="button" className="tp-btn" disabled={busy}
-              onClick={() => task(async () => { await verifyEmail(m.link.token); return `Verified ${m.to?.[0]}.` })}>
-              {m.link.label}
-            </button>
-          )}
         </li>
       ))}
     </ol>
@@ -682,6 +736,18 @@ function Outbox({ snap, task, busy, readOnly }) {
   )
 }
 const MAIL_SHOWN = 80
+
+/** An empty list: its icon, what is missing, and where things will come from. */
+function Empty({ icon, title, children, action }) {
+  return (
+    <div className="tp-empty">
+      <span className="tp-empty-icon"><Icon name={icon} size={20} /></span>
+      <strong>{title}</strong>
+      <p>{children}</p>
+      {action}
+    </div>
+  )
+}
 
 /* --- Trail: audit log and workflow history ---------------------------------------- */
 
@@ -704,21 +770,30 @@ function Trail({ snap }) {
 
   return (
     <div>
-      <select className="tp-select is-full" value={projectId} onChange={e => setProjectId(e.target.value)} aria-label="Filter by group">
+      <select className="tp-select is-full" value={projectId} onChange={e => setProjectId(e.target.value)} aria-label="Filter by group" disabled={!all.length}>
         <option value="">All groups and accounts ({all.length})</option>
         {projects.map(p => <option key={p.id} value={p.id}>{groupLabel(p)} ({count(p.id)})</option>)}
       </select>
       {rows.length > TRAIL_SHOWN && <p className="tp-hint tp-cut">The latest {TRAIL_SHOWN} of {rows.length} entries.</p>}
-      {rows.length === 0 ? <p className="tp-none">Nothing recorded yet.</p> : (
+      {rows.length === 0 ? <Empty icon="trail" title="Nothing recorded yet">Audit entries and stage moves show here as the workflow runs.</Empty> : (
         <ol className="tp-trail">
           {rows.slice(0, TRAIL_SHOWN).map(r => (
-            <li key={`${r.kind}-${r.id}`}>
-              <div className="tp-trail-head">
-                <span className="tp-action">{r.action}</span>
-                <span className="tp-sub">{r.kind} · {fmtDateTime(r.at)}</span>
+            <li key={`${r.kind}-${r.id}`} className={`tp-entry is-${r.kind.toLowerCase()}`}>
+              <span className="tp-entry-icon" title={r.kind}><Icon name={r.kind === 'Audit' ? 'audit' : 'history'} label={r.kind} /></span>
+              <div className="tp-entry-body">
+                <div className="tp-entry-head">
+                  <span className="tp-action">{r.action}</span>
+                  <time className="tp-sub" dateTime={r.at}>{fmtDateTime(r.at)}</time>
+                </div>
+                <div className="tp-sub">{nameOf(r.actorId)}{r.hat ? ` as ${r.hat}` : ''}{r.projectId ? ` · ${groupLabel(projects.find(p => p.id === r.projectId))}` : ''}</div>
+                {(r.before != null || r.after != null) && (
+                  <div className="tp-change tp-mono">
+                    <span className="tp-diff">{show(r.before)}</span>
+                    <Icon name="arrow" />
+                    <span className="tp-diff is-after">{show(r.after)}</span>
+                  </div>
+                )}
               </div>
-              <div className="tp-sub">{nameOf(r.actorId)}{r.hat ? ` as ${r.hat}` : ''}{r.projectId ? ` · ${groupLabel(projects.find(p => p.id === r.projectId))}` : ''}</div>
-              <div className="tp-mono tp-diff">{show(r.before)} → {show(r.after)}</div>
             </li>
           ))}
         </ol>
@@ -735,28 +810,33 @@ function Rules() {
   return (
     <div>
       <section className="tp-block">
-        <header><h3>Config flags</h3><p>Mockup defaults live in src/domain/flags.js.</p></header>
+        <header><h3><Icon name="admin" />Config flags</h3><p>Mockup defaults live in src/domain/flags.js.</p></header>
         <dl className="tp-flags">
           {Object.entries(FLAGS).map(([k, v]) => (
-            <div key={k}>
+            <div key={k} className="tp-flag">
               <dt className="tp-mono">{k}</dt>
-              <dd><span className="tp-mono tp-diff">{show(v)}</span>
-                {FLAG_NOTES[k]?.wired && <span className="tp-sub"> — {FLAG_NOTES[k].wired}</span>}</dd>
+              <dd className="tp-flag-value">
+                {typeof v === 'boolean'
+                  ? <span className={`tp-switch${v ? ' is-on' : ''}`}><span className="tp-switch-dot" aria-hidden="true" />{v ? 'On' : 'Off'}</span>
+                  : <span className="tp-mono tp-value">{show(v)}</span>}
+              </dd>
+              {FLAG_NOTES[k]?.wired && <dd className="tp-sub tp-flag-note">{FLAG_NOTES[k].wired}</dd>}
             </div>
           ))}
         </dl>
       </section>
       <section className="tp-block">
-        <header><h3>allowedActions — role × stage</h3><p>From the CAAC policies. Membership, program scope and
+        <header><h3><Icon name="rules" />allowedActions — role × stage</h3><p>From the CAAC policies. Membership, program scope and
           not-approving-yourself are checked per user on top.</p></header>
         {Object.values(PROJECT_ROLES).map(hat => (
           <details key={hat} className="tp-details">
-            <summary>{hat}</summary>
-            <dl className="tp-flags">
+            <summary><Icon name="chevron" className="tp-caret" /><span>{hat}</span>
+              <span className="tp-group-n">{STAGES.filter(s => allowedActions(hat, s.key).length).length} stages</span></summary>
+            <dl className="tp-acts">
               {STAGES.map(s => {
                 const actions = allowedActions(hat, s.key)
                 return actions.length ? (
-                  <div key={s.key}><dt>{s.label}</dt><dd className="tp-mono tp-diff">{actions.join(', ')}</dd></div>
+                  <div key={s.key}><dt>{s.label}</dt><dd>{actions.map(a => <span key={a} className="tp-tag">{a}</span>)}</dd></div>
                 ) : null
               })}
             </dl>
@@ -782,23 +862,23 @@ function DataControls({ snap, me, busy, task, replaceStore, signIn }) {
 
   return (
     <div className="tp-data">
-      <button type="button" className="tp-btn is-quiet" disabled={busy}
+      <button type="button" className="tp-btn is-quiet has-icon" disabled={busy}
         onClick={() => task(async () => { setCheckpoint(writeCheckpoint(snap, me?.id)); return 'Checkpoint saved.' })}
-        title="Remember the whole store as it is now">Save checkpoint</button>
-      <button type="button" className="tp-btn is-quiet" disabled={busy || !checkpoint}
+        title="Remember the whole store as it is now"><Icon name="save" />Save checkpoint</button>
+      <button type="button" className="tp-btn is-quiet has-icon" disabled={busy || !checkpoint}
         title={checkpoint ? `Saved ${fmtDateTime(checkpoint.savedAt)}` : 'Save a checkpoint first'}
         onClick={() => task(async () => {
           const cp = readCheckpoint()
           await replaceStore(cp.store)
           if (cp.signedInAs && cp.store.users?.[cp.signedInAs]) signIn(cp.signedInAs)
           return `Restored the checkpoint from ${fmtDateTime(cp.savedAt)}.`
-        })}>Restore</button>
-      <button type="button" className={`tp-btn ${arming ? 'is-danger' : 'is-quiet'}`} disabled={busy}
+        })}><Icon name="restore" />Restore</button>
+      <button type="button" className={`tp-btn has-icon tp-wipe ${arming ? 'is-danger' : 'is-quiet'}`} disabled={busy}
         onClick={() => {
           if (!arming) { setArming(true); return }
           setArming(false)
           task(async () => { await wipe(); return 'Everything is gone. Spawn a fresh set.' })
-        }}>{arming ? 'Click again to wipe' : 'Wipe all'}</button>
+        }}><Icon name="trash" />{arming ? 'Click again to wipe' : 'Wipe all'}</button>
     </div>
   )
 }

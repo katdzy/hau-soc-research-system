@@ -3,12 +3,14 @@ import { isLiveBackend } from '../backend/index.js'
 import { PROGRAM_INFO, COURSES, GLOBAL_ROLES as G, normalizeSection, sectionProblem, parseSection } from '../domain/constants.js'
 import {
   spawnStudentsInBlock, sectionByBlock, spawnSection, dropSection, spawnStudent, dropStudent, spawnGroup, dropGroup, spawnFaculty, dropFaculty,
-  spawnOffice, dropOffice, setInstructor, starterStore, sectionsOf, studentsIn, groupsIn, plainFaculty, officeHolders,
+  spawnOffice, dropOffice, setInstructor, starterStore, sectionsOf, studentsIn, groupsIn, plainFaculty, officeHolders, OFFICE_ROLES,
 } from './spawn.js'
+import { Icon } from './icons.jsx'
 
 const SHORT = { WD: 'Web Development', NW: 'Network Administration', CS: 'Computer Science', EMC: 'Multimedia Computing', CYB: 'Cybersecurity' }
 const OFFICES = [
-  [G.DEAN, 'Dean'], [G.ASSOCIATE_DEAN, 'Associate Dean'], [G.URO, 'Research Office (URO)'], [G.ADMIN, 'System Administrator'],
+  [G.DEAN, 'Dean', 'dean'], [G.ASSOCIATE_DEAN, 'Associate Dean', 'deputy'], [G.URO, 'Research Office (URO)', 'research'],
+  [G.ADMIN, 'System Administrator', 'admin'],
 ]
 
 /**
@@ -27,15 +29,25 @@ export default function Spawner({ store, edit, busy, me = null }) {
   const [program, setProgram] = useState('')
   const programsHere = PROGRAM_INFO.map(p => p.code).filter(code => sections.some(s => parseSection(s.block)?.code === code))
   const listed = program ? sections.filter(s => parseSection(s.block)?.code === program) : sections
+  const isMember = (u) => Object.values(store.projectMembers).some(m => m.userId === u.id)
+  const census = {
+    sections: sections.length,
+    students: Object.values(users).filter(u => (u.globalRoles ?? []).includes(G.STUDENT)).length,
+    groups: Object.keys(store.projects).length,
+    faculty: faculty.length,
+    offices: Object.values(users).filter(u => (u.globalRoles ?? []).some(r => OFFICE_ROLES.includes(r))).length,
+  }
 
   return (
     <div className="tp-spawn">
-      {!empty && <JumpBar />}
+      {!empty && <Census counts={census} />}
       {empty && (
-        <div className="tp-callout">
-          <p><strong>The store is empty.</strong> Start from a small school, or build it up yourself below.</p>
-          <button type="button" className="tp-btn is-primary" disabled={busy} onClick={() => edit(s => ({ store: starterStore(s), note: 'Starter set added.' }))}>
-            Add starter set
+        <div className="tp-empty is-start">
+          <span className="tp-empty-icon"><Icon name="spawn" size={20} /></span>
+          <strong>The store is empty</strong>
+          <p>Start from a small school, or build it up yourself below.</p>
+          <button type="button" className="tp-btn is-primary has-icon" disabled={busy} onClick={() => edit(s => ({ store: starterStore(s), note: 'Starter set added.' }))}>
+            <Icon name="plus" />Add starter set
           </button>
           <p className="tp-hint">A Capstone 1 section per program with eight students and its instructor, four more faculty,
             a Program Chair per program, and a Dean, Associate Dean, URO and System Administrator. No groups.</p>
@@ -46,7 +58,7 @@ export default function Spawner({ store, edit, busy, me = null }) {
 
       <section className="tp-block" aria-labelledby="tp-sec-h">
         <header>
-          <h3 id="tp-sec-h">Sections</h3>
+          <h3 id="tp-sec-h"><Icon name="section" />Sections</h3>
           <p>A new section brings its own instructor, who becomes Instructor 1 of the groups formed in it.</p>
         </header>
         {/* ARIA table roles on divs: a real <table> picks up the app's row hover and cell padding. */}
@@ -75,7 +87,7 @@ export default function Spawner({ store, edit, busy, me = null }) {
 
       <section className="tp-block" aria-labelledby="tp-class-h">
         <header>
-          <h3 id="tp-class-h">Class lists</h3>
+          <h3 id="tp-class-h"><Icon name="group" />Class lists</h3>
           <p>Students join a section with no group. <strong>Groups</strong> forms one from them at Group Formation,
             the way Instructor 1 would — or form groups in the app itself.</p>
         </header>
@@ -91,85 +103,97 @@ export default function Spawner({ store, edit, busy, me = null }) {
           </div>
         )}
         {sections.length === 0 ? <p className="tp-none">Add a section first.</p> : (
-          <ul className="tp-sections">
+          <div className="tp-classes" role="table" aria-label="Class lists">
+            <div className="tp-class is-head" role="row">
+              <span role="columnheader">Section · instructor</span>
+              <span role="columnheader" className="tp-col-icon"><Icon name="student" />Students</span>
+              <span role="columnheader" className="tp-col-icon"><Icon name="group" />Groups</span>
+            </div>
             {listed.map(sec => {
               const students = studentsIn(store, sec)
-              const grouped = students.filter(u => Object.values(store.projectMembers).some(m => m.userId === u.id)).length
+              const grouped = students.filter(isMember).length
               return (
-                <li key={sec.id}>
-                  <div className="tp-sec-head">
-                    <span className="tp-code">{sec.block}</span>
-                    <span className="tp-sub">{sec.course}</span>
+                <div key={sec.id} className="tp-class" role="row">
+                  <span role="rowheader" className="tp-class-name">
+                    <span className="tp-class-id">
+                      <span className="tp-code">{sec.block}</span>
+                      <span className="tp-tag">{sec.course === COURSES.C1 ? 'C1' : 'C2'}</span>
+                      <span className="tp-sub">{grouped}/{students.length} grouped</span>
+                    </span>
                     <select className="tp-select" aria-label={`Instructor of ${sec.block}`} value={sec.instructorId ?? ''} disabled={busy}
                       onChange={e => edit(s => setInstructor(s, sec.id, e.target.value))}>
                       <option value="">No instructor</option>
                       {instructorChoices(faculty, sec).map(u => <option key={u.id} value={u.id}>{u.name}{isLiveBackend && !u.spawned ? ' (no login)' : ''}</option>)}
                     </select>
-                  </div>
-                  <div className="tp-sec-row">
-                    <span className="tp-row-label">Students <span className="tp-sub">{grouped} in groups</span></span>
+                  </span>
+                  <span role="cell" data-label="Students">
                     <Stepper label={`student in ${sec.block}`} value={students.length} busy={busy}
                       onDec={(n) => edit(s => dropStudent(s, sec.id), n)}
                       onInc={(n) => edit(s => spawnStudent(s, sec.id), n)} />
-                  </div>
-                  {sec.course === COURSES.C1 && (
-                    <div className="tp-sec-row">
-                      <span className="tp-row-label">Groups</span>
+                  </span>
+                  <span role="cell" data-label="Groups">
+                    {sec.course === COURSES.C1 ? (
                       <Stepper label={`group in ${sec.block}`} value={groupsIn(store, sec).length} busy={busy}
                         onDec={(n) => edit(s => dropGroup(s, sec.id), n)}
                         onInc={(n) => edit(s => spawnGroup(s, sec.id), n)} />
-                    </div>
-                  )}
-                </li>
+                    ) : <span className="tp-sub tp-na" title="Groups are formed in Capstone 1 sections">Capstone 1 only</span>}
+                  </span>
+                </div>
               )
             })}
-          </ul>
+          </div>
         )}
       </section>
 
       <section className="tp-block" aria-labelledby="tp-fac-h">
         <header>
-          <h3 id="tp-fac-h">Faculty</h3>
+          <h3 id="tp-fac-h"><Icon name="faculty" />Faculty</h3>
           <p>No Global Role beyond Faculty: every permission comes from the groups they are assigned to — advisers,
             panelists, Instructor 2.</p>
         </header>
-        <div className="tp-line">
-          <span className="tp-row-label">Faculty <span className="tp-sub">{teaching} teach a section</span></span>
-          <Stepper label="faculty member" value={faculty.length} busy={busy}
-            onDec={(n) => edit(dropFaculty, n)} onInc={(n) => edit(spawnFaculty, n)} />
+        <div className="tp-cells is-one">
+          <div className="tp-cell">
+            <span className="tp-cell-icon"><Icon name="faculty" /></span>
+            <span className="tp-cell-text"><span className="tp-row-label">Faculty</span><span className="tp-sub">{teaching} teach a section</span></span>
+            <Stepper label="faculty member" value={faculty.length} busy={busy}
+              onDec={(n) => edit(dropFaculty, n)} onInc={(n) => edit(spawnFaculty, n)} />
+          </div>
         </div>
       </section>
 
       <section className="tp-block" aria-labelledby="tp-off-h">
         <header>
-          <h3 id="tp-off-h">Offices</h3>
+          <h3 id="tp-off-h"><Icon name="office" />Offices</h3>
           <p>School-wide roles. A Program Chair covers one program.</p>
         </header>
-        <div className="tp-line is-stack">
-          <span className="tp-row-label">Program Chair / Coordinator</span>
-          <div className="tp-chairs">
-            {PROGRAM_INFO.map(({ code, name }) => (
-              <div key={code} className="tp-chair">
-                <span className="tp-code">{code}</span>
-                <Stepper label={`${code} Program Chair`} value={officeHolders(users, G.COORDINATOR, name).length} busy={busy}
-                  onDec={(n) => edit(s => dropOffice(s, G.COORDINATOR, name), n)}
-                  onInc={(n) => edit(s => spawnOffice(s, G.COORDINATOR, name), n)} />
-              </div>
-            ))}
-          </div>
+        <h4 className="tp-subhead"><Icon name="chair" />Program Chair / Coordinator</h4>
+        <div className="tp-cells">
+          {PROGRAM_INFO.map(({ code, name }) => (
+            <div key={code} className="tp-cell">
+              <span className="tp-cell-icon is-code">{code}</span>
+              <span className="tp-cell-text"><span className="tp-row-label">{SHORT[code]}</span></span>
+              <Stepper label={`${code} Program Chair`} value={officeHolders(users, G.COORDINATOR, name).length} busy={busy}
+                onDec={(n) => edit(s => dropOffice(s, G.COORDINATOR, name), n)}
+                onInc={(n) => edit(s => spawnOffice(s, G.COORDINATOR, name), n)} />
+            </div>
+          ))}
         </div>
-        {OFFICES.map(([role, label]) => (
-          <div key={role} className="tp-line">
-            <span className="tp-row-label">{label}</span>
-            <Stepper label={label} value={officeHolders(users, role).length} busy={busy}
-              onDec={(n) => edit(s => dropOffice(s, role), n)} onInc={(n) => edit(s => spawnOffice(s, role), n)} />
-          </div>
-        ))}
+        <h4 className="tp-subhead"><Icon name="office" />School-wide</h4>
+        <div className="tp-cells">
+          {OFFICES.map(([role, label, icon]) => (
+            <div key={role} className="tp-cell">
+              <span className="tp-cell-icon"><Icon name={icon} /></span>
+              <span className="tp-cell-text"><span className="tp-row-label">{label}</span></span>
+              <Stepper label={label} value={officeHolders(users, role).length} busy={busy}
+                onDec={(n) => edit(s => dropOffice(s, role), n)} onInc={(n) => edit(s => spawnOffice(s, role), n)} />
+            </div>
+          ))}
+        </div>
       </section>
 
       {!empty && (
         <p className="tp-hint tp-foot-hint">
-          Shift-click a − or + to do five. − takes back the newest one and clears what it held (memberships,
+          <kbd>Shift</kbd>-click a − or + to do five. − takes back the newest one and clears what it held (memberships,
           assignments); a section with groups keeps them until you remove the groups.
         </p>
       )}
@@ -184,10 +208,14 @@ const instructorChoices = (faculty, sec) => (isLiveBackend
   ? faculty.filter(u => u.spawned || u.id === sec.instructorId)
   : faculty)
 
-// The Spawn tab is long: a bar that stays at the top and jumps to each part.
-const PARTS = [['tp-into-h', 'Students'], ['tp-sec-h', 'Sections'], ['tp-class-h', 'Class lists'], ['tp-fac-h', 'Faculty'], ['tp-off-h', 'Offices']]
+// The Spawn tab is long: a census that stays at the top — what the store holds —
+// and jumps to the part that changes each count.
+const PARTS = [
+  ['sections', 'Sections', 'section', 'tp-sec-h'], ['students', 'Students', 'student', 'tp-into-h'],
+  ['groups', 'Groups', 'group', 'tp-class-h'], ['faculty', 'Faculty', 'faculty', 'tp-fac-h'], ['offices', 'Offices', 'office', 'tp-off-h'],
+]
 
-function JumpBar() {
+function Census({ counts }) {
   const go = (id) => {
     const target = document.getElementById(id)?.closest('section')
     if (!target) return
@@ -196,8 +224,14 @@ function JumpBar() {
     target.querySelector('input, select, button')?.focus({ preventScroll: true })
   }
   return (
-    <nav className="tp-jump" aria-label="Parts of Spawn">
-      {PARTS.map(([id, label]) => <button key={id} type="button" onClick={() => go(id)}>{label}</button>)}
+    <nav className="tp-census" aria-label="Parts of Spawn">
+      {PARTS.map(([key, label, icon, id]) => (
+        <button key={key} type="button" onClick={() => go(id)} title={`Go to ${label}`}>
+          <Icon name={icon} />
+          <span className="tp-census-n">{counts[key]}</span>
+          <span className="tp-census-label">{label}</span>
+        </button>
+      ))}
     </nav>
   )
 }
@@ -250,7 +284,7 @@ function SpawnInto({ store, sections, edit, busy, me }) {
   return (
     <section className="tp-block" aria-labelledby="tp-into-h">
       <header>
-        <h3 id="tp-into-h">Add students to a section</h3>
+        <h3 id="tp-into-h"><Icon name="student" />Add students to a section</h3>
         <p>Pick a section on record or type a new one, e.g. WD-405. A new section comes with its own instructor.</p>
       </header>
       <form className="tp-into" onSubmit={e => { e.preventDefault(); if (!problem) edit(s => spawnStudentsInBlock(s, name, course, n)) }}>
@@ -272,8 +306,8 @@ function SpawnInto({ store, sections, edit, busy, me }) {
           <span className="tp-label">Students</span>
           <input type="number" min="1" max={MAX_AT_ONCE} value={count} onChange={e => setCount(e.target.value)} />
         </label>
-        <button type="submit" className="tp-btn is-primary" disabled={busy || Boolean(problem)}>
-          Add {n === 1 ? 'student' : `${n} students`}
+        <button type="submit" className="tp-btn is-primary has-icon" disabled={busy || Boolean(problem)}>
+          <Icon name="plus" />Add {n === 1 ? 'student' : `${n} students`}
         </button>
       </form>
       <p id="tp-into-note" className={`tp-hint tp-after${problem && name ? ' is-error' : ''}`}>
@@ -292,9 +326,9 @@ function Stepper({ label, value, onDec, onInc, busy }) {
   const times = (e) => (e.shiftKey ? 5 : 1)
   return (
     <span className="tp-stepper">
-      <button type="button" aria-label={`Remove one ${label}`} disabled={busy || value === 0} onClick={e => onDec(times(e))}>−</button>
+      <button type="button" aria-label={`Remove one ${label}`} disabled={busy || value === 0} onClick={e => onDec(times(e))}><Icon name="minus" size={14} /></button>
       <output aria-label={`Count: ${label}`}>{value}</output>
-      <button type="button" aria-label={`Add one ${label}`} disabled={busy} onClick={e => onInc(times(e))}>+</button>
+      <button type="button" aria-label={`Add one ${label}`} disabled={busy} onClick={e => onInc(times(e))}><Icon name="plus" size={14} /></button>
     </span>
   )
 }

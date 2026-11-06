@@ -2,61 +2,9 @@
   "version": "0.0.1",
   "configurations": [
     {
-      "name": "capstone-prototype",
-      "runtimeExecutable": "npm",
-      "runtimeArgs": [
-        "run",
-        "dev"
-      ],
+      "name": "capstone-docker",
+      "url": "http://localhost:5180",
       "port": 5180
-    },
-    {
-      "name": "capstone-prototype-local",
-      "runtimeExecutable": "env",
-      "runtimeArgs": [
-        "VITE_BACKEND=local",
-        "VITE_USE_EMULATORS=false",
-        "npm",
-        "run",
-        "dev",
-        "--",
-        "--port",
-        "5181",
-        "--strictPort"
-      ],
-      "port": 5181
-    },
-    {
-      "name": "capstone-prototype-local-alt",
-      "runtimeExecutable": "env",
-      "runtimeArgs": [
-        "VITE_BACKEND=local",
-        "VITE_USE_EMULATORS=false",
-        "npm",
-        "run",
-        "dev",
-        "--",
-        "--port",
-        "5183",
-        "--strictPort"
-      ],
-      "port": 5183
-    },
-    {
-      "name": "capstone-prototype-local-3",
-      "runtimeExecutable": "env",
-      "runtimeArgs": [
-        "VITE_BACKEND=local",
-        "VITE_USE_EMULATORS=false",
-        "npm",
-        "run",
-        "dev",
-        "--",
-        "--port",
-        "5184",
-        "--strictPort"
-      ],
-      "port": 5184
     },
     {
       "name": "capstone-pwa-preview",
