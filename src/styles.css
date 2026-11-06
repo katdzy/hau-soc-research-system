@@ -1608,3 +1608,56 @@ tbody tr.is-flagged :is(.faint, .muted) { color: var(--ink-muted); }
 .classmate-results { list-style: none; margin: calc(-1 * var(--s1)) 0 0; padding: 0; border: 1px solid var(--rule); border-radius: var(--radius-box); }
 .classmate-results li { display: flex; align-items: center; justify-content: space-between; gap: var(--s2); padding: var(--s1) var(--s2); }
 .classmate-results li + li { border-top: 1px solid var(--rule); }
+
+/* Group drafts: the student's card — four seats on the left, the approval
+   steps beside them (GroupDraft.jsx). Seats keep one height whether or not a
+   row carries a Withdraw button, so the roster reads as a fixed set of four. */
+.draft-grid { display: grid; grid-template-columns: minmax(0, 1fr) 300px; gap: var(--s5); align-items: start; }
+.draft-main { min-width: 0; }
+.draft-steps { border-left: 1px solid var(--rule); padding-left: var(--s4); }
+.draft-steps-h { font-size: 13px; font-weight: 600; letter-spacing: 0; margin-bottom: var(--s2); }
+.draft-steps .trail-step { grid-template-columns: 28px minmax(0, 1fr); }
+.draft-steps .trail-step.is-later .trail-name { color: var(--ink-muted); }
+.draft-steps-foot { margin: var(--s3) 0 0; padding-top: var(--s2); border-top: 1px solid var(--rule); font-size: 12px; color: var(--ink-faint); }
+
+.seats { list-style: none; margin: 0; padding: 0; border-top: 1px solid var(--rule); }
+.seat {
+  display: grid; grid-template-columns: 32px minmax(0, 1fr) auto; align-items: center; gap: 12px;
+  min-height: 56px; padding: var(--s1) 0; border-bottom: 1px solid var(--rule);
+}
+.seat-mark {
+  width: 32px; height: 32px; border-radius: 50%;
+  display: inline-flex; align-items: center; justify-content: center;
+  font: 600 11.5px/1 var(--sans); letter-spacing: .02em;
+}
+.seat.is-joined .seat-mark { background: var(--ink); color: var(--paper); }
+.seat.is-invited .seat-mark { border: 1.5px dashed var(--accent-ink); color: var(--accent-ink); background: var(--accent-wash); }
+.seat.is-open .seat-mark { border: 1.5px dashed var(--rule-strong); color: var(--ink-faint); }
+.seat-who { display: flex; flex-direction: column; min-width: 0; }
+.seat-name { font-weight: 500; font-size: 14px; overflow-wrap: anywhere; }
+.seat.is-open .seat-name { font-weight: 400; color: var(--ink-muted); }
+.seat-state { font-size: 12.5px; color: var(--ink-faint); }
+.seat.is-joined .seat-state { color: var(--ok-ink); }
+.seat.is-invited .seat-state { color: var(--accent-ink); }
+
+.draft .classmate-search { margin-top: var(--s3); }
+.draft-status { margin-top: var(--s3); font-size: 13px; color: var(--ink-muted); max-width: 68ch; }
+.draft-foot {
+  display: flex; align-items: center; justify-content: space-between; gap: var(--s2); flex-wrap: wrap;
+  margin-top: var(--s3); padding-top: var(--s3); border-top: 1px solid var(--rule);
+}
+.seats + .draft-foot, .seats + .draft-status { border-top: 0; padding-top: 0; }
+.draft-submit { display: flex; align-items: center; gap: var(--s2); flex-wrap: wrap; min-width: 0; }
+.draft-submit > span { max-width: 52ch; }
+.leave-confirm { display: flex; align-items: center; gap: var(--s1); flex-wrap: wrap; }
+.ok-text { color: var(--ok-ink); }
+.nowrap { white-space: nowrap; }
+
+@media (max-width: 1080px) {
+  .draft-grid { grid-template-columns: minmax(0, 1fr); gap: var(--s4); }
+  .draft-steps { border-left: 0; padding-left: 0; border-top: 1px solid var(--rule); padding-top: var(--s3); }
+}
+@media (max-width: 600px) {
+  .nowrap { white-space: normal; overflow-wrap: anywhere; }
+  .draft-submit > button { width: 100%; }
+}

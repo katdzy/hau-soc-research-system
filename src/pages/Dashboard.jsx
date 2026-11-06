@@ -6,7 +6,7 @@ import { Section, firstName } from '../components/ui.jsx'
 import { accountType } from '../domain/constants.js'
 import { DeskHead } from './dashboards/parts.jsx'
 import StudentDesk from './dashboards/StudentDesk.jsx'
-import { GroupDraftCard } from '../components/GroupDraft.jsx'
+import { GroupDraftCard, myGroupDraft } from '../components/GroupDraft.jsx'
 import { FLAGS } from '../domain/flags.js'
 import {
   AdviserDesk, PanelDesk, Instructor1Desk, Instructor2Desk, CoordinatorDesk, DeanDesk, UroDesk, AdminDesk,
@@ -62,28 +62,31 @@ const owesLine = (rows) => {
 
 /** An account that holds no role yet: an ungrouped student (T14), or faculty with no assignment. */
 function NoContext() {
-  const { me } = useApp()
+  const { me, snap } = useApp()
   const student = accountType(me.email) === 'Student'
+  const drafts = student && FLAGS.STUDENT_GROUP_DRAFTS
+  const draft = drafts ? myGroupDraft(snap, me) : null
+  const where = !student ? 'You hold no role on a project yet.'
+    : draft?.status === 'Submitted' ? 'Your group is waiting for approval.'
+      : draft?.status === 'Returned' ? 'Your group was returned; see the remarks below.'
+        : draft ? 'Your group is still forming.'
+          : 'You are not in a project group yet.'
   return (
     <div className="page">
-      <DeskHead sub={`Good day, ${firstName(me.name)}. ${student ? 'You are not in a project group yet.' : 'You hold no role on a project yet.'}`} />
-      {student && FLAGS.STUDENT_GROUP_DRAFTS && <GroupDraftCard />}
-      <Section title="What happens next">
+      <DeskHead sub={`Good day, ${firstName(me.name)}. ${where}`} />
+      {drafts && <GroupDraftCard />}
+      {!drafts && <Section title="What happens next">
         <p className="measure m-0">
           {student
-            ? FLAGS.STUDENT_GROUP_DRAFTS
-              ? <>Once the Instructor 1 of your section{me.block ? ` (${me.block})` : ''} approves your group, its
-                workspace, stage, adviser and deadlines appear here. Instructor 1 can also place you in a group.
-                You’ll get an email at {me.email} at each step.</>
-              : <>Students don’t form their own groups. The Instructor 1 of your section
-                {me.block ? ` (${me.block})` : ''} creates the groups and adds you to one. Your group’s
-                workspace, stage, adviser and deadlines appear here once they do, and you’ll get an
-                email at {me.email}.</>
+            ? <>Students don’t form their own groups. The Instructor 1 of your section
+              {me.block ? ` (${me.block})` : ''} creates the groups and adds you to one. Your group’s
+              workspace, stage, adviser and deadlines appear here once they do, and you’ll get an
+              email at {me.email}.</>
             : <>Your account is active. Advising, panel and instructor roles are given per project by the
               Program Chair/Coordinator or an Instructor 1; each one appears here, and under “Acting as”,
               once it is assigned. You’ll get an email at {me.email}.</>}
         </p>
-      </Section>
+      </Section>}
     </div>
   )
 }
