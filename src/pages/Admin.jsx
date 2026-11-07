@@ -36,11 +36,26 @@ function ProgramPill({ u }) {
   return <span className="program-pill" title={programOf(u)}>{programCode(programOf(u))}</span>
 }
 
+/**
+ * Faculty accounts that registered in the last NEW_ACCOUNT_DAYS and are active:
+ * the ones to look at for an office role (S0.3). `needsRole` marks those holding
+ * nothing beyond the base Faculty tag — most keep it that way (advising and
+ * panel roles come from project assignments), so it is a prompt, not a fault.
+ */
+export function newFacultyAccounts(users, now = Date.now()) {
+  const since = now - FLAGS.NEW_ACCOUNT_DAYS * 86400000
+  return (users ?? [])
+    .filter(u => accountType(u.email) === 'Faculty' && u.status === ACCOUNT_STATUS.ACTIVE &&
+      u.createdAt && new Date(u.createdAt).getTime() >= since)
+    .map(u => ({ user: u, needsRole: !(u.globalRoles ?? []).some(r => r !== G.FACULTY) }))
+    .sort((a, b) => new Date(b.user.createdAt) - new Date(a.user.createdAt))
+}
+
 /** Accounts that registered and are not active yet (S0.1–S0.3). */
 export const pendingAccounts = (users) => (users ?? []).filter(u => u.status === ACCOUNT_STATUS.INACTIVE)
 
 // Administration is three pages, each reached from its own link in the rail:
-//   /admin/accounts  Accounts — activation, Global Roles, program scope (S0.3)
+//   /admin/accounts  Accounts — Global Roles, program scope, suspension (S0.3)
 //   /admin/caac      CAAC configuration — permission overrides, tags and policies
 //   /admin/settings  Global settings — the revision countdown (S7.6)
 // None of them gives the System Administrator a manuscript or workflow capability.
@@ -65,7 +80,9 @@ export function AccountsPage() {
     <AdminPage
       cap="admin.accounts" label="User accounts" title="User accounts"
       deny="Account administration belongs to the System Administrator."
-      lede="Activate verified registrations, grant and remove Global Roles, and set each Program Chair/Coordinator’s programs. The System Administrator cannot open a document, approve a gate, sign a form or assign a project role."
+      lede={FLAGS.ACCOUNT_ACTIVATION === 'email'
+        ? 'Grant and remove Global Roles, set each Program Chair/Coordinator’s programs, and suspend or reactivate accounts. An account activates itself when its owner verifies the email. The System Administrator cannot open a document, approve a gate, sign a form or assign a project role.'
+        : 'Activate verified registrations, grant and remove Global Roles, set each Program Chair/Coordinator’s programs, and suspend or reactivate accounts. The System Administrator cannot open a document, approve a gate, sign a form or assign a project role.'}
     >
       <Accounts />
     </AdminPage>
@@ -125,6 +142,8 @@ function Accounts() {
   const [category, setCategory] = useState('')
 
   const users = snap.users ?? []
+  const byEmail = FLAGS.ACCOUNT_ACTIVATION === 'email'
+  const fresh = newFacultyAccounts(users)
   const pending = pendingAccounts(users).sort((a, b) => Number(b.emailVerified) - Number(a.emailVerified))
   const q = query.trim().toLowerCase()
   // Status and search narrow the list first; the pill counts follow them.
@@ -136,12 +155,35 @@ function Accounts() {
 
   return (
     <>
-      <Section title={`Awaiting activation (${pending.length})`}>
-        {pending.length === 0 && <Empty>No registrations are waiting. New accounts appear here after they register.</Empty>}
+      <Section title={`New faculty accounts (${fresh.length})`} className="new-accounts">
+        <p className="small muted m-0 mb-2 measure">
+          Faculty registered in the last {FLAGS.NEW_ACCOUNT_DAYS} days. Each starts
+          as {FLAGS.FACULTY_BASE_IDENTITY ? caacTag(G.FACULTY) : 'no Global Role'}, which grants nothing on its own. Grant an
+          office role if this person is a Dean, Associate Dean, Program Chair/Coordinator, URO or System Administrator;
+          advising, panel and instructor roles come from project assignments, not from here.
+        </p>
+        {fresh.length === 0
+          ? <Empty>No faculty account registered in the last {FLAGS.NEW_ACCOUNT_DAYS} days.</Empty>
+          : (
+            <div className="table-scroll"><table className="cards">
+              <thead>
+                <tr><th>Account</th><th>Global Roles</th><th className="tight">Status</th></tr>
+              </thead>
+              <tbody>
+                {fresh.map(({ user }) => <AccountRow key={user.id} u={user} busy={busy} run={run} registered />)}
+              </tbody>
+            </table></div>
+          )}
+      </Section>
+
+      <Section title={byEmail ? `Waiting for email verification (${pending.length})` : `Awaiting activation (${pending.length})`}>
+        {pending.length === 0 && <Empty>{byEmail
+          ? 'Every registration is verified. New accounts appear here until their owner opens the verification email.'
+          : 'No registrations are waiting. New accounts appear here after they register.'}</Empty>}
         {pending.length > 0 && (
           <div className="table-scroll"><table className="cards">
             <thead>
-              <tr><th>Account</th><th>Type</th><th className="tight">Registered</th><th>Email</th><th className="tight" /></tr>
+              <tr><th>Account</th><th>Type</th><th className="tight">Registered</th><th>Email</th>{!byEmail && <th className="tight" />}</tr>
             </thead>
             <tbody>
               {pending.map(u => (
@@ -159,23 +201,25 @@ function Accounts() {
                       ? <span className="signed">Verified</span>
                       : <span className="faint">Not verified yet — the owner has to use the link in the email</span>}
                   </td>
-                  <td className="tight">
-                    <Act>
-                      <button className="small" disabled={busy || !u.emailVerified}
-                        onClick={() => run(() => setAccountStatus(me, snap, u.id, ACCOUNT_STATUS.ACTIVE))}>
-                        Activate
-                      </button>
-                    </Act>
-                  </td>
+                  {!byEmail && (
+                    <td className="tight">
+                      <Act>
+                        <button className="small" disabled={busy || !u.emailVerified}
+                          onClick={() => run(() => setAccountStatus(me, snap, u.id, ACCOUNT_STATUS.ACTIVE))}>
+                          Activate
+                        </button>
+                      </Act>
+                    </td>
+                  )}
                 </tr>
               ))}
             </tbody>
           </table></div>
         )}
         <p className="faint small mt-2">
-          {FLAGS.ACCOUNT_ACTIVATION === 'email'
-            ? 'An account becomes active as soon as its owner verifies the email; you can suspend it here.'
-            : 'Activation follows email verification: the owner verifies, then you activate the account here.'}
+          {byEmail
+            ? 'Nothing is needed from you here: an account becomes active as soon as its owner verifies the email. '
+            : 'Activation follows email verification: the owner verifies, then you activate the account here. '}
           Student addresses start as {caacTag(G.STUDENT)}; faculty addresses start
           as {FLAGS.FACULTY_BASE_IDENTITY ? caacTag(G.FACULTY) : 'no Global Role'}, which grants nothing
           until an office role or a project assignment is added.
@@ -225,7 +269,7 @@ function Accounts() {
   )
 }
 
-function AccountRow({ u, busy, run }) {
+function AccountRow({ u, busy, run, registered = false }) {
   const { snap, me } = useApp()
   const type = accountType(u.email)
   const options = type === 'Student' ? [G.STUDENT] : OFFICE_ROLES
@@ -241,6 +285,7 @@ function AccountRow({ u, busy, run }) {
         <div className="mono faint text-xs">{u.email}</div>
         <div className="faint small">
           {type}{u.block && ` · ${u.block}`}{u.idNumber && ` · ${u.idNumber}`}{!u.emailVerified && ' · email not verified'}
+          {registered && u.createdAt && ` · registered ${fmtDate(u.createdAt)}`}
         </div>
       </td>
       <td data-label="Global Roles">
@@ -293,17 +338,60 @@ function AccountRow({ u, busy, run }) {
         )}
       </td>
       <td className="tight card-status">
-        {viewOnly
-          ? <Badge tone={STATUS_TONE[u.status]}>{u.status}</Badge>
-          : (
-            <select value={u.status} disabled={busy || u.id === me.id} aria-label={`Status of ${u.name}`}
-              onChange={e => run(() => setAccountStatus(me, snap, u.id, e.target.value))}
-              className={`select-quiet tone-${STATUS_TONE[u.status]}`}>
-              {Object.values(ACCOUNT_STATUS).map(s => <option key={s}>{s}</option>)}
-            </select>
-          )}
+        <StatusControl u={u} busy={busy} run={run} />
       </td>
     </tr>
+  )
+}
+
+/**
+ * An account's status and the one change that makes sense from it: suspend an
+ * active account, reactivate a suspended one. Either asks first — suspending
+ * signs the person out of every role at once (their records stay).
+ */
+function StatusControl({ u, busy, run }) {
+  const { snap, me } = useApp()
+  const viewOnly = useViewOnly()
+  const [asking, setAsking] = useState(false)
+  const byEmail = FLAGS.ACCOUNT_ACTIVATION === 'email'
+  const label = u.status === ACCOUNT_STATUS.INACTIVE && byEmail && !u.emailVerified ? 'Not verified' : u.status
+  const badge = <Badge tone={STATUS_TONE[u.status]}>{label}</Badge>
+  // Back to Active once verified; an unverified account returns to waiting.
+  const back = u.emailVerified ? ACCOUNT_STATUS.ACTIVE : ACCOUNT_STATUS.INACTIVE
+  const change = u.status === ACCOUNT_STATUS.SUSPENDED
+    ? { to: back, verb: 'Reactivate', ask: back === ACCOUNT_STATUS.ACTIVE
+        ? `${u.name} can sign in again with the roles they hold.`
+        : `${u.name} can sign in once they verify their email.` }
+    : u.status === ACCOUNT_STATUS.ACTIVE
+      ? { to: ACCOUNT_STATUS.SUSPENDED, verb: 'Suspend', danger: true,
+          ask: `${u.name} can’t sign in or act in any role until reactivated. Their records stay.` }
+      : !byEmail && u.emailVerified
+        ? { to: ACCOUNT_STATUS.ACTIVE, verb: 'Activate', ask: `${u.name} can sign in with the roles they hold.` }
+        : null
+
+  if (viewOnly || u.id === me.id || !change) {
+    return <div className="status-control">{badge}{u.id === me.id && <span className="faint text-xs">your account</span>}</div>
+  }
+  if (!asking) {
+    return (
+      <div className="status-control">
+        {badge}
+        <button className={`quiet small${change.danger ? ' danger' : ''}`} disabled={busy}
+          aria-label={`${change.verb} ${u.name}`} onClick={() => setAsking(true)}>{change.verb}…</button>
+      </div>
+    )
+  }
+  return (
+    <div className="status-confirm" role="group" aria-label={`${change.verb} ${u.name}`}>
+      <p className="small m-0">{change.ask}</p>
+      <div className="actions">
+        <button className={`small${change.danger ? ' danger' : ' primary'}`} disabled={busy}
+          onClick={() => { setAsking(false); run(() => setAccountStatus(me, snap, u.id, change.to)) }}>
+          {change.verb}
+        </button>
+        <button className="small quiet" disabled={busy} onClick={() => setAsking(false)}>Cancel</button>
+      </div>
+    </div>
   )
 }
 

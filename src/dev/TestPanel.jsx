@@ -723,10 +723,16 @@ function Outbox({ snap, task, busy, readOnly }) {
             </div>
             <p className="tp-mail-text">{m.body}</p>
             {m.link?.kind === 'verify' && !readOnly && (
-              <button type="button" className="tp-btn has-icon" disabled={busy}
-                onClick={() => task(async () => { await verifyEmail(m.link.token); return `Verified ${m.to?.[0]}.` })}>
-                <Icon name="check" />{m.link.label}
-              </button>
+              <div className="tp-mail-actions">
+                {/* Opens the link the way the owner would: the S-16 screen verifies it. */}
+                <a className="tp-btn has-icon" href={`/?verify=${encodeURIComponent(m.link.token)}`}>
+                  <Icon name="check" />{m.link.label}
+                </a>
+                <button type="button" className="tp-btn" disabled={busy}
+                  onClick={() => task(async () => { await verifyEmail(m.link.token); return `Verified ${m.to?.[0]}.` })}>
+                  Verify here
+                </button>
+              </div>
             )}
           </div>
         </li>

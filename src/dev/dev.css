@@ -392,6 +392,14 @@
 .tp-to { overflow-wrap: anywhere; }
 .tp-mail-text { color: var(--tp-muted); font-size: 12.5px; max-width: 70ch; }
 .tp-entry .tp-btn { justify-self: start; margin-top: 4px; }
+.tp-mail-actions { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 4px; }
+.tp-mail-actions .tp-btn { margin-top: 0; }
+/* A link styled as the panel's button (the verification link opens S-16). */
+.tp a.tp-btn {
+  font: 600 12.5px/18px var(--sans); color: var(--tp-ink); text-decoration: none;
+  border: 1px solid var(--tp-line-strong); border-radius: var(--radius); transition: background-color .12s;
+}
+.tp a.tp-btn:hover { background: var(--tp-raise); }
 .tp-action { font: 600 11.5px var(--mono); color: var(--tp-accent); overflow-wrap: anywhere; }
 .tp-change { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 6px; }
 .tp-change > .tp-svg { color: var(--tp-muted); }

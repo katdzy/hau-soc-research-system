@@ -142,7 +142,7 @@ policy after adviser feedback means editing one file.
 
 | Stubbed | In production |
 |---|---|
-| Email | The notification channel — there is no in-app notification list (team decision 2026-09-29). The prototype records each email in the dev outbox; the Firebase build sends it through Resend. |
+| Email | The notification channel — desktop has no in-app notification list (team decision 2026-09-29); phones and tablets have one, the bell in the top bar, listing the same emails (decided 2026-11-07, flag `IN_APP_NOTIFICATIONS`). The prototype records each email in the dev outbox; the Firebase build sends it through Resend. |
 | Device notifications | Revision 2026-10-07 (flag `DEVICE_NOTIFICATIONS`): each email also shows as a phone/desktop notification for recipients who turned them on in the account menu — the same event and text. In production one Cloud Function, `deliverOutbox` (`functions/`, not deployed — needs the Blaze plan), sends each outbox entry as the email (Resend) and the push (FCM); devices register through `registerPushToken` and are removed on sign-out. Until push is configured, the open app shows them itself. iOS needs the app on the Home Screen (16.4+). |
 | Verification email | Shown on screen. Firebase Authentication sends it; passwords are not stored locally. |
 | File upload | File name and size are recorded, no binary. Firebase Cloud Storage holds the PDF. |

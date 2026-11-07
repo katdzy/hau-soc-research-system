@@ -2,6 +2,7 @@ import { Link } from 'react-router-dom'
 import { useApp } from '../../state/AppContext.jsx'
 import { officeQueues } from '../../services/worklist.js'
 import { reportScope } from '../Reports.jsx'
+import { newFacultyAccounts } from '../Admin.jsx'
 import { Badge, Section, fmtDate, fmtDateTime, daysLeft } from '../../components/ui.jsx'
 import { viewBundle } from '../../domain/guard.js'
 import { sectionNow, courseOfStage, uroReturnOutstanding } from '../../domain/stages.js'
@@ -455,10 +456,13 @@ export function AdminDesk({ notice }) {
   const { snap } = useApp()
   const users = snap.users ?? []
   const nameOf = (id) => users.find(u => u.id === id)?.name ?? 'System'
-  // Flag ACCOUNT_ACTIVATION: with 'email' verification alone activates, so what
-  // waits is the owner's verification; with 'email+admin', this office.
+  // Flag ACCOUNT_ACTIVATION: with 'email' verification alone activates, so this
+  // office's part is the role a new faculty account may need (S0.3); with
+  // 'email+admin', the verified registrations it activates.
   const byEmail = FLAGS.ACCOUNT_ACTIVATION === 'email'
-  const toActivate = users.filter(u => u.status === ACCOUNT_STATUS.INACTIVE && (byEmail ? !u.emailVerified : u.emailVerified))
+  const toActivate = users.filter(u => u.status === ACCOUNT_STATUS.INACTIVE && u.emailVerified)
+  const fresh = newFacultyAccounts(users)
+  const toReview = fresh.filter(f => f.needsRole).length
   const changes = (snap.auditLogs ?? []).filter(a => ROLE_ACTIONS[a.action])
     .sort((a, b) => new Date(b.at) - new Date(a.at)).slice(0, 5)
   const overrides = (snap.permissionOverrides ?? []).filter(o => !o.liftedAt).length
@@ -468,17 +472,29 @@ export function AdminDesk({ notice }) {
       <DeskHead notice={notice} sub="Accounts and role setup for the School of Computing" />
       <Stats>
         <Stat label="Total users" n={users.length} to="/admin/accounts" />
-        <Stat label={byEmail ? 'Not yet verified' : 'Waiting for activation'} n={toActivate.length} tone={toActivate.length ? 'accent' : undefined} to="/admin/accounts" />
+        {byEmail
+          ? <Stat label="New faculty, no office role" n={toReview} tone={toReview ? 'accent' : undefined} to="/admin/accounts" />
+          : <Stat label="Waiting for activation" n={toActivate.length} tone={toActivate.length ? 'accent' : undefined} to="/admin/accounts" />}
         <Stat label="Faculty" n={users.filter(u => accountType(u.email) === 'Faculty').length} />
         <Stat label="Students" n={users.filter(u => accountType(u.email) === 'Student').length} />
       </Stats>
       <Columns
         main={<>
-          <Section title={byEmail ? 'Registrations waiting for email verification' : 'New accounts waiting for activation'} aside={<Link className="small" to="/admin/accounts">User Accounts</Link>}>
-            <Feed empty={byEmail ? 'Every registration is verified.' : 'Every verified registration is active.'} items={toActivate.slice(0, 6).map(u => ({
-              key: u.id, title: u.name, sub: `${u.email} · registered ${fmtDate(u.createdAt)}`, chip: [byEmail ? 'Not verified' : 'Needs activation', 'warn'], to: '/admin/accounts',
-            }))} />
-          </Section>
+          {byEmail ? (
+            <Section title={`New faculty accounts · last ${FLAGS.NEW_ACCOUNT_DAYS} days`} aside={<Link className="small" to="/admin/accounts">User Accounts</Link>}>
+              <Feed empty={`No faculty account registered in the last ${FLAGS.NEW_ACCOUNT_DAYS} days.`} items={fresh.slice(0, 6).map(({ user: u, needsRole }) => ({
+                key: u.id, title: u.name, sub: `${u.email} · registered ${fmtDate(u.createdAt)}`,
+                chip: needsRole ? ['No office role', 'warn'] : [(u.globalRoles ?? []).filter(r => r !== G.FACULTY).join(', '), 'neutral'],
+                to: '/admin/accounts',
+              }))} />
+            </Section>
+          ) : (
+            <Section title="New accounts waiting for activation" aside={<Link className="small" to="/admin/accounts">User Accounts</Link>}>
+              <Feed empty="Every verified registration is active." items={toActivate.slice(0, 6).map(u => ({
+                key: u.id, title: u.name, sub: `${u.email} · registered ${fmtDate(u.createdAt)}`, chip: ['Needs activation', 'warn'], to: '/admin/accounts',
+              }))} />
+            </Section>
+          )}
           <Section title="Recent role changes" aside={<Link className="small" to="/audit">Audit Log</Link>}>
             <Feed empty="No role changes recorded yet." items={changes.map(a => ({
               key: a.id, title: ROLE_ACTIONS[a.action], sub: `${nameOf(a.actorId)} · ${fmtDateTime(a.at)}`,

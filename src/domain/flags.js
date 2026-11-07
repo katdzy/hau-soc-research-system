@@ -220,10 +220,28 @@ export const FLAGS = {
    * 'mirror-email' = every email notify() records also shows as a notification
    * on the recipients' phones and tablets, from the installed app only (Figma
    * F04): a general line, never the email's text; a tap opens the project.
-   * Desktop and browser tabs get email only. Still no in-app notification list.
-   * 'off' = email only.
+   * Desktop and browser tabs get email only. The in-app list is a separate
+   * flag (IN_APP_NOTIFICATIONS). 'off' = email only.
    */
   DEVICE_NOTIFICATIONS: 'mirror-email',
+
+  /**
+   * Decided 2026-11-07 · the in-app notification list (the bell in the top
+   * bar) is for phones and tablets only. 'mobile' = the bell shows on a phone
+   * or tablet (browser tab or installed app; browserSupport.isMobile, the same
+   * device test as device notifications); desktop has email alone. It lists
+   * the emails addressed to you (outbox) — email stays the official record.
+   * 'off' = no in-app list anywhere.
+   */
+  IN_APP_NOTIFICATIONS: 'mobile',
+
+  /**
+   * Mockup default · how long a faculty account counts as new on the System
+   * Administrator's desk and the User Accounts page ("New faculty accounts"),
+   * where an office role is granted if the person holds one. Days since it
+   * registered.
+   */
+  NEW_ACCOUNT_DAYS: 14,
 
   /**
    * Figma 06 · phones and tablets in portrait are view only. 'touch-below-1024'
@@ -267,6 +285,8 @@ export const FLAG_NOTES = {
   VERDICT_AFTER_SCHEDULED_TIME: { source: 'NEW-40', kind: 'Decided 2026-09-29', wired: 'stages.js defenseNotHeld → verdict gates, recordVerdict, DefensePanel' },
   REDEFENSE_REVISION_DAYS: { source: 'NEW-41', kind: 'Decided 2026-09-29', wired: 'recordVerdict countdown; stages.js RETURN_TO_*_DEFENSE gates; submitReview' },
   PHONE_VIEW_ONLY: { source: 'Figma 06 (responsive web)', kind: 'Wireframe', wired: 'components/ViewOnly.jsx: <Act> around every action, useAction refuses, ViewOnlyBanner + ☰ menu in Shell, ManuscriptViewer read-only' },
+  NEW_ACCOUNT_DAYS: { source: 'Checklist item 4 (S-26: assign roles to new accounts)', kind: 'Mockup default', wired: 'newFacultyAccounts (Admin.jsx): User Accounts "New faculty accounts", AdminDesk (Desks.jsx)' },
+  IN_APP_NOTIFICATIONS: { source: 'Team, 2026-11-07', kind: 'Decided 2026-11-07', wired: 'Shell.jsx: NotificationCenter in the top bar only when isMobile(currentEnv()) (browserSupport.js)' },
   DEVICE_NOTIFICATIONS: { source: 'Revision 2026-10-07', kind: 'Decided 2026-10-07', wired: 'useOutboxNotifications (notifications.js) in Shell; functions/index.js deliverOutbox + registerPushToken (not deployed); signOut (AppContext) unregisters the device; account-menu switch + lock-screen text (Pwa.jsx NotificationSetting, deviceNotice.js)' },
   VERDICT_CORRECTION_HOURS: { source: 'NEW-42', kind: 'Decided 2026-09-29', wired: 'stages.js verdictCorrectionBlocker, guard correctVerdict, correctVerdict (actions.js), DefensePanel' },
   I2_READINESS_CHECK: { source: 'NEW-43', kind: 'Decided 2026-09-29', wired: 'caac.js readiness.confirm policy, stages.js readinessBlocker + FM-2005 gate, confirmReadiness (actions.js)' },

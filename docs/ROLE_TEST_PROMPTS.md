@@ -159,7 +159,7 @@ Follow the Shared Rules in ROLE_TEST_PROMPTS.md. Read WORKFLOWS.md §2, §3, §4
 Role: Student (Global). Personas: one student in each of G1–G4 (use the stage controls to cover every stage) and the student with no group.
 Goal: polish and test every student action, and confirm each upload lands in the right reviewer's queue.
 
-1. Dashboard — own group only: current stage, what's waiting on them, deadlines/countdown, latest verdict, adviser and panel names, notification list, empty state for the no-group student.
+1. Dashboard — own group only: current stage, what's waiting on them, deadlines/countdown, latest verdict, adviser and panel names, notification list (phones and tablets only: the bell in the top bar; none on desktop), empty state for the no-group student.
 2. Actions — for each, check UI, guard, state change, email, audit:
    S3.1 five topics · S3.5 concept paper · S4.1 drafts/manuscript · S5.3 complete manuscript + presentation video LINK (no video upload) · S5.7 revisions · S6.1 weekly log (FM-AAC-SOC-2003) · S6.3 drafts · S6.6 deployment info (not in the data model — OQ#12; keep it a simple placeholder) · S6.8 export logs · S7.4 final manuscript + link · S8.1 revised manuscript · S9.1 Editor's Certificate · S9.2 Plagiarism Clearance Certificate.
    Validation on both client and guard: PDF only, required fields, valid URL for the video link.

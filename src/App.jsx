@@ -1,8 +1,9 @@
 import { Suspense, lazy } from 'react'
-import { Routes, Route, Navigate } from 'react-router-dom'
+import { Routes, Route, Navigate, useLocation } from 'react-router-dom'
 import { useApp } from './state/AppContext.jsx'
 import Shell from './components/Shell.jsx'
 import SignIn from './pages/SignIn.jsx'
+import VerifyEmail, { verificationLink } from './pages/VerifyEmail.jsx'
 import Dashboard from './pages/Dashboard.jsx'
 import Projects from './pages/Projects.jsx'
 import ProjectWorkspace from './pages/ProjectWorkspace.jsx'
@@ -31,10 +32,14 @@ export default function App() {
 
 function Screens() {
   const { me, ready, snap } = useApp()
+  const { search } = useLocation()
 
   if (!ready) {
     return <div className="page"><p className="muted">Loading workspace…</p></div>
   }
+
+  // The verification link (S-16) opens its own screen, signed in or not.
+  if (verificationLink(search)) return <VerifyEmail key={search} />
 
   if (!me) return <SignIn empty={(snap.users ?? []).length === 0} />
 

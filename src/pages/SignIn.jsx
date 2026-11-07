@@ -1,8 +1,10 @@
 import { useState } from 'react'
+import { useLocation } from 'react-router-dom'
 import { useApp } from '../state/AppContext.jsx'
 import { db, isLiveBackend } from '../backend/index.js'
+import { FLAGS } from '../domain/flags.js'
 import {
-  EMAIL_DOMAINS, PROGRAM_INFO, ACCOUNT_STATUS, COURSES, accountType, normalizeEmail, sectionProblem, courseSchedule, parseSection,
+  EMAIL_DOMAINS, ACCOUNT_STATUS, accountType, normalizeEmail, sectionProblem, parseSection,
 } from '../domain/constants.js'
 import { Field } from '../components/ui.jsx'
 import { registerAccount, confirmProviderVerification, requestPasswordReset } from '../services/api.js'
@@ -34,11 +36,29 @@ const blocksOf = (snap, code) => [...new Set([
   ...(PROGRAM_SECTIONS[code] ?? []),
 ])].sort((a, b) => a.localeCompare(b, undefined, { numeric: true }))
 
+/** The left-hand panel every signed-out screen shares (Figma S-00). */
+export function SignInBrand() {
+  return (
+    <aside className="signin-brand">
+      <img className="crest-img" src={crest} alt="Holy Angel University School of Computing" width="76" height="76" />
+      <div className="inst">Holy Angel University</div>
+      <div className="school">School of Computing</div>
+      <h1>Thesis &amp; Capstone Project Management and Workflow Automation System</h1>
+      <p>For School of Computing students, advisers, panels and offices.</p>
+      <InstallApp className="signin-install" />
+      <p className="foot">Holy Angel University · Angeles City, Pampanga<br />© 2026 School of Computing</p>
+    </aside>
+  )
+}
+
 export default function SignIn({ empty = false }) {
   const { snap, signIn, backendName } = useApp()
-  const [tab, setTab] = useState('register') // 'login' | 'register'
+  // Most visits are returning users, so the card opens on Log in. The
+  // verification screen (VerifyEmail) may also hand over the address.
+  const handoff = useLocation().state
+  const [tab, setTab] = useState(handoff?.tab === 'register' ? 'register' : 'login') // 'login' | 'register' | 'reset'
 
-  const [loginEmail, setLoginEmail] = useState('')
+  const [loginEmail, setLoginEmail] = useState(handoff?.email ?? '')
   const [loginPassword, setLoginPassword] = useState('')
 
   const [reg, setReg] = useState({
@@ -46,7 +66,7 @@ export default function SignIn({ empty = false }) {
     idNumber: '',
     email: '',
     program: PROGRAM_OPTIONS[0].name,
-    block: 'WD-401',
+    block: blocksOf(snap, PROGRAM_OPTIONS[0].code)[0] ?? '',
     password: '',
     confirmPassword: '',
   })
@@ -64,26 +84,27 @@ export default function SignIn({ empty = false }) {
   const [successMsg, setSuccessMsg] = useState('')
   const [loading, setLoading] = useState(false)
 
-  // Forgot password modal state
-  const [showForgotModal, setShowForgotModal] = useState(false)
-  const [forgotEmail, setForgotEmail] = useState('')
-  const [forgotLoading, setForgotLoading] = useState(false)
-  const [forgotMsg, setForgotMsg] = useState('')
-  const [forgotErr, setForgotErr] = useState('')
+  // Password reset: a step inside the card, not a dialog.
+  const [resetEmail, setResetEmail] = useState('')
+  const [resetSent, setResetSent] = useState('')
 
   const isFirebaseMode = backendName === 'firebase'
   const regType = accountType(reg.email)
+  const student = regType !== 'Faculty' // until an address says otherwise, a student
 
   function clear() { setError(''); setSuccessMsg(''); setUnverified(null) }
+  function go(next) { clear(); setResetSent(''); setTab(next) }
 
   /** An account may sign in once its email is verified and it is active (S0.2–S0.4). */
   function admit(user) {
     if (!user) { setError('No account is registered to that institutional address.'); return }
     if (!user.emailVerified) { setError('Verify your email address first — use the link in the verification email.'); return }
     if (user.status !== ACCOUNT_STATUS.ACTIVE) {
-      setError(user.status === ACCOUNT_STATUS.INACTIVE
-        ? 'Your email is verified. The System Administrator still has to activate the account.'
-        : 'That account has been suspended. Contact the System Administrator.')
+      setError(user.status !== ACCOUNT_STATUS.INACTIVE
+        ? 'That account has been suspended. Contact the System Administrator.'
+        : FLAGS.ACCOUNT_ACTIVATION === 'email'
+          ? 'This account is not active yet. Open the link in the verification email, then log in again.'
+          : 'Your email is verified. The System Administrator still has to activate the account.')
       return
     }
     signIn(user.id)
@@ -148,9 +169,11 @@ export default function SignIn({ empty = false }) {
         block: regType === 'Faculty' ? '' : reg.block,
       })
       setSuccessMsg(
-        `Account created for ${email}. Open the verification email to confirm the address` +
-        `${import.meta.env.DEV && !isFirebaseMode ? ' (in this prototype: Dev tools → Outbox)' : ''}. ` +
-        'The System Administrator then activates the account.',
+        `Account created for ${email}. Open the verification email we sent there` +
+        `${import.meta.env.DEV && !isFirebaseMode ? ' (in this prototype: test panel → Outbox)' : ''}` +
+        (FLAGS.ACCOUNT_ACTIVATION === 'email'
+          ? '. The link activates your account; then log in here.'
+          : ' to confirm the address. The System Administrator then activates the account.'),
       )
       setTab('login')
       setLoginEmail(email)
@@ -175,132 +198,86 @@ export default function SignIn({ empty = false }) {
     }
   }
 
-  async function handleForgotPassword(e) {
+  async function handleReset(e) {
     e.preventDefault()
-    setForgotErr('')
-    setForgotMsg('')
-    const email = normalizeEmail(forgotEmail)
-    if (!accountType(email)) {
-      setForgotErr(`Password reset is restricted to ${DOMAINS} institutional addresses.`)
-      return
-    }
-    setForgotLoading(true)
+    clear()
+    const email = normalizeEmail(resetEmail)
+    if (!accountType(email)) { setError(`Password reset is restricted to ${DOMAINS} addresses.`); return }
+    setLoading(true)
     try {
-      if (isFirebaseMode) {
-        await resetPasswordWithFirebase(email)
-      } else {
-        await requestPasswordReset(email)
-      }
-      setForgotMsg(
-        `A password reset link has been dispatched to ${email}. Please check your institutional inbox` +
-        `${import.meta.env.DEV && !isFirebaseMode ? ' (or check Dev Tools → Outbox in this prototype)' : ''}.`
-      )
+      if (isFirebaseMode) await resetPasswordWithFirebase(email)
+      else await requestPasswordReset(email)
+      setResetSent(email)
     } catch (err) {
-      setForgotErr(err.message || 'Unable to send reset email. Contact the SOC administrator.')
+      setError(err.message || 'The reset link could not be sent. Try again in a moment.')
     } finally {
-      setForgotLoading(false)
+      setLoading(false)
     }
   }
 
   const currentProgCode = PROGRAM_OPTIONS.find(p => p.name === reg.program)?.code || 'WD'
   const availableBlocks = blocksOf(snap, currentProgCode)
+  const switchTo = (label, next, lead) => (
+    <p className="signin-switch">
+      {lead}{' '}
+      <button type="button" className="linkish" onClick={() => go(next)}>{label}</button>
+    </p>
+  )
 
   return (
     <div className="signin">
-      <aside className="signin-brand">
-        <img className="crest-img" src={crest} alt="Holy Angel University School of Computing" width="76" height="76" />
-        <div className="inst">Holy Angel University</div>
-        <div className="school">School of Computing</div>
-        <h1>Thesis &amp; Capstone Project Management and Workflow Automation System</h1>
-        <p>For School of Computing students, advisers, panels and offices.</p>
-        <InstallApp className="signin-install" />
-        <p className="foot">Holy Angel University · Angeles City, Pampanga<br />© 2026 School of Computing</p>
-      </aside>
+      <SignInBrand />
 
       <div className="signin-main">
         <div className="signin-card">
           <div className="panel auth-panel">
-            {tab === 'register' ? (
+            {tab === 'register' && (
               <>
                 <h2>Create an account</h2>
                 <p className="signin-sub">
-                  Only @hau.edu.ph and @student.hau.edu.ph institutional emails can register.
+                  Only {DOMAINS} institutional emails can register.
                 </p>
-
-                {successMsg && <p className="note mb-2" role="status">{successMsg}</p>}
 
                 <form onSubmit={handleRegister} noValidate>
                   <Field label="Full name">
-                    <input
-                      type="text"
-                      value={reg.name}
-                      onChange={setField('name')}
-                      placeholder="Juan Dela Cruz"
-                      autoComplete="name"
-                      required
-                    />
-                  </Field>
-
-                  <Field label="Student / employee ID number">
-                    <input
-                      type="text"
-                      value={reg.idNumber}
-                      onChange={setField('idNumber')}
-                      placeholder="[ID number]"
-                    />
+                    <input type="text" value={reg.name} onChange={setField('name')}
+                      placeholder="Juan Dela Cruz" autoComplete="name" required />
                   </Field>
 
                   <Field label="Institutional email address">
-                    <input
-                      type="email"
-                      value={reg.email}
-                      onChange={setField('email')}
-                      placeholder="juan.delacruz@student.hau.edu.ph"
-                      autoComplete="username"
-                      required
-                    />
+                    <input type="email" value={reg.email} onChange={setField('email')}
+                      placeholder="juan.delacruz@student.hau.edu.ph" autoComplete="username" required />
                   </Field>
 
-                  <div className="row">
-                    <Field label="Academic program">
-                      <select value={reg.program} onChange={handleProgramChange}>
-                        {PROGRAM_OPTIONS.map(p => (
-                          <option key={p.code} value={p.name}>{p.label}</option>
-                        ))}
-                      </select>
-                    </Field>
+                  <Field label={student ? 'Student ID number' : 'Employee ID number'}>
+                    <input type="text" value={reg.idNumber} onChange={setField('idNumber')}
+                      inputMode="numeric" autoComplete="off" />
+                  </Field>
 
-                    <Field label="Year level and block (students)">
+                  <Field label="Academic program">
+                    <select value={reg.program} onChange={handleProgramChange}>
+                      {PROGRAM_OPTIONS.map(p => (
+                        <option key={p.code} value={p.name}>{p.label}</option>
+                      ))}
+                    </select>
+                  </Field>
+
+                  {student && (
+                    <Field label="Section" hint="Your year level and block.">
                       <select value={reg.block} onChange={setField('block')}>
                         {availableBlocks.map(b => (
                           <option key={b} value={b}>{b}</option>
                         ))}
-                        <option value="">Not applicable (Faculty)</option>
                       </select>
                     </Field>
-                  </div>
+                  )}
 
                   <div className="row">
-                    <Field label="Password">
-                      <input
-                        type="password"
-                        value={reg.password}
-                        onChange={setField('password')}
-                        placeholder="••••••••••••"
-                        autoComplete="new-password"
-                        required
-                      />
+                    <Field label="Password" hint={isFirebaseMode ? 'At least 6 characters.' : undefined}>
+                      <PasswordInput value={reg.password} onChange={setField('password')} autoComplete="new-password" />
                     </Field>
-
                     <Field label="Confirm password">
-                      <input
-                        type="password"
-                        value={reg.confirmPassword}
-                        onChange={setField('confirmPassword')}
-                        placeholder="••••••••••••"
-                        autoComplete="new-password"
-                        required
-                      />
+                      <PasswordInput value={reg.confirmPassword} onChange={setField('confirmPassword')} autoComplete="new-password" />
                     </Field>
                   </div>
 
@@ -311,68 +288,32 @@ export default function SignIn({ empty = false }) {
                   </button>
                 </form>
 
-                <p className="signin-switch">
-                  Already have an account?{' '}
-                  <button type="button" className="linkish" onClick={() => { setTab('login'); clear() }}>
-                    Sign in
-                  </button>
-                </p>
+                {switchTo('Log in', 'login', 'Already have an account?')}
               </>
-            ) : (
+            )}
+
+            {tab === 'login' && (
               <>
                 <h2>Log in</h2>
-                <p className="signin-sub">
-                  Use your institutional HAU account. Access is restricted to registered School of Computing accounts.
-                </p>
+                <p className="signin-sub">Use the institutional email you registered with.</p>
 
                 {successMsg && <p className="note mb-2" role="status">{successMsg}</p>}
 
                 <form onSubmit={handleSignIn} noValidate>
                   <Field label="Institutional email address">
-                    <input
-                      type="email"
-                      value={loginEmail}
-                      onChange={e => setLoginEmail(e.target.value)}
-                      placeholder="juan.delacruz@student.hau.edu.ph"
-                      autoComplete="username"
-                      required
-                    />
+                    <input type="email" value={loginEmail} onChange={e => setLoginEmail(e.target.value)}
+                      placeholder="juan.delacruz@student.hau.edu.ph" autoComplete="username" required />
                   </Field>
 
                   <Field label="Password">
-                    <input
-                      type="password"
-                      value={loginPassword}
-                      onChange={e => setLoginPassword(e.target.value)}
-                      placeholder="••••••••••••"
-                      autoComplete="current-password"
-                    />
+                    <PasswordInput value={loginPassword} onChange={e => setLoginPassword(e.target.value)} autoComplete="current-password" />
                   </Field>
 
                   <div className="login-links-row">
-                    <button
-                      type="button"
-                      className="linkish login-link"
-                      onClick={() => {
-                        setForgotEmail(loginEmail || '')
-                        setForgotMsg('')
-                        setForgotErr('')
-                        setShowForgotModal(true)
-                      }}
-                    >
+                    <button type="button" className="linkish login-link"
+                      onClick={() => { setResetEmail(loginEmail); go('reset') }}>
                       Forgot password?
                     </button>
-
-                    <div className="login-register-switch">
-                      <span>No account yet? </span>
-                      <button
-                        type="button"
-                        className="linkish login-link"
-                        onClick={() => { setTab('register'); clear() }}
-                      >
-                        Register
-                      </button>
-                    </div>
                   </div>
 
                   {error && <p className="small error-text mb-2" role="alert">{error}</p>}
@@ -383,113 +324,73 @@ export default function SignIn({ empty = false }) {
                   )}
 
                   <button className="primary create-account-btn" type="submit" disabled={loading}>
-                    {loading ? 'Continuing…' : 'Continue'}
+                    {loading ? 'Logging in…' : 'Log in'}
                   </button>
                 </form>
+
+                {switchTo('Create an account', 'register', 'New here?')}
+              </>
+            )}
+
+            {tab === 'reset' && (
+              <>
+                <h2>Reset your password</h2>
+                {resetSent ? (
+                  <>
+                    <p className="signin-sub" role="status">
+                      If an account uses <strong>{resetSent}</strong>, a link to set a new password is on its way.
+                      Check that inbox, including spam
+                      {import.meta.env.DEV && !isFirebaseMode ? ' (in this prototype: test panel → Outbox)' : ''}.
+                    </p>
+                    <button className="primary create-account-btn" type="button" onClick={() => go('login')}>
+                      Back to log in
+                    </button>
+                  </>
+                ) : (
+                  <>
+                    <p className="signin-sub">
+                      Enter your institutional email. We’ll send a link to set a new password.
+                    </p>
+                    <form onSubmit={handleReset} noValidate>
+                      <Field label="Institutional email address">
+                        <input type="email" value={resetEmail} onChange={e => setResetEmail(e.target.value)}
+                          placeholder="juan.delacruz@student.hau.edu.ph" autoComplete="username" autoFocus required />
+                      </Field>
+                      {error && <p className="small error-text mb-2" role="alert">{error}</p>}
+                      <button className="primary create-account-btn" type="submit" disabled={loading}>
+                        {loading ? 'Sending…' : 'Send reset link'}
+                      </button>
+                    </form>
+                    {switchTo('Back to log in', 'login', 'Remembered it?')}
+                  </>
+                )}
               </>
             )}
           </div>
           <p className="signin-help">Trouble signing in? Contact the School of Computing office.</p>
 
-          {/* A live project is never seeded from the browser (AppContext). */}
-          {empty && (isLiveBackend
-            ? <p className="note mt-2">This Firebase project has no accounts yet. Seed it, or run with VITE_BACKEND=local.</p>
-            : import.meta.env.DEV && <p className="note mt-2">No accounts yet. Register one here, or open the test panel (bottom right) and spawn some.</p>)}
+          {/* Only the local store can tell it is empty: signed out, a live
+              project's rules hide every account, so it always looks empty. */}
+          {empty && import.meta.env.DEV && !isLiveBackend && (
+            <p className="note mt-2">No accounts yet. Register one here, or open the test panel (bottom right) and spawn some.</p>
+          )}
         </div>
       </div>
-
-      {showForgotModal && (
-        <div
-          className="modal-backdrop"
-          onClick={(e) => { if (e.target === e.currentTarget) setShowForgotModal(false) }}
-          role="dialog"
-          aria-modal="true"
-          aria-labelledby="forgot-pwd-title"
-        >
-          <div className="modal-dialog forgot-dialog">
-            <div className="modal-header">
-              <div className="modal-title-wrap">
-                <span className="modal-badge">School of Computing</span>
-                <h3 id="forgot-pwd-title">Password Assistance</h3>
-              </div>
-              <button
-                type="button"
-                className="modal-close-btn"
-                onClick={() => setShowForgotModal(false)}
-                aria-label="Close dialog"
-              >
-                ✕
-              </button>
-            </div>
-
-            <div className="modal-body">
-              <p className="forgot-intro">
-                Enter your institutional HAU address (<code>@hau.edu.ph</code> or <code>@student.hau.edu.ph</code>). We will send a secure link to reset your account password.
-              </p>
-
-              {forgotMsg ? (
-                <div className="forgot-success-box" role="status">
-                  <div className="forgot-success-icon" aria-hidden="true">✓</div>
-                  <div>
-                    <strong>Reset Instructions Dispatched</strong>
-                    <p>{forgotMsg}</p>
-                  </div>
-                </div>
-              ) : (
-                <form onSubmit={handleForgotPassword} noValidate>
-                  <Field label="Institutional email address">
-                    <input
-                      type="email"
-                      value={forgotEmail}
-                      onChange={e => setForgotEmail(e.target.value)}
-                      placeholder="juan.delacruz@student.hau.edu.ph"
-                      autoFocus
-                      required
-                    />
-                  </Field>
-
-                  {forgotErr && <p className="small error-text mb-2" role="alert">{forgotErr}</p>}
-
-                  <button className="primary create-account-btn mt-2" type="submit" disabled={forgotLoading}>
-                    {forgotLoading ? 'Sending reset link…' : 'Send password reset link'}
-                  </button>
-                </form>
-              )}
-
-              <div className="forgot-support-card">
-                <h4>Institutional Support &amp; Recovery</h4>
-                <p>If you no longer have access to your inbox or need administrative reset assistance:</p>
-                <ul>
-                  <li><strong>SOC Dean's Office:</strong> <a href="mailto:soc@hau.edu.ph">soc@hau.edu.ph</a></li>
-                  <li><strong>HAU ITSS Helpdesk:</strong> <a href="mailto:itss@hau.edu.ph">itss@hau.edu.ph</a> · SJH Ground Floor</li>
-                </ul>
-                {!isFirebaseMode && (
-                  <p className="forgot-proto-tip">
-                    💡 <strong>Prototype Notice:</strong> In this local prototype environment, authentication is passwordless — you can sign in directly or switch personas using the <em>Demo Panel</em> below.
-                  </p>
-                )}
-              </div>
-            </div>
-
-            <div className="modal-footer">
-              <button
-                type="button"
-                className="quiet"
-                onClick={() => setShowForgotModal(false)}
-              >
-                Back to Sign in
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
     </div>
   )
 }
 
-/** "e.g. WD-401 · Capstone 1 in 4th Year, 1st Semester" for the chosen program. */
-function sectionHint(program) {
-  const info = PROGRAM_INFO.find(p => p.name === program) ?? PROGRAM_INFO[0]
-  const year = info.capstone[COURSES.C1].year
-  return `e.g. ${info.code}-${year}01 · Capstone 1 in ${courseSchedule(info.name, COURSES.C1)}`
+/** A password field with a Show/Hide switch (the dots alone hide typos). */
+function PasswordInput({ value, onChange, autoComplete }) {
+  const [shown, setShown] = useState(false)
+  return (
+    <span className="pw-field">
+      <input type={shown ? 'text' : 'password'} value={value} onChange={onChange}
+        autoComplete={autoComplete} spellCheck={false} autoCapitalize="off" required />
+      <button type="button" className="pw-toggle" aria-pressed={shown}
+        aria-label={shown ? 'Hide password' : 'Show password'} onClick={() => setShown(s => !s)}>
+        {shown ? 'Hide' : 'Show'}
+      </button>
+    </span>
+  )
 }

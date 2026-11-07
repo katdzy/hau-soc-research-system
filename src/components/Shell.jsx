@@ -10,6 +10,7 @@ import { FLAGS } from '../domain/flags.js'
 import { Avatar } from './ui.jsx'
 import { InstallApp, InstallBanner, NotificationSetting } from './Pwa.jsx'
 import { useOutboxNotifications } from '../notifications.js'
+import { currentEnv, isMobile } from '../browserSupport.js'
 import { ViewOnlyBanner } from './ViewOnly.jsx'
 import crest from '../assets/soc-crest.webp'
 import { writePath } from '../services/api.js'
@@ -80,6 +81,8 @@ export default function Shell() {
 
   // Below 860px (phones, tablets upright) the rail moves behind ☰ (Figma R-00p).
   const compact = useMediaQuery('(max-width: 860px)')
+  // The in-app list is for phones and tablets; desktop has email alone (flag IN_APP_NOTIFICATIONS).
+  const [inAppList] = useState(() => FLAGS.IN_APP_NOTIFICATIONS === 'mobile' && isMobile(currentEnv()))
   const here = location.pathname + location.search
   const railFoot = (
     <div className="rail-foot">
@@ -142,7 +145,7 @@ export default function Shell() {
           <span className="brand-short">HAU-SOC Capstone</span>
         </Link>
         <div className="topbar-end">
-          <NotificationCenter me={me} snap={snap} pathname={here} />
+          {inAppList && <NotificationCenter me={me} snap={snap} pathname={here} />}
           <ActingAs acting={acting} contexts={contexts} current={current} openId={openId}
             onChoose={(key) => { choose(key); navigate('/') }} pathname={here} />
           <AccountMenu me={me} pathname={here} onSignOut={() => { signOut(); navigate('/') }} />
@@ -244,9 +247,9 @@ function MenuButton({ pathname, label, children }) {
 }
 
 /**
- * In-App Notification Center:
- * Displays notifications addressed to the current user (from snap.outbox).
- * Persists read/unread states per user in localStorage.
+ * In-app notification list — phones and tablets only (flag IN_APP_NOTIFICATIONS,
+ * decided 2026-11-07): the emails addressed to the current user (snap.outbox).
+ * Read/unread is kept per user on this device in localStorage.
  */
 function NotificationCenter({ me, snap, pathname }) {
   const ref = useDisclosure(pathname)

@@ -3,7 +3,7 @@
  *
  * Every email notify() records in `outbox` also shows as a notification for
  * its recipients — the same events and text as the email, never a second
- * source of truth, and still no in-app list. Two deliveries share one tag (the
+ * source of truth (the in-app list, on phones and tablets only, reads the same outbox). Two deliveries share one tag (the
  * outbox id), so the OS shows each email once:
  *   1. useOutboxNotifications — while the app is open or recently in the
  *      background, a new outbox entry addressed to you is shown from here.

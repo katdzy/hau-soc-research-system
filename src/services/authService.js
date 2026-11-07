@@ -60,6 +60,25 @@ export async function getAuthInstance() {
 }
 
 /**
+ * Sends Firebase's verification email with a "Continue" link back to this app,
+ * where the verification screen (pages/VerifyEmail.jsx, Figma S-16) says the
+ * address is confirmed. Firebase accepts the link only for an authorized
+ * domain (localhost and the hosting domain by default); from anywhere else,
+ * e.g. another PC on the network, the email goes out without it.
+ */
+async function sendVerification(user) {
+  const { sendEmailVerification } = await getAuthInstance()
+  const url = typeof window !== 'undefined' ? `${window.location.origin}/?verified=1` : null
+  if (!url) return sendEmailVerification(user)
+  try {
+    await sendEmailVerification(user, { url })
+  } catch (err) {
+    if (!/unauthorized-continue-uri|invalid-continue-uri|missing-continue-uri/.test(err?.code ?? '')) throw err
+    await sendEmailVerification(user)
+  }
+}
+
+/**
  * Registers a new user with Firebase Authentication and sends an email verification link.
  */
 export async function registerWithFirebase(email, password) {
@@ -68,12 +87,11 @@ export async function registerWithFirebase(email, password) {
     throw new Error(check.error)
   }
 
-  const { auth, createUserWithEmailAndPassword, sendEmailVerification } = await getAuthInstance()
+  const { auth, createUserWithEmailAndPassword } = await getAuthInstance()
   const userCredential = await createUserWithEmailAndPassword(auth, email.trim().toLowerCase(), password)
   const user = userCredential.user
 
-  // Send verification email
-  await sendEmailVerification(user)
+  await sendVerification(user)
   return user
 }
 
@@ -86,7 +104,7 @@ export async function loginWithFirebase(email, password) {
     throw new Error(check.error)
   }
 
-  const { auth, signInWithEmailAndPassword, sendEmailVerification } = await getAuthInstance()
+  const { auth, signInWithEmailAndPassword } = await getAuthInstance()
   const userCredential = await signInWithEmailAndPassword(auth, email.trim().toLowerCase(), password)
   const user = userCredential.user
 
@@ -96,7 +114,7 @@ export async function loginWithFirebase(email, password) {
   return {
     user,
     emailVerified: user.emailVerified,
-    resendVerification: () => sendEmailVerification(user),
+    resendVerification: () => sendVerification(user),
   }
 }
 
@@ -104,8 +122,7 @@ export async function loginWithFirebase(email, password) {
  * Resends the verification email to a Firebase User.
  */
 export async function sendFirebaseEmailVerification(user) {
-  const { sendEmailVerification } = await getAuthInstance()
-  await sendEmailVerification(user)
+  await sendVerification(user)
 }
 
 /**
