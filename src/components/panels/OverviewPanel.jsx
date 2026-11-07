@@ -5,7 +5,7 @@ import {
   addMember, removeMember, assignRole, unassignRole, ASSIGNING_CAPABILITY, assignmentConflict,
 } from '../../services/api.js'
 import { useAction, ActionError } from '../useAction.jsx'
-import { Section, Empty, Badge, Field, fmtDate } from '../ui.jsx'
+import { Section, Empty, Badge, Field, fmtDate, accountNote } from '../ui.jsx'
 import {
   GLOBAL_ROLES as G, ACCOUNT_STATUS, COURSES, accountType, capstone2SectionOf, nextSemester,
 } from '../../domain/constants.js'
@@ -85,9 +85,10 @@ export default function OverviewPanel({ b, ctx, goTo }) {
             <tbody>
               {b.members.map(m => {
                 const u = users.find(x => x.id === m.userId)
+                const note = accountNote(u)
                 return (
-                  <tr key={m.id}>
-                    <td>{u?.name ?? m.userId}</td>
+                  <tr key={m.id} className={note ? 'is-off' : undefined}>
+                    <td>{u?.name ?? m.userId}{note && <span className="off-note">{note}</span>}</td>
                     <td className="mono muted" data-label="Student number">{u?.idNumber || '—'}</td>
                     <td className="small muted" data-label="Year and section">{u?.yearLevel} · {u?.block}</td>
                     <td className="tight">

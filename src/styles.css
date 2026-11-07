@@ -515,6 +515,47 @@ input[type="radio"], input[type="checkbox"] { width: auto; accent-color: var(--a
   font: 600 11px var(--sans); color: var(--ink); background: var(--accent-tint);
   border-radius: 9px; padding: 1px 7px; margin-left: 6px;
 }
+.tab-n.is-quiet { background: var(--surface-sunk); color: var(--ink-muted); font-variant-numeric: tabular-nums; }
+.tabs button[aria-selected="true"] .tab-n.is-quiet { background: var(--rule); color: var(--ink); }
+
+/* --- list toolbar + pagination (User accounts) ------------------------------
+   Search and the program pills sit on one band above the table; the pager
+   closes the box with a rule that runs edge to edge like the table rows. */
+.list-toolbar {
+  display: flex; flex-wrap: wrap; align-items: center; gap: var(--s1) var(--s2);
+  margin: var(--s3) 0 var(--s2);
+}
+.list-search { width: 320px; max-width: 100%; flex: 0 1 320px; }
+.accounts-list > .small.measure + .empty { margin-top: var(--s2); }
+.accounts-table > thead th:first-child { width: 34%; }
+
+.pager {
+  display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: var(--s1) var(--s3);
+  margin: 0 calc(-1 * var(--s3)) calc(-1 * var(--s1)); padding: var(--s2) var(--s3) 0;
+  border-top: 1px solid var(--rule-strong);
+}
+.pager-range { margin: 0; font-size: 13px; color: var(--ink-muted); font-variant-numeric: tabular-nums; }
+.pager-range strong { color: var(--ink); font-weight: 600; }
+.pager-pages { display: flex; align-items: center; gap: 4px; }
+.pager-num, .pager-step {
+  min-width: 34px; height: 34px; padding: 0 var(--s1); font-size: 13px; font-variant-numeric: tabular-nums;
+  border-color: transparent; background: transparent; color: var(--ink-muted);
+}
+.pager-step { padding: 0 12px; font-weight: 500; }
+.pager-num:hover:not(:disabled), .pager-step:hover:not(:disabled) { background: var(--surface-sunk); color: var(--ink); }
+.pager-num[aria-current="page"],
+.pager-num[aria-current="page"]:hover { background: var(--ink); border-color: var(--ink); color: #fff; }
+.pager-gap { min-width: 20px; text-align: center; color: var(--ink-faint); }
+.pager-size { display: inline-flex; align-items: center; gap: var(--s1); font-size: 13px; color: var(--ink-muted); margin: 0; }
+@media (max-width: 860px) {
+  .pager { margin-inline: calc(-1 * var(--s2)); padding-inline: var(--s2); }
+}
+@media (max-width: 600px) {
+  .list-search { flex-basis: 100%; }
+  .pager { justify-content: center; }
+  .pager-range { flex-basis: 100%; text-align: center; }
+  .pager-word, .pager-size { display: none; }
+}
 
 /* --- documents ------------------------------------------------------------ */
 /* Sized by the tab panel, not the viewport: next to the inspector the panel is
@@ -883,6 +924,13 @@ button.linkish:hover:not(:disabled) { background: none; color: var(--accent-ink)
 .desk-grid > aside { display: flex; flex-direction: column; }
 .people-row { display: flex; flex-wrap: wrap; gap: 12px var(--s4); list-style: none; margin: 0; padding: 0; }
 .people-row li { display: flex; align-items: center; gap: 10px; font-size: 13.5px; }
+/* A suspended or not-yet-active account: grayed out, with the reason beside the name. */
+.is-off, .is-off td { color: var(--ink-faint); }
+.is-off .avatar { background: var(--surface-sunk); color: var(--ink-faint); box-shadow: inset 0 0 0 1px var(--rule-strong); }
+.off-note {
+  margin-left: var(--s1); padding: 1px 6px; border: 1px solid var(--rule-strong); border-radius: 4px;
+  font-size: 11px; font-weight: 500; letter-spacing: .02em; color: var(--ink-faint); white-space: nowrap;
+}
 @media (max-width: 1180px) {
   .desk-grid { grid-template-columns: minmax(0, 1fr); }
 }

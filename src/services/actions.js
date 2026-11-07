@@ -26,12 +26,12 @@ import {
 import {
   DOC_STATUS, DOC_TYPES, DECISIONS, FORMS, AI_MILESTONES, AI_DISCLOSURE, AI_PLACEHOLDER_NOTICE, VERDICTS, PROGRAMS,
   GLOBAL_ROLES as G, PROJECT_ROLES as P, PANEL_ROLES, ACCOUNT_STATUS, LINK_TYPES, accountType, normalizeEmail,
-  isVideoLink, isPdfFile, topicsProblem, COURSES, CAPSTONE2_MILESTONES, normalizeSection, parseSection, sectionProblem, yearLevelOf,
+  isVideoLink, isPdfFile, topicsProblem, COURSES, CAPSTONE2_MILESTONES, normalizeSection, parseSection, sectionProblem, yearLevelOf, termProblem,
   EMAIL_DOMAINS,
 } from '../domain/constants.js'
 import {
   stageByKey, stageLabel, stageIndex, resolveNext, staysAtStage, openGates, defenseNotHeld, ADVISER_APPROVERS,
-  adviserApprovalComplete, requiredAdviserApprovers, milestoneStatus, uroReturnOf, uroReturnOutstanding, returnResetsSigning,
+  adviserApprovalComplete, requiredAdviserApprovers, milestoneStatus, uroReturnOf, uroReturnOutstanding, returnResetsSigning, courseOfStage,
 } from '../domain/stages.js'
 import { resolveContext, allowedDocTypes, uploadBlocker, can, CAPABILITIES, PROJECT_POLICIES } from '../domain/caac.js'
 import { SETTINGS_ID, revisionDaysOf, REVISION_DAYS_LIMITS } from '../domain/settings.js'
@@ -1677,6 +1677,167 @@ export async function setProgramScope(actor, _snap, userId, programScope) {
       actorId: me.id, hat, action: 'PROGRAM_SCOPE_CHANGED', entityType: 'users', entityId: userId,
       before: { programScope: user.programScope ?? [] }, after: { programScope: next },
     })
+  })
+}
+
+// --- Sections (revision 2026-11-07, OQ#5) ----------------------------------------
+// The Program Chair/Coordinator sets up the sections of the programs they
+// coordinate and names who teaches each. Teaching a Capstone 1 section is what
+// makes someone Instructor 1 (caac.js `teachesBlock`); a Capstone 2 section's
+// instructor is on record only — Instructor 2 is still assigned per project.
+
+/** The section, if it is in a program `me` coordinates — or a refusal. */
+function sectionInScope(me, snap, sectionId) {
+  const sec = (snap.sections ?? []).find(s => s.id === sectionId)
+  if (!sec) throw new Error('Section not found.')
+  if (!(me.programScope ?? []).includes(sec.program)) throw new Error(`${sec.block} is not in a program you coordinate.`)
+  return sec
+}
+
+/** An instructor must be an active faculty account. */
+function instructorOf(snap, userId) {
+  const u = (snap.users ?? []).find(x => x.id === userId)
+  if (!u || accountType(u.email) !== 'Faculty') throw new Error('Sections are taught by faculty accounts only.')
+  if (u.status !== ACCOUNT_STATUS.ACTIVE) throw new Error(`${u.name}’s account is not active.`)
+  return u
+}
+
+const teachingNotice = (sec, roleNote) => ({
+  type: 'New assignment', event: 'Section assigned',
+  title: `You teach ${sec.block} (${sec.course})`,
+  body: `${sec.term}. ${roleNote}`,
+})
+const roleNoteOf = (sec) => sec.course === COURSES.C1
+  ? 'You are Instructor 1 for its groups: you approve the groups its students draft, or create them yourself.'
+  : 'Instructor 2 is still assigned on each project by the Program Chair/Coordinator.'
+
+export async function createSection(actor, _snap, { block, course, term, instructorId = null } = {}) {
+  const { actor: me, snap, hat } = authorizeInstitution(actor, 'section.manage')
+  if (!Object.values(COURSES).includes(course)) throw new Error('Choose Capstone 1 or Capstone 2.')
+  const problem = sectionProblem(block, null, course)
+  if (problem) throw new Error(problem)
+  const name = normalizeSection(block)
+  const program = parseSection(name).program
+  if (!(me.programScope ?? []).includes(program)) throw new Error(`${name} is not in a program you coordinate.`)
+  const termIssue = termProblem(term)
+  if (termIssue) throw new Error(termIssue)
+  if ((snap.sections ?? []).some(s => s.block === name && s.course === course)) {
+    throw new Error(`${name} (${course}) already exists.`)
+  }
+  const teacher = instructorId ? instructorOf(snap, instructorId) : null
+
+  return perform(`createSection:${name}:${course}`, async () => {
+    const sec = await db.add('sections', {
+      course, block: name, program, yearLevel: yearLevelOf(name), term: String(term).trim(),
+      instructorId: teacher?.id ?? null, createdAt: now(), createdBy: me.id,
+    })
+    await logAudit({
+      actorId: me.id, hat, action: 'SECTION_CREATED', entityType: 'sections', entityId: sec.id,
+      before: null, after: { block: name, course, term: sec.term, instructorId: sec.instructorId },
+    })
+    if (teacher && teacher.id !== me.id) await notify([teacher.id], teachingNotice(sec, roleNoteOf(sec)))
+    return sec
+  })
+}
+
+/**
+ * Name who teaches a section, or nobody (`userId` null). For a Capstone 1
+ * section, the groups still in Capstone 1 move with it: the outgoing
+ * instructor's Instructor 1 seat on each goes to the new one. Groups past the
+ * proposal keep theirs (NEW-6), and clearing the instructor moves nothing.
+ */
+export async function setSectionInstructor(actor, _snap, sectionId, userId = null) {
+  const { actor: me, snap, hat } = authorizeInstitution(actor, 'section.manage')
+  const sec = sectionInScope(me, snap, sectionId)
+  const teacher = userId ? instructorOf(snap, userId) : null
+  if ((sec.instructorId ?? null) === (teacher?.id ?? null)) {
+    throw new Error(teacher ? `${teacher.name} already teaches ${sec.block}.` : `${sec.block} has no instructor already.`)
+  }
+  const handover = sectionHandover(snap, sec, teacher?.id ?? null)
+
+  return perform(`sectionInstructor:${sectionId}`, async () => {
+    await db.update('sections', sectionId, { instructorId: teacher?.id ?? null })
+    await logAudit({
+      actorId: me.id, hat, action: 'SECTION_INSTRUCTOR_CHANGED', entityType: 'sections', entityId: sectionId,
+      before: { instructorId: sec.instructorId ?? null }, after: { instructorId: teacher?.id ?? null },
+      meta: { block: sec.block, course: sec.course, handedOver: handover.map(h => h.projectId) },
+    })
+    for (const h of handover) {
+      const b = bundle(current(), h.projectId)
+      for (const row of h.remove) await db.remove('projectAssignments', row.id)
+      const row = await db.add('projectAssignments', {
+        projectId: h.projectId, userId: teacher.id, roleType: P.INSTRUCTOR_1,
+        status: 'Accepted', assignedAt: now(), assignedBy: me.id,
+      })
+      await record({
+        actor: me, hat, b, action: 'ROLE_ASSIGNED', entityType: 'projectAssignments', entityId: row.id,
+        before: h.remove.length ? { userId: h.remove[0].userId, roleType: P.INSTRUCTOR_1 } : null,
+        after: { userId: teacher.id, roleType: P.INSTRUCTOR_1 },
+        note: `${sec.block} is now taught by ${teacher.name}, who takes over as Instructor 1`,
+      })
+    }
+    const groups = handover.length ? ` ${handover.length === 1 ? 'Its group' : `Its ${handover.length} groups`} in Capstone 1 moved with it.` : ''
+    if (teacher && teacher.id !== me.id) {
+      await notify([teacher.id], teachingNotice(sec, roleNoteOf(sec) + groups))
+    }
+    if (sec.instructorId && sec.instructorId !== me.id) {
+      await notify([sec.instructorId], {
+        type: 'New assignment', event: 'Section reassigned',
+        title: `You no longer teach ${sec.block} (${sec.course})`,
+        body: `${teacher ? `${teacher.name} teaches it now.` : 'It has no instructor for now.'}${groups}`,
+      })
+    }
+  })
+}
+
+/**
+ * The Capstone 1 groups of `sec` whose Instructor 1 seat moves to `toId`: those
+ * still in Capstone 1, where the outgoing instructor holds the seat or nobody does.
+ */
+export function sectionHandover(snap, sec, toId) {
+  if (sec.course !== COURSES.C1 || !toId) return []
+  return (snap.projects ?? [])
+    .filter(p => p.sectionId === sec.id && p.status !== 'Archived' && courseOfStage(p.currentStage) === COURSES.C1)
+    .map(p => {
+      const seats = (snap.projectAssignments ?? []).filter(a => a.projectId === p.id && a.roleType === P.INSTRUCTOR_1)
+      if (seats.some(a => a.userId === toId)) return null
+      const remove = seats.filter(a => a.userId === sec.instructorId)
+      if (seats.length > remove.length) return null // someone else holds it — leave it to them
+      return { projectId: p.id, title: p.title, remove }
+    })
+    .filter(Boolean)
+}
+
+/** Why a section cannot be removed (it is in use), or null. */
+export function sectionInUse(snap, sec) {
+  const groups = (snap.projects ?? []).filter(p => p.sectionId === sec.id).length
+  if (groups) return `${sec.block} has ${groups} group${groups > 1 ? 's' : ''}.`
+  if ((snap.groupDrafts ?? []).some(d => d.sectionId === sec.id && ['Draft', 'Returned', 'Submitted'].includes(d.status))) {
+    return `Students in ${sec.block} are drafting a group.`
+  }
+  const sameName = (snap.sections ?? []).some(s => s.id !== sec.id && s.block === sec.block)
+  const students = sameName ? 0 : (snap.users ?? []).filter(u => accountType(u.email) === 'Student' && u.block === sec.block).length
+  if (students) return `${students} student account${students > 1 ? 's' : ''} list ${sec.block} as their section.`
+  return null
+}
+
+export async function removeSection(actor, _snap, sectionId) {
+  const { actor: me, snap, hat } = authorizeInstitution(actor, 'section.manage')
+  const sec = sectionInScope(me, snap, sectionId)
+  const busy = sectionInUse(snap, sec)
+  if (busy) throw new Error(`${busy} Only an unused section can be removed.`)
+  return perform(`removeSection:${sectionId}`, async () => {
+    await db.remove('sections', sectionId)
+    await logAudit({
+      actorId: me.id, hat, action: 'SECTION_REMOVED', entityType: 'sections', entityId: sectionId,
+      before: { block: sec.block, course: sec.course, term: sec.term, instructorId: sec.instructorId ?? null }, after: null,
+    })
+    if (sec.instructorId && sec.instructorId !== me.id) {
+      await notify([sec.instructorId], {
+        type: 'New assignment', event: 'Section removed',
+        title: `${sec.block} (${sec.course}) was removed`, body: `${me.name} removed the section. You no longer teach it.`,
+      })
+    }
   })
 }
 

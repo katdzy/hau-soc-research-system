@@ -1,6 +1,6 @@
 import { Link } from 'react-router-dom'
 import { useApp } from '../../state/AppContext.jsx'
-import { Badge, Section, Countdown, Avatar, daysLeft, fmtDate, fmtDateTime, verdictTone } from '../../components/ui.jsx'
+import { Badge, Section, Countdown, Avatar, accountNote, daysLeft, fmtDate, fmtDateTime, verdictTone } from '../../components/ui.jsx'
 import ProgressTrail from '../../components/ProgressTrail.jsx'
 import { can, resolveContext, allowedDocTypes } from '../../domain/caac.js'
 import { viewBundle } from '../../domain/guard.js'
@@ -137,9 +137,15 @@ export default function StudentDesk({ r }) {
 
           <Section title="Group members">
             <ul className="people-row">
-              {b.members.map(m => (
-                <li key={m.id}><Avatar name={nameOf(m.userId)} small />{nameOf(m.userId)}</li>
-              ))}
+              {b.members.map(m => {
+                const note = accountNote((snap.users ?? []).find(u => u.id === m.userId))
+                return (
+                  <li key={m.id} className={note ? 'is-off' : undefined}>
+                    <Avatar name={nameOf(m.userId)} small />{nameOf(m.userId)}
+                    {note && <span className="off-note">{note}</span>}
+                  </li>
+                )
+              })}
             </ul>
           </Section>
 

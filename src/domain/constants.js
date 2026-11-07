@@ -240,9 +240,25 @@ export function capstone2SectionOf(value) {
   return `${s.code}-${year}${s.number}`
 }
 
+const TERM = /^AY (\d{4})–(\d{4}), (1st|2nd) Semester$/
+
+/** Why a term does not read like "AY 2026–2027, 1st Semester", or null. */
+export function termProblem(term = '') {
+  const m = TERM.exec(String(term ?? '').trim())
+  if (!m) return 'Enter the term as AY 2026–2027, 1st Semester.'
+  if (Number(m[2]) !== Number(m[1]) + 1) return 'An academic year spans two consecutive years, e.g. AY 2026–2027.'
+  return null
+}
+
+/** The term a date falls in: June onward opens the 1st Semester of a new academic year. */
+export function termOf(date = new Date()) {
+  const y = date.getFullYear()
+  return date.getMonth() >= 5 ? `AY ${y}–${y + 1}, 1st Semester` : `AY ${y - 1}–${y}, 2nd Semester`
+}
+
 /** "AY 2025–2026, 2nd Semester" → "AY 2026–2027, 1st Semester"; 1st → 2nd within the year. */
 export function nextSemester(term = '') {
-  const m = /^AY (\d{4})–(\d{4}), (1st|2nd) Semester$/.exec(term)
+  const m = TERM.exec(term)
   if (!m) return term
   const [from, to] = [Number(m[1]), Number(m[2])]
   return m[3] === '1st' ? `AY ${from}–${to}, 2nd Semester` : `AY ${from + 1}–${to + 1}, 1st Semester`

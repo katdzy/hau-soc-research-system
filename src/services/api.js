@@ -158,6 +158,9 @@ export const runGate = pick('runGate')
 export const setGlobalRoles = pick('setGlobalRoles')
 export const setAccountStatus = pick('setAccountStatus')
 export const setProgramScope = pick('setProgramScope')
+export const createSection = pick('createSection')
+export const setSectionInstructor = pick('setSectionInstructor')
+export const removeSection = pick('removeSection')
 export const revokeCapability = pick('revokeCapability')
 export const liftOverride = pick('liftOverride')
 export const updateRevisionDays = pick('updateRevisionDays')
@@ -170,5 +173,5 @@ export const confirmProviderVerification = pick('confirmProviderVerification')
 // authService.js, confirmProviderVerification).
 export {
   ASSIGNING_ACTION, ASSIGNING_CAPABILITY, assignmentConflict, defenseTypeAt, check, checkSubmission,
-  flagOverdueRevisions, requestPasswordReset, verifyEmail,
+  flagOverdueRevisions, requestPasswordReset, verifyEmail, sectionHandover, sectionInUse,
 } from './actions.js'

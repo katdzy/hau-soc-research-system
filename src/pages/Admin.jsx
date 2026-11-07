@@ -1,12 +1,15 @@
-import { useState } from 'react'
+import { useRef, useState } from 'react'
+import { useSearchParams } from 'react-router-dom'
 import { useApp } from '../state/AppContext.jsx'
 import {
   setGlobalRoles, setAccountStatus, setProgramScope, revokeCapability, liftOverride, updateRevisionDays,
 } from '../services/api.js'
 import { useAction, ActionError } from '../components/useAction.jsx'
-import { Section, Restricted, Empty, Field, Badge, fmtDate, fmtDateTime } from '../components/ui.jsx'
 import {
-  GLOBAL_ROLES as G, PROJECT_ROLES, ACCOUNT_STATUS, PROGRAMS, PROGRAM_INFO, accountType, programCode, parseSection,
+  Section, Restricted, Empty, Field, Badge, Tabs, tabPanelProps, Pagination, paginate, fmtDate, fmtDateTime,
+} from '../components/ui.jsx'
+import {
+  GLOBAL_ROLES as G, PROJECT_ROLES, ACCOUNT_STATUS, PROGRAMS, PROGRAM_INFO, COURSES, accountType, programCode, parseSection,
 } from '../domain/constants.js'
 import {
   CAPABILITIES, PROJECT_POLICIES, INSTITUTION_POLICIES, caacTag, resolveInstitution, can,
@@ -27,6 +30,11 @@ const CATEGORIES = [
   { key: FACULTY_CATEGORY, label: 'Faculty & offices', title: 'Faculty and office accounts' },
 ]
 const programOf = (u) => u.program || parseSection(u.block)?.program || ''
+
+/** The sections an account teaches (Instructor 1 for a Capstone 1 section), by block. */
+export const sectionsTaughtBy = (u, snap) => (snap.sections ?? [])
+  .filter(s => s.instructorId === u.id)
+  .sort((a, b) => String(a.block).localeCompare(String(b.block)))
 const categoryOf = (u) => accountType(u.email) === 'Student'
   ? (programCode(programOf(u)) || 'Unknown') : FACULTY_CATEGORY
 
@@ -105,14 +113,8 @@ export function CaacPage() {
       deny="CAAC configuration belongs to the System Administrator."
       lede="Every permission is a role paired with the context it applies in. Review which tags each account holds and the policies behind them, and revoke a capability from one account where needed. An override can only take a permission away."
     >
-      <div className="tabs" role="tablist" aria-label="CAAC configuration">
-        {tabs.map(t => (
-          <button key={t.key} role="tab" aria-selected={tab === t.key} onClick={() => setTab(t.key)}>
-            {t.label}{t.n > 0 && <span className="tab-n">{t.n}</span>}
-          </button>
-        ))}
-      </div>
-      <div role="tabpanel">
+      <Tabs id="caac" label="CAAC configuration" tabs={tabs} value={tab} onChange={setTab} />
+      <div {...tabPanelProps('caac', tab)}>
         {tab === 'overrides' && overrides && <Overrides />}
         {tab === 'caac' && <TagsAndPolicies />}
       </div>
@@ -134,138 +136,184 @@ export function SettingsPage() {
 
 // --- Accounts ------------------------------------------------------------------
 
+// One list per tab; search and the program pills narrow whichever is open, and
+// each pages separately. The tab is kept in the URL (?tab=new) so it survives a
+// reload and can be linked to.
+const ACCOUNT_TABS = ['all', 'new', 'pending', 'suspended']
+const PAGE_SIZES = [10, 25, 50]
+const byName = (a, b) => String(a.name ?? '').localeCompare(String(b.name ?? ''), undefined, { sensitivity: 'base' })
+
 function Accounts() {
   const { snap, me } = useApp()
   const { run, error, busy } = useAction()
+  const [params, setParams] = useSearchParams()
   const [query, setQuery] = useState('')
-  const [status, setStatus] = useState('')
   const [category, setCategory] = useState('')
+  const [page, setPage] = useState(1)
+  const [size, setSize] = useState(PAGE_SIZES[0])
+  const listTop = useRef(null)
 
+  const tab = ACCOUNT_TABS.includes(params.get('tab')) ? params.get('tab') : 'all'
   const users = snap.users ?? []
   const byEmail = FLAGS.ACCOUNT_ACTIVATION === 'email'
   const fresh = newFacultyAccounts(users)
-  const pending = pendingAccounts(users).sort((a, b) => Number(b.emailVerified) - Number(a.emailVerified))
+  const lists = {
+    all: [...users].sort(byName),
+    new: fresh.map(f => f.user),
+    pending: pendingAccounts(users).sort((a, b) => Number(b.emailVerified) - Number(a.emailVerified) || byName(a, b)),
+    suspended: users.filter(u => u.status === ACCOUNT_STATUS.SUSPENDED).sort(byName),
+  }
+  const facultyOnly = fresh.filter(f => f.needsRole).length
+
   const q = query.trim().toLowerCase()
-  // Status and search narrow the list first; the pill counts follow them.
-  const matching = users.filter(u =>
-    (!status || u.status === status) &&
-    (!q || u.name.toLowerCase().includes(q) || u.email.toLowerCase().includes(q)))
+  const matching = lists[tab].filter(u => !q ||
+    [u.name, u.email, u.block, u.idNumber, ...sectionsTaughtBy(u, snap).map(s => s.block)]
+      .some(v => v && String(v).toLowerCase().includes(q)))
+  // Every new account is faculty, so the program pills only help elsewhere.
+  const showPills = tab !== 'new'
   const count = (key) => matching.filter(u => categoryOf(u) === key).length
-  const shown = matching.filter(u => !category || categoryOf(u) === category)
+  const filtered = matching.filter(u => !showPills || !category || categoryOf(u) === category)
+  const { rows, pages, page: current } = paginate(filtered, page, size)
+
+  const tabs = [
+    { key: 'all', label: 'All accounts', n: lists.all.length, tone: 'quiet' },
+    { key: 'new', label: 'New faculty', n: lists.new.length },
+    { key: 'pending', label: byEmail ? 'Unverified' : 'Awaiting activation', n: lists.pending.length, tone: byEmail ? 'quiet' : undefined },
+    { key: 'suspended', label: 'Suspended', n: lists.suspended.length, tone: 'quiet' },
+  ]
+
+  function openTab(key) {
+    setParams(p => { const n = new URLSearchParams(p); key === 'all' ? n.delete('tab') : n.set('tab', key); return n }, { replace: true })
+    setPage(1)
+  }
+  function goTo(p) {
+    setPage(p)
+    // Back to the top of the list when the next page starts above the fold.
+    const el = listTop.current
+    if (el && el.getBoundingClientRect().top < 0) el.scrollIntoView({ block: 'start' })
+  }
+
+  const intro = {
+    all: <>Every registered account. Project-Based Roles are not granted here: Instructor 1 comes from teaching a
+      Capstone 1 section, which the Program Chair/Coordinator sets under Sections, and the Adviser, panel and
+      Instructor 2 are assigned on each project.</>,
+    new: <>Faculty registered in the last {FLAGS.NEW_ACCOUNT_DAYS} days. Each starts
+      as {FLAGS.FACULTY_BASE_IDENTITY ? caacTag(G.FACULTY) : 'no Global Role'}, which grants nothing on its own —
+      grant an office role only if this person is a Dean, Associate Dean, Program Chair/Coordinator, URO or System
+      Administrator.{lists.new.length > 0 && <> <strong>{facultyOnly} of {lists.new.length}</strong> hold
+      no office role yet.</>}</>,
+    pending: byEmail
+      ? <>Nothing is needed from you here: an account becomes active as soon as its owner opens the verification
+        email. Student addresses start as {caacTag(G.STUDENT)}; faculty addresses
+        as {FLAGS.FACULTY_BASE_IDENTITY ? caacTag(G.FACULTY) : 'no Global Role'}.</>
+      : <>Activation follows email verification: the owner verifies, then you activate the account here.</>,
+    suspended: <>A suspended account can’t sign in or act in any role. Its academic records stay; reactivating
+      restores the roles it held.</>,
+  }
+  const empty = {
+    all: 'No accounts yet. They appear here as people register.',
+    new: `No faculty account registered in the last ${FLAGS.NEW_ACCOUNT_DAYS} days.`,
+    pending: byEmail
+      ? 'Every registration is verified.'
+      : 'No registrations are waiting. New accounts appear here after they register.',
+    suspended: 'No account is suspended.',
+  }
 
   return (
     <>
-      <Section title={`New faculty accounts (${fresh.length})`} className="new-accounts">
-        <p className="small muted m-0 mb-2 measure">
-          Faculty registered in the last {FLAGS.NEW_ACCOUNT_DAYS} days. Each starts
-          as {FLAGS.FACULTY_BASE_IDENTITY ? caacTag(G.FACULTY) : 'no Global Role'}, which grants nothing on its own. Grant an
-          office role if this person is a Dean, Associate Dean, Program Chair/Coordinator, URO or System Administrator;
-          advising, panel and instructor roles come from project assignments, not from here.
-        </p>
-        {fresh.length === 0
-          ? <Empty>No faculty account registered in the last {FLAGS.NEW_ACCOUNT_DAYS} days.</Empty>
+      <Tabs id="accounts" label="Accounts" tabs={tabs} value={tab} onChange={openTab} />
+      <section className="section accounts-list" ref={listTop} {...tabPanelProps('accounts', tab)}>
+        <p className="small muted m-0 measure">{intro[tab]}</p>
+
+        {lists[tab].length > 0 && (
+          <div className="list-toolbar">
+            <input type="search" value={query} onChange={e => { setQuery(e.target.value); setPage(1) }}
+              placeholder="Search name, email, ID or section" aria-label="Search accounts" className="list-search" />
+            {showPills && (
+              <div className="pills m-0" role="group" aria-label="Filter accounts by program">
+                <button type="button" className="pill" aria-pressed={!category} onClick={() => { setCategory(''); setPage(1) }}>
+                  All <span className="pill-n">{matching.length}</span>
+                </button>
+                {CATEGORIES.filter(c => c.key === category || count(c.key) > 0).map(c => (
+                  <button type="button" key={c.key} className="pill" title={c.title} aria-pressed={category === c.key}
+                    onClick={() => { setCategory(category === c.key ? '' : c.key); setPage(1) }}>
+                    {c.label} <span className="pill-n">{count(c.key)}</span>
+                  </button>
+                ))}
+              </div>
+            )}
+          </div>
+        )}
+
+        {lists[tab].length === 0 && <Empty>{empty[tab]}</Empty>}
+        {lists[tab].length > 0 && filtered.length === 0 && (
+          <Empty>
+            No account here matches {q ? <>“{query.trim()}”</> : 'this filter'}{' '}
+            <button type="button" className="linkish" onClick={() => { setQuery(''); setCategory(''); setPage(1) }}>
+              Clear filters
+            </button>
+          </Empty>
+        )}
+
+        {rows.length > 0 && (tab === 'pending'
+          ? <PendingTable rows={rows} byEmail={byEmail} busy={busy} run={run} />
           : (
-            <div className="table-scroll"><table className="cards">
+            <div className="table-scroll"><table className="cards accounts-table">
               <thead>
                 <tr><th>Account</th><th>Global Roles</th><th className="tight">Status</th></tr>
               </thead>
               <tbody>
-                {fresh.map(({ user }) => <AccountRow key={user.id} u={user} busy={busy} run={run} registered />)}
+                {rows.map(u => <AccountRow key={u.id} u={u} busy={busy} run={run} registered={tab === 'new'} />)}
               </tbody>
             </table></div>
-          )}
-      </Section>
-
-      <Section title={byEmail ? `Waiting for email verification (${pending.length})` : `Awaiting activation (${pending.length})`}>
-        {pending.length === 0 && <Empty>{byEmail
-          ? 'Every registration is verified. New accounts appear here until their owner opens the verification email.'
-          : 'No registrations are waiting. New accounts appear here after they register.'}</Empty>}
-        {pending.length > 0 && (
-          <div className="table-scroll"><table className="cards">
-            <thead>
-              <tr><th>Account</th><th>Type</th><th className="tight">Registered</th><th>Email</th>{!byEmail && <th className="tight" />}</tr>
-            </thead>
-            <tbody>
-              {pending.map(u => (
-                <tr key={u.id}>
-                  <td>
-                    <div>{u.name}</div>
-                    <div className="mono faint text-xs">{u.email}</div>
-                  </td>
-                  <td className="small muted" data-label="Type">
-                    <div className="inline">{accountType(u.email)}{u.block && ` · ${u.block}`} <ProgramPill u={u} /></div>
-                  </td>
-                  <td className="tight small faint" data-label="Registered">{fmtDate(u.createdAt)}</td>
-                  <td className="small" data-label="Email">
-                    {u.emailVerified
-                      ? <span className="signed">Verified</span>
-                      : <span className="faint">Not verified yet — the owner has to use the link in the email</span>}
-                  </td>
-                  {!byEmail && (
-                    <td className="tight">
-                      <Act>
-                        <button className="small" disabled={busy || !u.emailVerified}
-                          onClick={() => run(() => setAccountStatus(me, snap, u.id, ACCOUNT_STATUS.ACTIVE))}>
-                          Activate
-                        </button>
-                      </Act>
-                    </td>
-                  )}
-                </tr>
-              ))}
-            </tbody>
-          </table></div>
-        )}
-        <p className="faint small mt-2">
-          {byEmail
-            ? 'Nothing is needed from you here: an account becomes active as soon as its owner verifies the email. '
-            : 'Activation follows email verification: the owner verifies, then you activate the account here. '}
-          Student addresses start as {caacTag(G.STUDENT)}; faculty addresses start
-          as {FLAGS.FACULTY_BASE_IDENTITY ? caacTag(G.FACULTY) : 'no Global Role'}, which grants nothing
-          until an office role or a project assignment is added.
-        </p>
-      </Section>
-
-      <Section
-        title={`All accounts (${shown.length})`}
-        aside={
-          <div className="inline">
-            <select value={status} onChange={e => setStatus(e.target.value)} aria-label="Filter by status" className="select-quiet">
-              <option value="">Every status</option>
-              {Object.values(ACCOUNT_STATUS).map(s => <option key={s}>{s}</option>)}
-            </select>
-            <input type="search" value={query} onChange={e => setQuery(e.target.value)} placeholder="Search name or email" aria-label="Search accounts" className="w-search" />
-          </div>
-        }
-      >
-        <div className="pills" role="group" aria-label="Filter accounts by program">
-          <button className="pill" aria-pressed={!category} onClick={() => setCategory('')}>
-            All <span className="pill-n">{matching.length}</span>
-          </button>
-          {CATEGORIES.map(c => (
-            <button key={c.key} className="pill" title={c.title} aria-pressed={category === c.key}
-              onClick={() => setCategory(category === c.key ? '' : c.key)}>
-              {c.label} <span className="pill-n">{count(c.key)}</span>
-            </button>
           ))}
-        </div>
-        {shown.length === 0 && <Empty>No account matches these filters.</Empty>}
-        <div className="table-scroll"><table className="cards">
-          <thead>
-            <tr><th>Account</th><th>Global Roles</th><th className="tight">Status</th></tr>
-          </thead>
-          <tbody>
-            {shown.map(u => <AccountRow key={u.id} u={u} busy={busy} run={run} />)}
-          </tbody>
-        </table></div>
+
+        <Pagination page={current} pages={pages} total={filtered.length} size={size} sizes={PAGE_SIZES}
+          noun={filtered.length === 1 ? 'account' : 'accounts'}
+          onPage={goTo} onSize={s => { setSize(s); setPage(1) }} />
         <ActionError error={error} />
-        <p className="faint small mt-2">
-          Changing an account’s status never removes its academic records. Project-Based Roles are not
-          granted here: Instructor 1 comes from teaching a Capstone 1 section, and the Adviser, panel and
-          Instructor 2 are assigned by the Program Chair/Coordinator on each project.
-        </p>
-      </Section>
+      </section>
     </>
+  )
+}
+
+function PendingTable({ rows, byEmail, busy, run }) {
+  const { snap, me } = useApp()
+  return (
+    <div className="table-scroll"><table className="cards accounts-table">
+      <thead>
+        <tr><th>Account</th><th>Type</th><th className="tight">Registered</th><th>Email</th>{!byEmail && <th className="tight" />}</tr>
+      </thead>
+      <tbody>
+        {rows.map(u => (
+          <tr key={u.id}>
+            <td>
+              <div>{u.name}</div>
+              <div className="mono faint text-xs">{u.email}</div>
+            </td>
+            <td className="small muted" data-label="Type">
+              <div className="inline">{accountType(u.email)}{u.block && ` · ${u.block}`} <ProgramPill u={u} /></div>
+            </td>
+            <td className="tight small faint" data-label="Registered">{fmtDate(u.createdAt)}</td>
+            <td className="small" data-label="Email">
+              {u.emailVerified
+                ? <span className="signed">Verified</span>
+                : <span className="faint">Not verified yet — the owner has to use the link in the email</span>}
+            </td>
+            {!byEmail && (
+              <td className="tight">
+                <Act>
+                  <button className="small" disabled={busy || !u.emailVerified}
+                    onClick={() => run(() => setAccountStatus(me, snap, u.id, ACCOUNT_STATUS.ACTIVE))}>
+                    Activate
+                  </button>
+                </Act>
+              </td>
+            )}
+          </tr>
+        ))}
+      </tbody>
+    </table></div>
   )
 }
 
@@ -276,6 +324,7 @@ function AccountRow({ u, busy, run, registered = false }) {
   const roles = u.globalRoles ?? []
   const scope = u.programScope ?? []
   const coordinator = roles.includes(G.COORDINATOR)
+  const teaches = sectionsTaughtBy(u, snap)
   const viewOnly = useViewOnly()
 
   return (
@@ -299,7 +348,7 @@ function AccountRow({ u, busy, run, registered = false }) {
               </Act>
             </span>
           ))}
-          {roles.length === 0 && <span className="faint small">none — project roles only</span>}
+          {roles.length === 0 && <span className="faint small">{teaches.length ? 'none' : 'none — project roles only'}</span>}
           {options.some(r => !roles.includes(r)) && !viewOnly && (
             <select value="" disabled={busy} aria-label={`Grant a Global Role to ${u.name}`}
               onChange={e => e.target.value && run(() => setGlobalRoles(me, snap, u.id, [...roles, e.target.value]))}
@@ -333,6 +382,18 @@ function AccountRow({ u, busy, run, registered = false }) {
                   {PROGRAMS.filter(p => !scope.includes(p)).map(p => <option key={p} value={p}>{programCode(p)} — {p}</option>)}
                 </select>
               )}
+            </div>
+          </div>
+        )}
+        {teaches.length > 0 && (
+          <div className="scope">
+            <span className="label">Sections taught</span>
+            <div className="inline">
+              {teaches.map(s => (
+                <span key={s.id} className="tag" title={[s.course, s.term].filter(Boolean).join(' · ')}>
+                  {s.block} · {s.course === COURSES.C1 ? caacTag(PROJECT_ROLES.INSTRUCTOR_1) : s.course}
+                </span>
+              ))}
             </div>
           </div>
         )}

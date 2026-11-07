@@ -52,6 +52,7 @@ export const CONTEXTS = [
     key: 'coordinator', role: G.COORDINATOR, heading: 'Program Chair', global: true,
     nav: [
       { to: '/routing', label: 'Assignments & Routing' },
+      { to: '/sections', label: 'Sections' },
       { to: '/versions', label: 'Version History' },
       { to: '/reports', label: 'Reports' },
     ],

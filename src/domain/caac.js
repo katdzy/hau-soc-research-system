@@ -64,6 +64,7 @@ export const CAPABILITIES = {
   'final.approve': 'Give final approval by signing the Approval Sheet',
   // Institution scope
   'group.create': 'Create project groups for a Capstone 1 block',
+  'section.manage': 'Set up the sections of the programs you coordinate and assign who teaches each',
   'groupdraft.manage': 'Draft a project group with classmates for Instructor 1 to approve',
   'report.generate': 'Generate and export reports',
   'records.search': 'Search and filter the records-table archive',
@@ -114,6 +115,10 @@ const notTheAdviser = cond(
 const acceptsUploads = cond(
   'the current stage accepts submissions',
   env => allowedDocTypes(env.stage, env.bundle).length > 0,
+)
+const coordinatesAProgram = cond(
+  'you coordinate at least one program',
+  env => (env.user.programScope ?? []).length > 0,
 )
 const teachesBlock = cond(
   'you teach a Capstone 1 section this term',
@@ -280,6 +285,10 @@ export const INSTITUTION_POLICIES = [
     g(role, 'records.search', always),
   ]),
   g(G.COORDINATOR, 'report.generate', cond('for the programs you coordinate', () => true)),
+  // Revision 2026-11-07 (OQ#5): the Program Chair/Coordinator sets up each
+  // section and names its instructor; teaching a Capstone 1 section is what
+  // makes someone Instructor 1. The service checks the section's program.
+  g(G.COORDINATOR, 'section.manage', coordinatesAProgram),
   g(G.ADMIN, 'report.generate', always),
   g(G.ADMIN, 'records.manage', always),
   g(G.ADMIN, 'admin.accounts', always),

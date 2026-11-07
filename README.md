@@ -236,7 +236,8 @@ reverse, and each is worth settling in the manuscript.
    Administrator grants Global Roles and can suspend accounts.
 5. **Who assigns Instructor 1 and 2 (#5).** Instructor 1 comes from teaching the block (the
    `sections` collection) and is assigned automatically on group creation; the Program
-   Chair/Coordinator assigns Instructor 2. Assignments are recorded as Accepted.
+   Chair/Coordinator sets up each section and names its instructor (Sections page, revision
+   2026-11-07) and assigns Instructor 2. Assignments are recorded as Accepted.
 6. **Adviser approval.** Either the Dean or the Associate Dean may approve, never their own
    assignment. Both sign the Approval Sheet at the end.
 7. **Stage enum (#9).** Adviser Assignment precedes ideation, per the process.

@@ -12,6 +12,7 @@ import BlankForms from './pages/BlankForms.jsx'
 import Reports from './pages/Reports.jsx'
 import { AccountsPage, CaacPage, SettingsPage } from './pages/Admin.jsx'
 import Audit from './pages/Audit.jsx'
+import Sections from './pages/Sections.jsx'
 import { WorkspaceProvider } from './components/Workspace.jsx'
 import {
   Advisees, WeeklyLogs, Versions, Completed, Panels, Rosters, Defended, Scheduling,
@@ -69,6 +70,7 @@ function Screens() {
         <Route path="defended" element={<Defended />} />
         <Route path="scheduling" element={<Scheduling />} />
         <Route path="routing" element={<Routing />} />
+        <Route path="sections" element={<Sections />} />
         <Route path="adviser-approvals" element={<AdviserApprovals />} />
         <Route path="approvals" element={<Approvals />} />
         <Route path="school" element={<School />} />
