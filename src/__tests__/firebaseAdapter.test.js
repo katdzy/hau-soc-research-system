@@ -10,7 +10,7 @@ const fake = vi.hoisted(() => ({
   listeners: new Map(), // collection → onNext
   attached: 0,          // onSnapshot calls, across re-attaches
   auth: { currentUser: null, authStateReady: async () => {} },
-  onAuth: null,         // the adapter's onAuthStateChanged callback
+  onToken: null,        // the adapter's onIdTokenChanged callback
   commits: [],          // one entry per batch.commit(): the writes it carried
   failNextCommit: false,
 }))
@@ -19,7 +19,7 @@ vi.mock('firebase/app', () => ({ initializeApp: () => ({}) }))
 vi.mock('firebase/auth', () => ({
   getAuth: () => fake.auth,
   connectAuthEmulator: () => {},
-  onAuthStateChanged: (_auth, fn) => { fake.onAuth = fn; return () => {} },
+  onIdTokenChanged: (_auth, fn) => { fake.onToken = fn; return () => {} },
 }))
 vi.mock('firebase/firestore', () => {
   let n = 0
@@ -54,6 +54,11 @@ const deliver = (name, docs, fromCache = false) => fake.listeners.get(name)({
   metadata: { fromCache },
 })
 const tick = () => new Promise(r => setTimeout(r, 5))
+// A signed-in Auth user whose ID token carries `claims` (a fresh iat each read, like a refresh).
+const signedIn = (uid, claims = {}) => ({
+  uid,
+  getIdTokenResult: async () => ({ claims: { user_id: uid, iat: Math.random(), exp: Math.random(), ...claims } }),
+})
 // The adapter starts asynchronously; wait for its listeners, not a fixed delay.
 const started = () => vi.waitFor(() => expect(fake.listeners.size).toBe(COLLECTIONS.length))
 
@@ -132,17 +137,19 @@ describe('firebase adapter', () => {
   })
 
   it('attaches its listeners again when the signed-in account changes, and says when that account has loaded', async () => {
+    const N = COLLECTIONS.length
     db.subscribe(() => {})
     await started()
     COLLECTIONS.forEach(c => deliver(c, []))
     await tick()
-    expect(fake.attached).toBe(COLLECTIONS.length)
+    expect(fake.attached).toBe(N)
 
     // Signing in: the signed-out listeners were refused, so they are attached again.
     let settled = false
-    fake.onAuth({ uid: 'auth1' })
+    fake.auth.currentUser = signedIn('auth1', { email_verified: true })
+    fake.onToken()
     const waiting = db.authSettled('auth1').then(() => { settled = true })
-    expect(fake.attached).toBe(2 * COLLECTIONS.length)
+    await vi.waitFor(() => expect(fake.attached).toBe(2 * N))
     await tick()
     expect(settled).toBe(false)
 
@@ -150,8 +157,36 @@ describe('firebase adapter', () => {
     await waiting
     expect(db.snapshot().users).toEqual([{ id: 'u1', email: 'a@hau.edu.ph' }])
 
-    // The same account again (a token refresh) changes nothing.
-    fake.onAuth({ uid: 'auth1' })
-    expect(fake.attached).toBe(2 * COLLECTIONS.length)
+    // A token refresh that grants the same changes nothing.
+    fake.onToken()
+    await tick()
+    expect(fake.attached).toBe(2 * N)
+  })
+
+  it('attaches again when the same account is verified or its claims change', async () => {
+    const N = COLLECTIONS.length
+    db.subscribe(() => {})
+    await started()
+
+    // Registration signs the account in before its email is verified: the
+    // rules refuse it `sections`, and that listener is never retried.
+    fake.auth.currentUser = signedIn('auth1', { email_verified: false })
+    fake.onToken()
+    await vi.waitFor(() => expect(fake.attached).toBe(2 * N))
+    COLLECTIONS.forEach(c => deliver(c, []))
+
+    // Signing in after opening the link refreshes the token; authSettled
+    // re-attaches before the sign-in goes on, even if no event came yet.
+    fake.auth.currentUser = signedIn('auth1', { email_verified: true })
+    const waiting = db.authSettled('auth1')
+    await vi.waitFor(() => expect(fake.attached).toBe(3 * N))
+    COLLECTIONS.forEach(c => deliver(c, c === 'sections' ? [{ id: 's1', block: 'WD-402' }] : []))
+    await waiting
+    expect(db.snapshot().sections).toEqual([{ id: 's1', block: 'WD-402' }])
+
+    // New custom claims (refreshClaims, claimsSync) count too.
+    fake.auth.currentUser = signedIn('auth1', { email_verified: true, projects: { p1: ['Member'] } })
+    fake.onToken()
+    await vi.waitFor(() => expect(fake.attached).toBe(4 * N))
   })
 })

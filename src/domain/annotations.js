@@ -12,8 +12,8 @@
 //
 // A null position is a general comment on the whole version.
 
-export const MAX_RECTS = 40
-export const MAX_QUOTE = 400
+const MAX_RECTS = 40
+const MAX_QUOTE = 400
 
 const unit = (n) => typeof n === 'number' && Number.isFinite(n) && n >= 0 && n <= 1
 

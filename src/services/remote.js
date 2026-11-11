@@ -28,6 +28,7 @@ export const REMOTE = {
   unassignRole: 'actor',
   submitDocument: 'actor',
   returnToGroup: 'actor',
+  returnAdviserAssignment: 'actor',
   addAnnotation: 'actor',
   submitReview: 'actor',
   submitWeeklyLog: 'actor',

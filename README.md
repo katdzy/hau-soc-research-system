@@ -13,20 +13,24 @@ manuscript and the Capstone 2 knowledge base.
 ## Running it
 
 ```bash
-npm install && npm run dev
+npm install
+npm run dev:local     # in-browser store: no Firebase, credentials or network
 ```
 
-Open http://localhost:5180. No Firebase project, credentials or network are needed — the
-default backend stores everything in the browser. Demo data loads on first run and can be
-restored from **Administration → Reset demo data**.
+Open http://localhost:5180. `npm run dev` follows `.env` instead, which may point at the live
+Firebase project. The app **starts empty** (decision 2026-11-02): there are no pre-made groups,
+students, faculty, panels or admins. Accounts come from registration or from the test panel.
 
 ## Signing in
 
 - **Register / sign in** — domain-restricted to `@hau.edu.ph` and `@student.hau.edu.ph`.
-  Registering sends a verification email with an approval button (shown on screen in the
-  prototype); the account stays Inactive until it is approved. Student addresses receive the
+  Registering sends a verification email (in the local build it lands in the test panel's
+  Outbox); the account stays Inactive until it is approved. Student addresses receive the
   Student role; faculty addresses start with no Global Role. There is no OTP step.
-- **Demo accounts** — one click, no password. Each is labelled with the roles it actually holds.
+- **Test panel** (dev builds only) — the floating bubble on every screen, sign-in included.
+  **Spawn** makes sections, students, groups, faculty and office holders; **People** signs in
+  as any of them and lands on their next step; **Stage** jumps a group to any stage (not on a
+  live project).
 
 ---
 
@@ -55,49 +59,30 @@ The **CAAC Inspector** beside every project workspace lists, for each role you h
 on *this* project at *this* stage — and what the same role would grant under a different context.
 The service layer calls `authorize()` before every write, as each Cloud Function would.
 
-### Personas worth signing in as
-
-| Person | Standing | What to notice |
-|---|---|---|
-| **Dr. Marlon I. Tayag** | Dean · Adviser on Group 2 | Sees Group 2 at Adviser Approval but cannot approve it — he is the Adviser being approved |
-| **Engr. Marites C. Bondoc** | No Global Role · Adviser on one project, Panel Member on another | Full version history on one; latest version only and private notes on the other |
-| **Mr. Chris Almocera** | Program Chair/Coordinator (IT programs) · Adviser on the IoT project | Both dimensions grant on the same project; reports are scoped to his programs |
-| **Asst. Prof. Espinosa** | No Global Role · teaches block WD-4A | Can create groups; loses access to a project once it moves to Capstone 2 |
-| **Ms. Evelyn R. Castro** | University Research Office | Sees a project only while it is at URO Verification |
-
 ---
 
 ## A walkthrough
 
-Group 5 starts at Group Formation. Each row is one sign-in and the step on its worklist.
+Open the test panel → **Spawn** → the starter set, then follow one group. Each step is one
+sign-in from **People**; the dashboard's worklist shows what that account owes.
 
 | # | Sign in as | Do this | What it shows |
 |---|---|---|---|
-| 1 | Espinosa (Instructor 1) | Group 5 → **Forward roster** | Instructors form groups; students don't |
-| 2 | Almocera (Coordinator) | Assign an Adviser → **Route for approval** | Blocked until an Adviser exists |
-| 3 | Tayag or Rivera | **Approve adviser assignment** | Advisers are in place before ideation; no self-approval |
-| 4 | Karl Dungca (Student) | Documents → submit a Topic Proposal and a Concept Paper | Every upload is a new immutable version |
-| 5 | Espinosa | Approve both → **Register the approved topic** | The topic becomes the title; the old one is kept |
-| 6 | Karl → the Adviser → Espinosa | Proposal Manuscript → Adviser approves → **Approve for proposal defense** | Adviser reviews; Instructor 1 gates the defense |
-| 7 | Almocera | Assign Panel Chair and Members → confirm → Defense tab → **Publish schedule** | The Adviser is disabled in the panel picker; the AI summary is generated |
-| 8 | Bondoc, on *Smart Queue* | Documents | Latest version only; the Chair's private note is withheld |
-| 9 | Dr. Santos (Panel Chair) | Defense → **Record verdict** | Only the Chair can; FM-AAC-SOC-2004 issued, countdown starts, notes released |
-| 10 | Lazaro (Instructor 2), on the IoT project | Weekly logs → **Confirm milestones** | The Adviser's recommendation waits for this |
-| 11 | Almocera (Adviser there) | Approve the week 3 log → **Submit FM-AAC-SOC-2005** | Same person, acting through his project role |
-| 12 | Castro (URO), on *Sentiment Analysis* | **Verify certificates and sign** | URO comes before the Dean |
-| 13 | Tayag and Rivera | **Sign the Approval Sheet** | The second signature archives the project with a Pass result |
-| 14 | Reyes (System Administrator) | Audit trail, Administration, Records archive | Every step, attributed; tag assignments and policies |
+| 1 | A student | Draft a group, invite classmates, submit it | Students draft; Instructor 1 approves or returns |
+| 2 | The section's Instructor 1 | Approve the group → **Forward roster** | Authority comes from teaching the section |
+| 3 | Program Chair/Coordinator | Assign an Adviser → route for approval | Blocked until an Adviser exists |
+| 4 | Dean and Associate Dean | Approve the adviser assignment | Nobody approves an assignment that names themselves |
+| 5 | A group member | Documents → Topic Proposal, Concept Paper, Proposal Manuscript | Every upload is a new immutable version |
+| 6 | Adviser, then Instructor 1 | Review, annotate, approve for proposal defense | Annotations sit over the PDF; the file is never changed |
+| 7 | Program Chair/Coordinator | Assign the panel → publish the schedule | The Adviser cannot sit on their own group's panel |
+| 8 | Panel Member, Panel Chair | Read the latest version → **Record verdict** | Private notes stay hidden until the verdict |
+| 9 | Instructor 2, Adviser | Weekly logs, milestones, FM-AAC-SOC-2005 | Same person, different role per project |
+| 10 | University Research Office | Verify the certificates | URO comes before the Dean |
+| 11 | Dean and Associate Dean | Final approval | The project is archived with a Pass result |
+| 12 | System Administrator | Audit trail, Administration | Opens project records, never documents |
 
-Six projects are seeded at different stages:
-
-| Project | Parked at |
-|---|---|
-| Untitled — Group 5 (WD-4A) | Group Formation — walk the whole life cycle |
-| Untitled — Group 2 (WD-4A) | Adviser Approval — the Dean-as-Adviser conflict |
-| Smart Queue Management System | Proposal Defense — private notes, verdict, revision |
-| IoT-Based Laboratory Equipment Tracking | Implementation — weekly logs, milestones, FM-AAC-SOC-2005 |
-| Automated Student Feedback Sentiment Analysis | URO Verification — clearance, signatures, archiving |
-| Barangay Health Records Digitisation Platform | Archived — records archive |
+The §7 scenarios (T1–T21) run on a fixed fixture, the §6 test personas in
+`src/backend/seed.js`, through `npm test`. The app itself never loads that fixture.
 
 ---
 
@@ -114,12 +99,14 @@ Post-Defense Clearance       Final Requirements → URO Verification → Final A
 
 - Verdicts: **minor revisions (7 days)**, **major revisions (14 days)**, or **re-defense**, which
   returns the project to scheduling.
-- FM-AAC-SOC-2004 is signed Panel Chair → Adviser → Panel Members. The Approval Sheet is signed
-  Adviser → Panel → Program Chair/Coordinator → URO → Dean and Associate Dean.
+- Forms (FM-AAC-SOC-2004, FM-AAC-SOC-2005, the Approval Sheet) are signed **outside the system**
+  (revision 2026-10-30): each signatory uploads their signed copy, in the order set in
+  `src/domain/forms.js`. Blank forms are on the `/forms` page.
 - AI summaries (Gemini Flash) are generated automatically when a defense is scheduled, for the
   complete manuscript only, and always carry the AI disclosure label.
-- Cleared projects go to a **records-table archive** searchable by the Dean and Associate Dean.
-  There is no public gallery and no grade.
+- Cleared projects go to a **records-table archive**. The Dean and Associate Dean see the full
+  record; every other signed-in account browses the metadata only. There is no public gallery
+  and no grade.
 
 ## How it is put together
 
@@ -130,8 +117,9 @@ src/domain/forms.js       form signing order
 src/domain/constants.js   roles, verdicts, document types, official forms
 src/services/actions.js   every state change: authorize → write → audit → notify
 src/services/worklist.js  what each user owes the system right now
-src/backend/              swappable data layer (local ↔ Firestore) + demo seed
-src/components/panels/    the six workspace tabs
+src/backend/              swappable data layer (local ↔ Firestore) + the test fixture
+src/components/panels/    the project workspace tabs
+src/dev/                  the test panel (dev builds only)
 ```
 
 The workflow is data: the worklist, timeline, "Next step" panel and blocked-step messages all
@@ -144,11 +132,9 @@ policy after adviser feedback means editing one file.
 |---|---|
 | Email | The notification channel — desktop has no in-app notification list (team decision 2026-09-29); phones and tablets have one, the bell in the top bar, listing the same emails (decided 2026-11-07, flag `IN_APP_NOTIFICATIONS`). The prototype records each email in the dev outbox; the Firebase build sends it through Resend. |
 | Device notifications | Revision 2026-10-07 (flag `DEVICE_NOTIFICATIONS`): each email also shows as a phone/desktop notification for recipients who turned them on in the account menu — the same event and text. In production one Cloud Function, `deliverOutbox` (`functions/`, not deployed — needs the Blaze plan), sends each outbox entry as the email (Resend) and the push (FCM); devices register through `registerPushToken` and are removed on sign-out. Until push is configured, the open app shows them itself. iOS needs the app on the Home Screen (16.4+). |
-| Verification email | Shown on screen. Firebase Authentication sends it; passwords are not stored locally. |
-| File upload | File name and size are recorded, no binary. Firebase Cloud Storage holds the PDF. |
-| AI summary | A labelled placeholder (one seeded summary shows the real structure). The Gemini call is audit-logged. |
-| Digital signature | Name, role and timestamp against the form, in signing order. |
-| PDF annotation | Location is typed (`p. 14, Sampling`) rather than drawn on the page. |
+| Verification email | Recorded in the test panel's Outbox locally. Firebase Authentication sends it; passwords are not stored locally. |
+| File upload | The PDF is kept in the browser (IndexedDB). Firebase Cloud Storage holds it in the Firebase build. |
+| AI summary | A labelled placeholder unless `VITE_GEMINI_API_KEY` is set on a dev server; the Gemini call is audit-logged. Production builds never carry the key, and on the server (`act`) it is always the placeholder. |
 
 ## Switching to Firebase
 
@@ -171,7 +157,7 @@ The app container ignores `.env` for the backend and points at the emulators (pr
 Dependencies live in Docker volumes and reinstall on their own when `package.json` or a lock
 file changes; rerun `docker compose up --build` only after changing a Dockerfile.
 Emulator data is saved to `.emulator-data/` on a clean stop (`docker compose down` or Ctrl+C)
-and reloaded next time; delete the folder to start from the seed again.
+and reloaded next time; delete the folder to start empty again.
 
 **On another PC (Windows, macOS or Linux)** — the only thing to install is
 [Docker Desktop](https://www.docker.com/products/docker-desktop/) (on Windows, with the WSL 2
@@ -238,13 +224,12 @@ reverse, and each is worth settling in the manuscript.
    `sections` collection) and is assigned automatically on group creation; the Program
    Chair/Coordinator sets up each section and names its instructor (Sections page, revision
    2026-11-07) and assigns Instructor 2. Assignments are recorded as Accepted.
-6. **Adviser approval.** Either the Dean or the Associate Dean may approve, never their own
-   assignment. Both sign the Approval Sheet at the end.
+6. **Adviser approval.** The Dean and the Associate Dean both approve, in any order (flag
+   `ADVISER_APPROVAL`), never their own assignment.
 7. **Stage enum (#9).** Adviser Assignment precedes ideation, per the process.
 8. **Verdicts (#10).** Minor revisions, major revisions, re-defense — no plain "Passed" or "Failed".
 9. **Block and year level (#11).** Students carry `block` and `yearLevel`; blocks live in a
    `sections` collection that is not in the 17-entity ERD.
 10. **Entity → collection mapping (#8).** Documented at the top of `src/backend/schema.js`.
 
-Seed data uses the real names recorded for Instructor 1, the Program Coordinator and the Dean.
-Every other name is invented filler — edit `src/backend/seed.js` before any demo outside the team.
+Where this list and `docs/WORKFLOWS.md` disagree, `WORKFLOWS.md` is the source of truth.

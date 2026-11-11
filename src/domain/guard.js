@@ -16,7 +16,7 @@ import {
   resolveContext, can, why, isActiveAccount, denialOf, PROJECT_POLICIES, AccessDenied,
 } from './caac.js'
 import {
-  STAGES, stageIndex, verdictCorrectionBlocker, milestoneBlocker, readinessBlocker, uroReturnBlocker, postDefenseBlocker,
+  STAGES, stageIndex, adviserReturnBlocker, verdictCorrectionBlocker, milestoneBlocker, readinessBlocker, uroReturnBlocker, postDefenseBlocker,
 } from './stages.js'
 import { canSign } from './forms.js'
 import { DOC_STATUS, REVIEWABLE_TYPES, PROJECT_ROLES as P, PANEL_ROLES, COURSES } from './constants.js'
@@ -55,12 +55,17 @@ export const ACTIONS = {
     cap: 'review.return', docStates: AWAITING_DECISION,
     check: docCheck(AWAITING_DECISION, 'A decision has already been recorded on this version'),
   },
-  // Private panel notes after the verdict (OQ#3). The AI summary stays guard-only (R12).
+  // Private panel notes after the verdict (OQ#3).
   viewPrivatePanelNotes: { cap: 'annotation.viewReleased' },
   viewAiSummary: { cap: 'ai.view' },
 
   manageRoster: { cap: 'roster.manage' },
   assignAdviser: { cap: 'adviser.assign' },
+  // S2.2 return path (NEW-7, flag ADVISER_RETURN_PATH).
+  returnAdviser: {
+    cap: 'adviser.return',
+    check: (t, b, user) => adviserReturnBlocker(b, user),
+  },
   assignPanel: { cap: 'panel.assign' },
   assignInstructor2: { cap: 'instructor2.assign' },
   scheduleDefense: { cap: 'defense.schedule' },
@@ -111,9 +116,6 @@ export const ACTIONS = {
   // Stage gates — one action per gate, named after the gate.
   ...Object.fromEntries(STAGES.flatMap(s => s.gates.map(gate => [gate.action, { cap: gate.capability, gate: true }]))),
 }
-
-/** Gate actions and the stage-machine gate they belong to. */
-export const gateAction = (gate) => gate.action
 
 export { AccessDenied }
 
@@ -172,11 +174,6 @@ export function allowedActions(roleHat, stage, docState = null) {
     .map(([name]) => name)
 }
 
-/** Every role hat × stage row, for the dev tools and the report. */
-export function allowedActionsTable(roleHats) {
-  return roleHats.flatMap(hat => STAGES.map(s => ({ hat, stage: s.key, actions: allowedActions(hat, s.key) })))
-}
-
 // --- Reads -------------------------------------------------------------------
 
 /**
@@ -185,7 +182,7 @@ export function allowedActionsTable(roleHats) {
  * the Program Chair/Coordinator confirms it (S5.1). Until then an assignment is
  * a proposal, not a fact the students are told.
  */
-export function assignmentVisibleToGroup(a, stage) {
+function assignmentVisibleToGroup(a, stage) {
   const at = stageIndex(stage)
   if (a.roleType === P.ADVISER) return at > stageIndex('ADVISER_APPROVAL')
   if (PANEL_ROLES.includes(a.roleType)) return at > stageIndex('PANEL_ASSIGNMENT')
@@ -222,8 +219,11 @@ export function viewBundle(user, b) {
   const ids = new Set(documents.map(d => d.id))
   // A group member who holds no role on the project sees the group's view.
   const groupView = ctx.isMember && ctx.projectRoles.length === 0
+  // NEW-7: why an adviser assignment was returned is for the offices that route and approve it.
+  const seesReturns = ['adviser.assign', 'adviser.approve', 'adviser.return'].some(cap => can(ctx, cap))
   return {
     ...b,
+    project: seesReturns || !b.project.adviserReturns?.length ? b.project : { ...b.project, adviserReturns: [] },
     assignments: groupView
       ? b.assignments.filter(a => assignmentVisibleToGroup(a, b.project.currentStage))
       : b.assignments,

@@ -36,7 +36,7 @@ const enabled = FLAGS.DEVICE_NOTIFICATIONS !== 'off'
  * otherwise why it cannot (browserSupport.notificationSupport): 'desktop' | 'needs-install'
  * (a browser tab) | 'ios-too-old' | 'in-app' | 'unsupported'; or 'off' (the flag).
  */
-export function notificationStatus() {
+function notificationStatus() {
   if (!enabled) return 'off'
   const support = notificationSupport(currentEnv())
   return support === 'ready' ? Notification.permission : support
@@ -44,7 +44,7 @@ export function notificationStatus() {
 
 // Turned off with the account menu's switch: this account, this device.
 const OFF_KEY = (userId) => `hausoc.notify.off.${userId}`
-export const turnedOff = (userId) => { try { return localStorage.getItem(OFF_KEY(userId)) === '1' } catch { return false } }
+const turnedOff = (userId) => { try { return localStorage.getItem(OFF_KEY(userId)) === '1' } catch { return false } }
 const setTurnedOff = (userId, off) => {
   try { off ? localStorage.setItem(OFF_KEY(userId), '1') : localStorage.removeItem(OFF_KEY(userId)) } catch { /* private mode */ }
 }
@@ -74,7 +74,7 @@ const askPermission = () => new Promise(done => {
 const urlFor = (mail) => (mail.projectId ? `/projects/${mail.projectId}` : '/')
 
 /** Show one outbox entry. Through the service worker where there is one (Android requires it). */
-export async function showMailNotification(mail, text = lockScreenText(mail)) {
+async function showMailNotification(mail, text = lockScreenText(mail)) {
   if (notificationStatus() !== 'granted') return
   const { title } = text
   const options = {

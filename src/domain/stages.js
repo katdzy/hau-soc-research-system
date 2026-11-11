@@ -27,7 +27,7 @@ export { uroReturnOf, uroReturnOutstanding }
 
 // Offices whose approval the adviser assignment needs (NEW-7, flag ADVISER_APPROVAL).
 export const ADVISER_APPROVERS = [G.DEAN, G.ASSOCIATE_DEAN]
-export const adviserApprovalsOf = (b) => b.project.adviserApprovals ?? {}
+const adviserApprovalsOf = (b) => b.project.adviserApprovals ?? {}
 /**
  * The offices whose approval this assignment needs. NEW-5 (decided 2026-09-29,
  * Prompt 5): an office named as the Adviser may not approve itself
@@ -44,6 +44,22 @@ export const adviserApprovalComplete = (b) => {
   const done = required.filter(r => adviserApprovalsOf(b)[r])
   return FLAGS.ADVISER_APPROVAL === 'either' ? done.length > 0 : done.length === required.length
 }
+
+/**
+ * NEW-7 (flag ADVISER_RETURN_PATH): why `user` may not return this adviser
+ * assignment now, or null. An office that has already approved it keeps its
+ * approval; only an office still deciding sends it back.
+ */
+export function adviserReturnBlocker(b, user) {
+  if (!FLAGS.ADVISER_RETURN_PATH) return 'Returning an adviser assignment is switched off.'
+  if (b.project.currentStage !== 'ADVISER_APPROVAL') return 'Only an assignment waiting for approval can be returned.'
+  const mine = ADVISER_APPROVERS.find(r => (user?.globalRoles ?? []).includes(r))
+  if (mine && adviserApprovalsOf(b)[mine]) return 'You have already approved this assignment.'
+  return null
+}
+/** The return the Program Chair/Coordinator is still answering (back at Adviser Assignment), or null. */
+export const adviserReturnOf = (b) =>
+  b.project.currentStage === 'ADVISER_ASSIGNMENT' ? (b.project.adviserReturns ?? []).at(-1) ?? null : null
 
 const has = (list, pred) => list.some(pred)
 
@@ -67,7 +83,7 @@ export function defenseNotHeld(defense, at = Date.now()) {
 }
 
 /** NEW-41: the project is revising for a re-defense (the last verdict of this type was Re-defense). */
-export const inRedefense = (b, type) => lastDefense(b, type)?.verdict === VERDICTS.REDEFENSE
+const inRedefense = (b, type) => lastDefense(b, type)?.verdict === VERDICTS.REDEFENSE
 
 /**
  * NEW-42 (flag VERDICT_CORRECTION_HOURS): why this recorded verdict can no
@@ -259,7 +275,7 @@ export const STAGES = [
     key: 'GROUP_FORMATION',
     label: 'Group Formation',
     phase: PHASES.IDEATION,
-    blurb: 'Instructor 1 creates the group from their block and forwards the roster to the Program Chair/Coordinator. Students do not form their own groups.',
+    blurb: 'Students draft their group and Instructor 1 approves it — or Instructor 1 forms it from the block — then Instructor 1 forwards the roster to the Program Chair/Coordinator.',
     gates: [{
       action: 'ENDORSE_ROSTER',
       label: 'Forward roster to the Program Chair/Coordinator',
@@ -652,7 +668,7 @@ export const STAGES = [
 // Each fine-grained key belongs to one stage of the WORKFLOWS.md §3.0 stage
 // machine. With PROPOSAL_REVISION = 'sub-status' (NEW-3) the proposal
 // revision period is part of Proposal Defense.
-export const MACRO_STAGES = {
+const MACRO_STAGES = {
   GROUP_FORMATION: 'Group Formation',
   ADVISER_ASSIGNMENT: 'Adviser Assignment',
   ADVISER_APPROVAL: 'Adviser Assignment',
@@ -681,10 +697,6 @@ if (FLAGS.PROPOSAL_REVISION === 'sub-status') {
 export const stageByKey = (key) => STAGES.find(s => s.key === key)
 export const stageIndex = (key) => STAGES.findIndex(s => s.key === key)
 export const stageLabel = (key) => stageByKey(key)?.label ?? key
-
-/** Stage keys from `from` to `to`, inclusive. */
-export const stageRange = (from, to) =>
-  STAGES.slice(stageIndex(from), stageIndex(to) + 1).map(s => s.key)
 
 export const phaseStages = (...phases) =>
   STAGES.filter(s => phases.includes(s.phase)).map(s => s.key)

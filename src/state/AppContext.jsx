@@ -5,6 +5,7 @@ import { getSessionUserId, setSessionUserId } from './session.js'
 import { flagOverdueRevisions } from '../services/api.js'
 import { unregisterDevice } from '../services/push.js'
 import { followClaims } from '../services/claims.js'
+import { nameProjects } from '../domain/groupNames.js'
 
 const AppCtx = createContext(null)
 
@@ -23,7 +24,11 @@ export function AppProvider({ children }) {
   const [ready, setReady] = useState(false)
   const [userId, setUserId] = useState(getSessionUserId)
 
-  useEffect(() => db.subscribe((next) => { setSnap(next); setReady(true) }), [])
+  // Groups without a topic yet read as "WD-401-2", not "Untitled" (domain/groupNames.js).
+  useEffect(() => db.subscribe((next) => {
+    setSnap(next?.projects ? { ...next, projects: nameProjects(ensureArray(next.projects)) } : next)
+    setReady(true)
+  }), [])
 
   // Firebase build: refresh the ID token whenever the rules' claims change.
   useEffect(() => { followClaims() }, [])

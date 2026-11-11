@@ -26,7 +26,7 @@ export const BLANK_FORMS = [
   return { ...f, url: url ?? null, fileName: path?.split('/').pop() ?? null }
 })
 
-export const blankOf = (code) => BLANK_FORMS.find(f => f.code === code) ?? null
+const blankOf = (code) => BLANK_FORMS.find(f => f.code === code) ?? null
 
 export function BlankFormLink({ code, className = 'btn small', children }) {
   const blank = blankOf(code)

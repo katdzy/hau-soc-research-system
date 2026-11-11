@@ -11,6 +11,7 @@ import {
   AI_DISCLOSURE, REVISION_WINDOW_DAYS, CAPSTONE2_MILESTONES,
 } from '../domain/constants.js'
 import { STAGES, stageIndex, ADVISER_APPROVERS } from '../domain/stages.js'
+import { isUntitled } from '../domain/groupNames.js'
 import { FLAGS } from '../domain/flags.js'
 
 const DAY = 864e5
@@ -27,7 +28,7 @@ export const ALTERNATE_TOPICS = [
 ]
 
 // Default faculty used when a role must exist and the caller named nobody.
-export const DEFAULT_ROLE_HOLDERS = {
+const DEFAULT_ROLE_HOLDERS = {
   [P.INSTRUCTOR_1]: 'f_bravo',
   [P.ADVISER]: 'f_charlie',
   [P.PANEL_CHAIR]: 'f_foxtrot',
@@ -168,7 +169,7 @@ export function applyStage(store, projectId, target, opts = {}) {
   const patch = {
     currentStage: target, status: target === 'ARCHIVED' ? 'Archived' : 'Active',
     archiveResult: null, archivedAt: null, revisionClass: null, revisionDeadline: null, revisionStatus: null,
-    milestonesConfirmedAt: null, milestonesConfirmedBy: null, milestones: {}, adviserApprovals: {}, adviserOffices: [],
+    milestonesConfirmedAt: null, milestonesConfirmedBy: null, milestones: {}, adviserApprovals: {}, adviserOffices: [], adviserReturns: [],
     readinessConfirmedAt: null, readinessConfirmedBy: null, postDefenseConfirmedAt: null, postDefenseConfirmedBy: null, uroReturns: [],
     topicRegisteredAt: null, topicRegisteredBy: null,
   }
@@ -194,7 +195,7 @@ export function applyStage(store, projectId, target, opts = {}) {
   }
 
   if (past('TOPIC_PROPOSAL')) {
-    const title = project.title.startsWith('Untitled') ? (opts.title ?? `Registered topic for ${project.block}`) : project.title
+    const title = isUntitled(project) ? (opts.title ?? `Registered topic for ${project.block}`) : project.title
     // S3.1 — five topics in one version; S3.3 — Instructor 1 approves one.
     const topics = [title, ...ALTERNATE_TOPICS]
     const topic = doc(DOC_TYPES.TOPIC_PROPOSAL, DOC_STATUS.APPROVED, { title: 'Five proposed topics', topics })

@@ -31,10 +31,15 @@ let fb = null
 let starting = null
 // The rules decide what each account may read, and Firestore never retries a
 // listener they refused (signed out, every collection is). So the listeners
-// are attached again whenever the signed-in account changes; `authUid` is the
-// account they were last attached for, `settling` who waits for that load.
+// are attached again whenever what the ID token grants changes — another
+// account, or the same one once its email is verified or its claims change
+// (a new account is signed in unverified, and `sections` refused it until a
+// switch of account re-attached). `authUid` is the account they were last
+// attached for, `access` that token's grants, `settling` who waits for the load.
 let listeners = []
 let authUid
+let access = null
+let auth = null
 const settling = new Set()
 
 // Writes made inside `transaction` are staged here and committed as one
@@ -124,17 +129,38 @@ async function start() {
   fb = { app, db, ...firestore }
 
   // Wait for Auth to restore a saved session, so a reload reads as that account.
-  const { auth, onAuthStateChanged } = await (await import('../services/authService.js')).getAuthInstance()
+  const authModule = await (await import('../services/authService.js')).getAuthInstance()
+  auth = authModule.auth
   await auth.authStateReady()
-  authUid = auth.currentUser?.uid ?? null
-  listen()
-  onAuthStateChanged(auth, (user) => {
-    const uid = user?.uid ?? null
-    if (uid === authUid) return
-    authUid = uid
+  await syncAccess()
+  // Sign-in, sign-out and every token refresh; most refreshes change nothing.
+  authModule.onIdTokenChanged(auth, () => { syncAccess() })
+  return fb
+}
+
+/** The parts of the signed-in ID token firestore.rules read (account, verified email, claims). */
+async function accessOf(user) {
+  if (!user) return ''
+  try {
+    const { exp, iat, auth_time, firebase, ...claims } = (await user.getIdTokenResult()).claims
+    return JSON.stringify([user.uid, Object.keys(claims).sort().map(k => [k, claims[k]])])
+  } catch {
+    return user.uid // offline: the next refresh brings the rest
+  }
+}
+
+// One check at a time, each for whoever is signed in when it runs.
+let syncing = Promise.resolve()
+function syncAccess() {
+  syncing = syncing.then(async () => {
+    const user = auth.currentUser
+    const next = await accessOf(user)
+    if (next === access) return
+    access = next
+    authUid = user?.uid ?? null
     listen()
   })
-  return fb
+  return syncing
 }
 
 const init = () => (fb ? Promise.resolve(fb) : (starting ??= start()))
@@ -184,6 +210,7 @@ export const firebaseAdapter = {
    */
   async authSettled(uid = null) {
     await init()
+    await syncAccess() // a token refreshed just now (e.g. verified) re-attaches first
     if (authUid === uid && isReady()) return
     await new Promise((resolve) => {
       const w = { uid, resolve }

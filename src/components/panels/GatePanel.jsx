@@ -9,6 +9,7 @@ import { formOf, lineMethod } from '../../domain/forms.js'
 import { Act } from '../ViewOnly.jsx'
 import { Field } from '../ui.jsx'
 import { SignedCopyField, signedCopyReady } from '../FormFiles.jsx'
+import ForwardRosterDialog from './ForwardRoster.jsx'
 
 const TAB_LABEL = { defense: 'Defense', documents: 'Documents', logs: 'Weekly logs', forms: 'Forms & signatures', overview: 'Overview' }
 
@@ -72,7 +73,9 @@ export default function GatePanel({ b, ctx, goTo }) {
                       Continue in the {TAB_LABEL[gate.handledIn]} tab
                     </button>
                   </div>
-                : <GateAction gate={gate} b={b} busy={busy}
+                : gate.action === 'ENDORSE_ROSTER'
+                  ? <ForwardRosterAction b={b} />
+                  : <GateAction gate={gate} b={b} busy={busy}
                     onRun={(extra) => run(() => runGate(me, snap, b.project.id, { ...gate, ...extra }))} />}
             </Act>}
             <ActionError error={error} />
@@ -80,6 +83,17 @@ export default function GatePanel({ b, ctx, goTo }) {
         )
       })}
     </>
+  )
+}
+
+/** Forwarding the roster opens the two-step confirmation (ForwardRoster.jsx). */
+function ForwardRosterAction({ b }) {
+  const [open, setOpen] = useState(false)
+  return (
+    <div className="actions mt-2">
+      <button className="primary" onClick={() => setOpen(true)}>Review and forward to the Program Chair…</button>
+      {open && <ForwardRosterDialog groups={[b]} onClose={() => setOpen(false)} />}
+    </div>
   )
 }
 

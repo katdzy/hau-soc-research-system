@@ -190,14 +190,7 @@ export const programByCode = (code) => PROGRAM_INFO.find(p => p.code === String(
 export const programCode = (name) => programInfo(name)?.code ?? name
 
 const ORDINAL = { 1: '1st', 2: '2nd', 3: '3rd', 4: '4th' }
-export const yearLabel = (year) => `${ORDINAL[year] ?? year} Year`
-export const semesterLabel = (semester) => `${ORDINAL[semester] ?? semester} Semester`
-
-/** When a program takes a course, e.g. "4th Year, 1st Semester". */
-export function courseSchedule(program, course) {
-  const at = programInfo(program)?.capstone[course]
-  return at ? `${yearLabel(at.year)}, ${semesterLabel(at.semester)}` : ''
-}
+const yearLabel = (year) => `${ORDINAL[year] ?? year} Year`
 
 // Sections are named program code - year level - two-digit number: WD-401,
 // WD-402 … and CS-301 (Capstone 1) → CS-401 (Capstone 2).

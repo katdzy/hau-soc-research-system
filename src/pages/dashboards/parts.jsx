@@ -6,9 +6,14 @@ import { Badge, Section, daysLeft, programShort, fmtDate, fmtDateTime } from '..
 import { can } from '../../domain/caac.js'
 import { canDo, viewBundle } from '../../domain/guard.js'
 import { FLAGS } from '../../domain/flags.js'
-import { STAGES, openGates, sectionNow, courseOfStage, milestoneStatus, stageLabel } from '../../domain/stages.js'
+import { STAGES, openGates, sectionNow, courseOfStage, milestoneStatus, stageLabel, adviserReturnOf } from '../../domain/stages.js'
 import { ExportMenu } from '../../components/Export.jsx'
 import { GroupDraftReview } from '../../components/GroupDraft.jsx'
+import ForwardRosterDialog from '../../components/panels/ForwardRoster.jsx'
+import { Act } from '../../components/ViewOnly.jsx'
+import { owedBy } from '../../services/worklist.js'
+
+export { owedBy }
 import {
   ACCOUNT_STATUS, DOC_STATUS, DOC_TYPES, COURSES, FORMS, CAPSTONE2_MILESTONES, accountType, programCode,
 } from '../../domain/constants.js'
@@ -31,17 +36,6 @@ export const isOverdue = (p) => p.revisionStatus === 'Overdue' || (daysLeft(p.re
 const sum = (list) => list.reduce((n, t) => n + (t.n ?? 1), 0)
 
 /** Work a context owes across its rows: gates its role can act on, and tasks filed under it. */
-export function owedBy(rows, hats) {
-  return rows.flatMap(r => [
-    ...r.gates.filter(g => hats.includes(g.hat)).map(g => ({
-      r, key: g.gate.action, label: g.gate.label, blocker: g.blocker, tab: g.gate.handledIn, ready: !g.blocker,
-    })),
-    ...r.tasks.filter(t => hats.includes(t.hat)).map((t, i) => ({
-      r, key: `t${i}`, label: t.label, tab: t.tab, ready: true, urgent: t.urgent, kind: t.kind, n: t.n,
-    })),
-  ])
-}
-
 export const countKind = (rows, hats, kind) =>
   sum(rows.flatMap(r => r.tasks.filter(t => hats.includes(t.hat) && t.kind === kind)))
 
@@ -235,6 +229,9 @@ export function QueueSection({ q, rows }) {
                     <div className="faint small">{steps.filter(x => x.done).length} of {steps.length} {steps.length === 2 ? 'approvals' : 'steps'} done</div>
                   )}
                   {verifies && <VerifyList r={r} types={verifies} />}
+                  {q.name === 'Needs adviser' && adviserReturnOf(r.bundle) && (
+                    <div className="small tone-warn">Returned by the {adviserReturnOf(r.bundle).hat}</div>
+                  )}
                 </td>
                 <td className="tight"><Link className="btn small" to={itemLink(r, tab)}>Open</Link></td>
               </tr>
@@ -469,6 +466,9 @@ export function BlockDesk({ section, rows }) {
     .filter(u => accountType(u.email) === 'Student' && u.block === section.block && u.status === ACCOUNT_STATUS.ACTIVE)
   const ungrouped = roster.filter(u => !grouped.has(u.id))
   const queue = reviewQueue(groups, me)
+  // Groups this instructor can forward now (Figma S-22 "Send groups to Program Chair").
+  const forwardable = groups.filter(r => r.gates.some(g => g.gate.action === 'ENDORSE_ROSTER'))
+  const [forwarding, setForwarding] = useState(false)
 
   return (
     <section className="section" aria-labelledby={`blk-${section.id}`}>
@@ -544,8 +544,24 @@ export function BlockDesk({ section, rows }) {
               )}
             </>
           )}
+
+          {/* Figma S-22 · Roster actions */}
+          <div className="roster-actions">
+            <h3 className="label group-sub">Roster actions</h3>
+            <Act>
+              <button type="button" className="primary" disabled={!forwardable.length} onClick={() => setForwarding(true)}>
+                Send groups to Program Chair{forwardable.length ? ` (${forwardable.length})` : ''}
+              </button>
+            </Act>
+            <p className="small muted m-0 mt-1">
+              {forwardable.length
+                ? `Review and forward ${forwardable.length === 1 ? 'the group' : `${forwardable.length} groups`} at Group Formation. The Program Chair then assigns an adviser, which the Associate Dean and the Dean approve.`
+                : 'Groups appear here once they are formed. Forwarded groups go on to adviser assignment.'}
+            </p>
+          </div>
         </aside>
       </div>
+      {forwarding && <ForwardRosterDialog groups={forwardable.map(r => r.bundle)} onClose={() => setForwarding(false)} />}
     </section>
   )
 }

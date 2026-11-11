@@ -43,9 +43,6 @@ export const FLAGS = {
    */
   ADVISER_APPROVAL: 'both',
 
-  /** OQ#5 · Mockup default. No accept/decline step for the Adviser. Not wired (off = nothing to do). */
-  ADVISER_ACCEPT_STEP: false,
-
   /**
    * NEW-2 · Mockup default. Who schedules the PROPOSAL defense:
    * G.COORDINATOR | P.INSTRUCTOR_1 | P.INSTRUCTOR_2.
@@ -59,14 +56,7 @@ export const FLAGS = {
    */
   PROPOSAL_REVISION: 'sub-status',
 
-  /**
-   * NEW-4 · Mockup default — FEATURE NOT BUILT YET (R12). The stub that exists
-   * generates the summary when the defense schedule is published; it is left as is.
-   * Not wired.
-   */
-  AI_SUMMARY_TRIGGER: 'auto-on-complete-manuscript-at-defense-milestone',
-
-  /** OQ#2 · Mockup default — FEATURE NOT BUILT YET (R12). Guard-only: who may read the AI summary. */
+  /** OQ#2 · Mockup default. Who may read the AI summary. */
   AI_SUMMARY_AUDIENCE: [P.ADVISER, P.PANEL_CHAIR, P.PANEL_MEMBER],
 
   /**
@@ -101,11 +91,16 @@ export const FLAGS = {
    */
   PC_PROGRAM_VISIBILITY: 'summary-outside-pc-steps',
 
-  /** NEW-10 · Mockup default. Number of URO review levels. 1 = one verify step (current behaviour). */
-  URO_REVIEW_LEVELS: 1,
-
   /** NEW-7 · Mockup default. URO can return the project to the group with remarks (S9.4). */
   URO_RETURN_PATH: true,
+
+  /**
+   * NEW-7 · Mockup default. The Dean or Associate Dean can return an adviser
+   * assignment to the Program Chair/Coordinator with remarks (S2.2) instead of
+   * leaving it unapproved. Approvals already given are cleared; the PC changes
+   * the Adviser (or keeps them) and routes it again.
+   */
+  ADVISER_RETURN_PATH: true,
 
   // --- Decided 2026-09-29 (Prompt 0): keep the current behaviour ----------------
 
@@ -121,9 +116,6 @@ export const FLAGS = {
 
   /** NEW-6. What Instructor 1 keeps after routing to Capstone 2: 'none' | 'read-only'. */
   I1_ACCESS_AFTER_ROUTING: 'none',
-
-  /** NEW-6. The proposal panel carries over to the final defense (PC may still change it). */
-  SAME_PANEL_BOTH_DEFENSES: true,
 
   /** OQ#5. Who assigns Instructor 2. */
   INSTRUCTOR_2_ASSIGNER: G.COORDINATOR,
@@ -263,22 +255,19 @@ export const FLAG_NOTES = {
   STUDENT_GROUP_DRAFTS: { source: 'Team, 2026-10-30 (replaces Decision 17)', kind: 'Decided 2026-10-30', wired: 'caac.js groupdraft.manage; group drafts (actions.js); GroupDraftCard (dashboard), GroupDraftReview (Groups & Rosters)' },
   ACCOUNT_ACTIVATION: { source: 'OQ#4', kind: 'Decided 2026-10-30', wired: 'markVerified, confirmProviderVerification, setAccountStatus (actions.js); SignIn admit; Shell badge and AdminDesk' },
   ADVISER_APPROVAL: { source: 'NEW-7', kind: 'Mockup default', wired: 'APPROVE_ADVISER gate (stages.js, actions.js)' },
-  ADVISER_ACCEPT_STEP: { source: 'OQ#5', kind: 'Mockup default', wired: 'not wired (off)' },
   PROPOSAL_DEFENSE_SCHEDULER: { source: 'NEW-2', kind: 'Mockup default', wired: 'caac.js defense.schedule policy' },
   PROPOSAL_REVISION: { source: 'NEW-3', kind: 'Mockup default', wired: 'stages.js label / macro stage' },
-  AI_SUMMARY_TRIGGER: { source: 'NEW-4', kind: 'Mockup default · feature not built (R12)', wired: 'not wired' },
-  AI_SUMMARY_AUDIENCE: { source: 'OQ#2', kind: 'Mockup default · feature not built (R12)', wired: 'caac.js ai.view policy (guard)' },
+  AI_SUMMARY_AUDIENCE: { source: 'OQ#2', kind: 'Mockup default', wired: 'caac.js ai.view policy (guard)' },
   PANEL_NOTES_RELEASE: { source: 'OQ#3', kind: 'Mockup default', wired: 'guard.js canViewAnnotation; recordVerdict (actions.js) sets releasedAt' },
   VERDICT_VALUES: { source: 'OQ#10', kind: 'Mockup default', wired: 'constants.js VERDICTS' },
   REVISION_DAYS: { source: 'S7.6', kind: 'Mockup default', wired: 'starting value for settings.js revisionDaysOf → recordVerdict, DefensePanel; Admin can change it' },
   WEEKLY_LOG_SIGNER: { source: 'OQ#7', kind: 'Mockup default', wired: 'caac.js weeklylog.sign policy' },
   PC_PROGRAM_VISIBILITY: { source: 'NEW-11', kind: 'Mockup default', wired: 'caac.js Program Chair project.view' },
-  URO_REVIEW_LEVELS: { source: 'NEW-10', kind: 'Mockup default', wired: '1 = current single URO gate' },
+  ADVISER_RETURN_PATH: { source: 'NEW-7', kind: 'Mockup default', wired: 'caac.js adviser.return policy, stages.js adviserReturnBlocker, returnAdviserAssignment (actions.js), AdviserReturn panel, Needs adviser queue' },
   URO_RETURN_PATH: { source: 'NEW-7', kind: 'Mockup default', wired: 'caac.js uro.return policy, returnToGroup (actions.js), UroReview panel' },
   BLOCK_SELF_APPROVAL: { source: 'NEW-5', kind: 'Decided 2026-09-29', wired: 'caac.js notTheAdviser; stages.js requiredAdviserApprovers (other office approves alone)' },
   BLOCK_ADVISER_ON_PANEL: { source: 'NEW-5 / T19', kind: 'Decided 2026-09-29', wired: 'assignmentConflict (actions.js)' },
   I1_ACCESS_AFTER_ROUTING: { source: 'NEW-6', kind: 'Decided 2026-09-29', wired: 'caac.js Instructor 1 project.view' },
-  SAME_PANEL_BOTH_DEFENSES: { source: 'NEW-6', kind: 'Decided 2026-09-29', wired: 'current behaviour (assignments persist)' },
   INSTRUCTOR_2_ASSIGNER: { source: 'OQ#5', kind: 'Decided 2026-09-29', wired: 'caac.js instructor2.assign policy' },
   PERMISSION_OVERRIDES: { source: '§4 Sys Admin (NEW-19)', kind: 'Decided 2026-09-29', wired: 'caac.js overridesFor / evaluate, revokeCapability (actions.js), Admin page' },
   GROUP_SIZE: { source: 'Team, 2026-09-29', kind: 'Decided 2026-09-29', wired: 'addMember (actions.js), Overview and section desk counts' },

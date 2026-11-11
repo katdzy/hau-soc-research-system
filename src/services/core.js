@@ -88,7 +88,7 @@ export async function perform(key, fn, prepare) {
   }
 }
 
-export const userById = (snap, id) => (snap.users ?? []).find(u => u.id === id) ?? null
+const userById = (snap, id) => (snap.users ?? []).find(u => u.id === id) ?? null
 export const nameOf = (snap, id) => userById(snap, id)?.name ?? 'Unknown user'
 
 export const latestOf = (b, docType) =>

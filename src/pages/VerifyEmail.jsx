@@ -3,7 +3,7 @@ import { useLocation, useNavigate } from 'react-router-dom'
 import { useApp } from '../state/AppContext.jsx'
 import { verifyEmail } from '../services/api.js'
 import { FLAGS } from '../domain/flags.js'
-import { SignInBrand } from './SignIn.jsx'
+import { SignInBrand, SignInMain, VerifySteps } from './SignIn.jsx'
 
 // The verification link lands here (Figma S-16, WORKFLOWS S0.2).
 //   ?verify=<token>  the local build's link (outbox / test panel): verified here
@@ -47,8 +47,7 @@ export default function VerifyEmail() {
   return (
     <div className="signin">
       <SignInBrand />
-      <div className="signin-main">
-        <div className="signin-card">
+      <SignInMain>
           <div className="panel auth-panel verify-panel" aria-live="polite">
             {state.step === 'checking' && (
               <>
@@ -58,6 +57,7 @@ export default function VerifyEmail() {
             )}
             {state.step === 'done' && (
               <>
+                <VerifySteps verified />
                 <span className="verify-mark is-ok" aria-hidden="true">
                   <svg viewBox="0 0 24 24" width="22" height="22"><path d="M5 12.5 10 17l9-10" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" /></svg>
                 </span>
@@ -79,8 +79,8 @@ export default function VerifyEmail() {
                 </span>
                 <h2>This link didn’t work</h2>
                 <p className="signin-sub">
-                  {state.message} If you already verified, just log in. Otherwise log in and use
-                  “Resend verification email” to get a new link.
+                  {state.message} If you already verified, just log in. Otherwise log in with your
+                  email and password — you’ll be offered a new link.
                 </p>
                 <button className="primary create-account-btn" type="button" onClick={toLogin}>
                   {me ? 'Go to your dashboard' : 'Go to log in'}
@@ -88,8 +88,7 @@ export default function VerifyEmail() {
               </>
             )}
           </div>
-        </div>
-      </div>
+      </SignInMain>
     </div>
   )
 }

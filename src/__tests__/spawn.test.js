@@ -1,6 +1,6 @@
 // The test panel's spawner (src/dev/spawn.js): accounts and groups made on
 // demand must be ones the real workflow accepts.
-import { it, expect, beforeEach } from 'vitest'
+import { describe, it, expect, beforeEach } from 'vitest'
 import { db } from '../backend/index.js'
 import { emptyStore } from '../backend/schema.js'
 import { applyStage } from '../backend/stageBuilder.js'
@@ -173,4 +173,23 @@ it('spawn: students go into the section you name, which is made (with its instru
   expect(() => spawnStudentsInBlock(s, 'CS-401', COURSES.C1)).toThrow(/3rd Year/)
   expect(() => spawnStudentsInBlock(s, 'XX-401', COURSES.C1)).toThrow(/program code/)
   expect(() => spawnStudentsInBlock(s, 'WD-401', COURSES.C1, 0)).toThrow(/at least one/)
+})
+
+describe('dummy account details', () => {
+  it('students get a unique student number from their entry year; faculty an employee number', async () => {
+    const { starterStore, spawnStudent, spawnFaculty, spawnOffice } = await import('../dev/spawn.js')
+    let s = starterStore().store ?? starterStore()
+    const sec = Object.values(s.sections).find(x => x.block?.startsWith('WD-4'))
+    const a = spawnStudent(s, sec.id); s = a.store
+    const b = spawnStudent(s, sec.id); s = b.store
+    expect(a.user.idNumber).toMatch(/^2023-\d{5}$/)
+    expect(b.user.idNumber).not.toBe(a.user.idNumber)
+    const f = spawnFaculty(s); s = f.store
+    expect(f.user.idNumber).toMatch(/^EMP-\d{5}$/)
+    const chair = spawnOffice(s, 'Program Chair/Coordinator', sec.program)
+    expect(chair.user).toMatchObject({ program: sec.program, programScope: [sec.program] })
+    expect(chair.user.idNumber).not.toBe(f.user.idNumber)
+    const ids = Object.values(chair.store.users).map(u => u.idNumber).filter(Boolean)
+    expect(new Set(ids).size).toBe(ids.length)
+  })
 })

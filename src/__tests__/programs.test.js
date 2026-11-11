@@ -9,7 +9,7 @@ import { setSessionUserId } from '../state/session.js'
 import { registerAccount } from '../services/actions.js'
 import { sectionNow } from '../domain/stages.js'
 import {
-  PROGRAM_INFO, COURSES, courseSchedule, sectionProblem, parseSection, yearLevelOf, capstone2SectionOf, nextSemester,
+  PROGRAM_INFO, COURSES, sectionProblem, parseSection, yearLevelOf, capstone2SectionOf, nextSemester,
 } from '../domain/constants.js'
 
 const name = (code) => PROGRAM_INFO.find(p => p.code === code).name
@@ -26,12 +26,13 @@ describe('programs and the capstone schedule', () => {
   })
 
   it('every program takes Capstone 1 and 2 in 4th year — except CS (3rd year 2nd sem, then 4th year 1st sem)', () => {
+    const at = (code, course) => PROGRAM_INFO.find(p => p.code === code).capstone[course]
     for (const code of ['WD', 'NW', 'EMC', 'CYB']) {
-      expect(courseSchedule(name(code), COURSES.C1)).toBe('4th Year, 1st Semester')
-      expect(courseSchedule(name(code), COURSES.C2)).toBe('4th Year, 2nd Semester')
+      expect(at(code, COURSES.C1)).toMatchObject({ year: 4, semester: 1 })
+      expect(at(code, COURSES.C2)).toMatchObject({ year: 4, semester: 2 })
     }
-    expect(courseSchedule(name('CS'), COURSES.C1)).toBe('3rd Year, 2nd Semester')
-    expect(courseSchedule(name('CS'), COURSES.C2)).toBe('4th Year, 1st Semester')
+    expect(at('CS', COURSES.C1)).toMatchObject({ year: 3, semester: 2 })
+    expect(at('CS', COURSES.C2)).toMatchObject({ year: 4, semester: 1 })
   })
 })
 

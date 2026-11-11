@@ -80,7 +80,7 @@ describe('S4.2 / S6.4 — review decisions', () => {
 })
 
 describe('S6.2 / S6.7 — Implementation (T1)', () => {
-  it('S6.2 — approve + e-sign, or return with remarks; the group and Instructor 2 see the status', async () => {
+  it('S6.2 — mark reviewed, or return with remarks; the group and Instructor 2 see the status', async () => {
     await load(scenarioStore('T1'))
     const log = b('p_g1').weeklyLogs.find(l => l.status === 'Submitted')
     expect(tasksOf('f_alpha', 'p_g1')).toEqual(expect.arrayContaining([expect.objectContaining({ kind: 'log', n: 1 })]))

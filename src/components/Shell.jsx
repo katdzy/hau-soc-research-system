@@ -36,7 +36,7 @@ export default function Shell() {
   useOutboxNotifications(me, snap.outbox)
 
   // The "Acting as" context decides the rail and the dashboard (Figma F02).
-  const { held: contexts, current, inContext, choose } = useWorkspace()
+  const { held: contexts, current, inContext, choose, ready } = useWorkspace()
   const todo = actionableCount(inContext)
   const inst = resolveInstitution(me, snap)
   const projects = snap.projects ?? []
@@ -146,7 +146,7 @@ export default function Shell() {
         </Link>
         <div className="topbar-end">
           {inAppList && <NotificationCenter me={me} snap={snap} pathname={here} />}
-          <ActingAs acting={acting} contexts={contexts} current={current} openId={openId}
+          <ActingAs acting={acting} contexts={contexts} current={current} openId={openId} ready={ready}
             onChoose={(key) => { choose(key); navigate('/') }} pathname={here} />
           <AccountMenu me={me} pathname={here} onSignOut={() => { signOut(); navigate('/') }} />
         </div>
@@ -157,6 +157,10 @@ export default function Shell() {
 
         <main className="main" id="main" tabIndex={-1}>
           <ViewOnlyBanner />
+          {location.pathname !== '/' && (
+            <NextStep current={current} contexts={contexts} ready={ready} openId={openId} tab={tab}
+              onSwitch={(key) => { choose(key); navigate('/') }} />
+          )}
           <Outlet />
           {/* Phones and tablets, first screen after login (Figma PWA-01). */}
           {compact && location.pathname === '/' && <InstallBanner />}
@@ -172,7 +176,7 @@ export default function Shell() {
  * and picking one switches the rail and the dashboard. Permissions stay the
  * Global Role plus the role held on the project you open, at its stage.
  */
-function ActingAs({ acting, contexts, current, openId, onChoose, pathname }) {
+function ActingAs({ acting, contexts, current, openId, ready = {}, onChoose, pathname }) {
   const ref = useDisclosure(pathname)
   const { snap } = useApp()
   const sections = (c) => [...new Set(c.projectIds
@@ -184,11 +188,15 @@ function ActingAs({ acting, contexts, current, openId, onChoose, pathname }) {
     ['Your group', contexts.filter(c => c.member)],
   ].filter(([, list]) => list.length)
 
+  // Work waiting in the roles you are not looking at right now.
+  const elsewhere = contexts.filter(c => c.key !== current?.key).reduce((n, c) => n + (ready[c.key]?.length ?? 0), 0)
+
   return (
     <details className="acting" ref={ref}>
-      <summary aria-label={`Acting as ${acting}. Change context`}>
+      <summary aria-label={`Acting as ${acting}. Change context${elsewhere ? `. ${elsewhere} to do in your other roles` : ''}`}>
         <span className="acting-k">Acting as:</span>
         <span className="acting-v">{acting}</span>
+        {elsewhere > 0 && <span className="acting-dot" title={`${elsewhere} to do in your other roles`}>{elsewhere}</span>}
       </summary>
       <div className="acting-menu">
         {groups.length === 0 && <p className="acting-note">No role is assigned to this account yet.</p>}
@@ -203,6 +211,7 @@ function ActingAs({ acting, contexts, current, openId, onChoose, pathname }) {
                   onClick={() => { if (ref.current) ref.current.open = false; onChoose(c.key) }}>
                   <strong>{c.heading}</strong>
                   <span>{where}</span>
+                  {ready[c.key]?.length > 0 && <span className="acting-todo">{ready[c.key].length} to do</span>}
                 </button>
               )
             })}
@@ -213,6 +222,45 @@ function ActingAs({ acting, contexts, current, openId, onChoose, pathname }) {
         </p>
       </div>
     </details>
+  )
+}
+
+/**
+ * "Your next step" above every page but the dashboard: the most pressing thing
+ * this role can do now, one click away — or, when it has nothing, the role
+ * that does. Hidden on the very page where that step is done.
+ */
+function NextStep({ current, contexts, ready = {}, openId, tab, onSwitch }) {
+  if (!current) return null
+  const mine = ready[current.key] ?? []
+  const first = mine[0]
+  if (first) {
+    const here = openId === first.r.project.id && (tab ?? 'overview') === (first.tab ?? 'overview')
+    if (here) return null
+    const to = `/projects/${first.r.project.id}${first.tab && first.tab !== 'overview' ? `?tab=${first.tab}` : ''}`
+    return (
+      <aside className="next-step" aria-label="Your next step">
+        <span className="next-step-k">Next step</span>
+        <span className="next-step-v"><strong>{first.label}</strong> <span className="muted">· {first.r.project.title}</span></span>
+        <span className="next-step-end">
+          {mine.length > 1 && <Link to="/" className="small">{mine.length - 1} more</Link>}
+          <Link to={to} className="btn small primary">Open</Link>
+        </span>
+      </aside>
+    )
+  }
+  const other = contexts.find(c => c.key !== current.key && ready[c.key]?.length)
+  if (!other) return null
+  const n = ready[other.key].length
+  return (
+    <aside className="next-step is-elsewhere" aria-label="Work in another role">
+      <span className="next-step-v">
+        Nothing is waiting on you as {current.heading}. <strong>{n} {n === 1 ? 'item waits' : 'items wait'}</strong> for you as {other.heading}.
+      </span>
+      <span className="next-step-end">
+        <button type="button" className="small" onClick={() => onSwitch(other.key)}>Switch to {other.heading}</button>
+      </span>
+    </aside>
   )
 }
 

@@ -10,8 +10,9 @@ import { setSessionUserId } from '../state/session.js'
 import { bundle } from '../services/core.js'
 import {
   submitDocument, unassignRole, decideWeeklyLog, flagOverdueRevisions, registerAccount, verifyEmail,
-  setAccountStatus, runGate, recordVerdict, confirmProviderVerification,
+  setAccountStatus, runGate, recordVerdict, confirmProviderVerification, resendVerification,
 } from '../services/actions.js'
+import { authErrorMessage } from '../services/authService.js'
 import { canView } from '../domain/guard.js'
 import { DOC_TYPES, DOC_STATUS, PROJECT_ROLES as P, GLOBAL_ROLES as G } from '../domain/constants.js'
 import { stageByKey } from '../domain/stages.js'
@@ -153,6 +154,35 @@ describe('accounts (S0, flags ACCOUNT_ACTIVATION + FACULTY_BASE_IDENTITY)', () =
     expect(user(u.id).status).toBe('Inactive')
     await confirmProviderVerification('waiting@hau.edu.ph')
     expect(user(u.id)).toMatchObject({ status: 'Active', globalRoles: [G.FACULTY] })
+  })
+
+  it('resending a verification email replaces the link; only the newest works (S-16)', async () => {
+    const u = await registerAccount(null, { name: 'Slow Inbox', email: 'slow.inbox@hau.edu.ph' })
+    const first = snap().outbox.filter(m => m.event === 'Account verification').at(-1).link.token
+    await resendVerification(' Slow.Inbox@HAU.edu.ph ')
+    const mails = snap().outbox.filter(m => m.event === 'Account verification' && m.to[0] === 'slow.inbox@hau.edu.ph')
+    expect(mails).toHaveLength(2)
+    const second = mails.at(-1).link.token
+    expect(second).not.toBe(first)
+    await expect(verifyEmail(first)).rejects.toThrow(/invalid/)
+    await verifyEmail(second)
+    expect(user(u.id)).toMatchObject({ emailVerified: true, status: 'Active' })
+    expect(snap().auditLogs.some(l => l.action === 'VERIFICATION_RESENT' && l.entityId === u.id)).toBe(true)
+  })
+
+  it('a resend for an unknown or verified address sends nothing and says the same', async () => {
+    const before = snap().outbox.length
+    await expect(resendVerification('nobody@hau.edu.ph')).resolves.toEqual({ sent: true })
+    await expect(resendVerification('kilo@student.hau.edu.ph')).resolves.toEqual({ sent: true })
+    expect(snap().outbox.length).toBe(before)
+    await expect(resendVerification('x@gmail.com')).rejects.toThrow(/hau\.edu\.ph/)
+  })
+
+  it('Firebase Auth errors read as plain sentences', () => {
+    expect(authErrorMessage({ code: 'auth/invalid-credential' })).toMatch(/don’t match/)
+    expect(authErrorMessage({ code: 'auth/email-already-in-use' })).toMatch(/already has an account/)
+    expect(authErrorMessage({ message: 'Firebase: Error (auth/some-new-code).' }, 'Sign-in failed.')).toBe('Sign-in failed.')
+    expect(authErrorMessage(new Error('Enter your full name.'))).toBe('Enter your full name.')
   })
 
   it('rejects look-alike domains and duplicates', async () => {

@@ -43,6 +43,7 @@ export const CAPABILITIES = {
   'proposal.approveForDefense': 'Approve the group to present its proposal defense',
   'adviser.assign': 'Assign the Adviser',
   'adviser.approve': 'Approve the adviser assignment',
+  'adviser.return': 'Return the adviser assignment to the Program Chair/Coordinator with remarks',
   'panel.assign': 'Designate the Panel Chair and Panel Members',
   'instructor2.assign': 'Assign the Capstone 2 instructor',
   'defense.schedule': 'Create and publish a defense schedule',
@@ -139,7 +140,7 @@ const p = (role, cap, when) => policy(PROJECT, role, cap, when)
 // configuration and audit but never reads a manuscript (§2.2, T20).
 const viewAndRead = (make, role, when) => [make(role, 'project.view', when), make(role, 'document.read', when)]
 
-// OQ#2 (flag AI_SUMMARY_AUDIENCE) — feature not built yet (R12), guard only.
+// OQ#2 (flag AI_SUMMARY_AUDIENCE) — who may read the AI summary.
 const inAiAudience = (role) => FLAGS.AI_SUMMARY_AUDIENCE.includes(role)
 
 const DEFENSE_STAGES = ['PROPOSAL_DEFENSE_SCHEDULING', 'PROPOSAL_DEFENSE', 'FINAL_DEFENSE_SCHEDULING', 'FINAL_DEFENSE']
@@ -156,7 +157,7 @@ const PC_STEPS = [
   ['finaldefense.endorse', ['FINAL_DEFENSE_ENDORSEMENT']],
   ['clearance.endorse', ['CLEARANCE']],
 ]
-export const PC_STEP_STAGES = [...new Set(PC_STEPS.flatMap(([, stages]) => stages))]
+const PC_STEP_STAGES = [...new Set(PC_STEPS.flatMap(([, stages]) => stages))]
 const pcStepActive = cond(
   'one of your Program Chair/Coordinator steps is active',
   env => PC_STEP_STAGES.includes(env.stage),
@@ -256,6 +257,8 @@ export const PROJECT_POLICIES = [
     ...viewAndRead(g, role, at('ADVISER_APPROVAL', 'FINAL_APPROVAL', 'ARCHIVED')),
     g(role, 'document.history', at('FINAL_APPROVAL', 'ARCHIVED')),
     g(role, 'adviser.approve', all(at('ADVISER_APPROVAL'), noSelfApproval)),
+    // NEW-7 (flag ADVISER_RETURN_PATH): the same offices may send it back instead.
+    ...(FLAGS.ADVISER_RETURN_PATH ? [g(role, 'adviser.return', all(at('ADVISER_APPROVAL'), noSelfApproval))] : []),
     g(role, 'final.approve', at('FINAL_APPROVAL')),
   ]),
 
@@ -271,7 +274,7 @@ export const PROJECT_POLICIES = [
 ]
 
 // Every active, verified account — student or faculty, with or without a role.
-export const ANY_ACCOUNT = 'Registered user'
+const ANY_ACCOUNT = 'Registered user'
 
 export const INSTITUTION_POLICIES = [
   // S-17 — the archive of completed projects, metadata only (title, members,
@@ -301,7 +304,7 @@ export const INSTITUTION_POLICIES = [
 
 export const caacTag = (role) => '@' + String(role).replace(/[^A-Za-z0-9]/g, '')
 
-export const globalRolesOf = (user) => user?.globalRoles ?? []
+const globalRolesOf = (user) => user?.globalRoles ?? []
 
 /** Only active, verified accounts hold any grant (S0.3, flag ACCOUNT_ACTIVATION). */
 export const isActiveAccount = (user) =>
@@ -320,7 +323,7 @@ export function overridesFor(user, rows, projectId = null) {
 }
 
 /** The sentence a denial shows when an override, not the policy, is the reason. */
-export const overrideReason = (o) =>
+const overrideReason = (o) =>
   `Revoked for your account by a System Administrator override${o.reason ? ` (“${o.reason}”)` : ''}.`
 
 function evaluate(policies, held, env, overrides = []) {
@@ -472,17 +475,5 @@ export function uploadBlocker(b, docType) {
     if (latestOfType(b, DOC_TYPES.CONCEPT_PAPER)?.status === DOC_STATUS.APPROVED) return 'Your concept paper is already approved.'
   }
   return null
-}
-
-/** Short description of someone's standing, e.g. "Dean · Adviser on 1 project". */
-export function describeStanding(user, snap) {
-  const counts = {}
-  for (const a of snap.projectAssignments ?? []) {
-    if (a.userId === user.id && a.status !== 'Declined') counts[a.roleType] = (counts[a.roleType] ?? 0) + 1
-  }
-  const project = Object.entries(counts)
-    .map(([role, n]) => `${role} on ${n} project${n > 1 ? 's' : ''}`)
-  const global = globalRolesOf(user)
-  return [...(global.length ? global : ['No Global Role']), ...project].join(' · ')
 }
 

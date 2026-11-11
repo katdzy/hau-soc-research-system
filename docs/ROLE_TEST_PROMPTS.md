@@ -45,13 +45,11 @@
 - **R9 — Dev tools stay dev-only.** The persona switcher, stage controls, reset, outbox, and audit viewer are behind a dev flag and excluded from the production build.
 - **R10 — Scope.** Change only what the current role needs. If you touch shared code (guard, data model, dashboard shell, seed), re-run the guard tests and note which earlier role reports may need a re-run.
 - **R11 — Report.** Write the report in the format below. Be honest about failures; don't mark a check as passed unless you verified it.
-- **R12 — Not built yet: the Gemini AI summary.** (Annotations were built on 2026-09-30 — see below.) In these passes:
-  - **Don't build the AI summary** and don't add placeholder UI for it. The existing stub is not extended.
-  - **Guard only:** keep `viewAiSummary` in the allowedActions table and test who may or may not use it in the guard unit tests.
-  - **Report as "Not built"**, not Fail, for any UI check that needs it. List each skipped check so it can be re-run later.
-- **Annotations are built (2026-09-30).** Reviewers open the PDF in **Documents → File**, select words or use **Mark area**, and pin a comment there; comments without a mark are general notes. The file is never written to — each annotation is its own record (page, position, quoted words), drawn over the page. Panel notes are private to their author until the Panel Chair records the verdict (PANEL_NOTES_RELEASE). Where a prompt below still says annotating is "guard only (R12)", **test the UI as well**. In dev builds, **Attach dummy PDF** in the upload form supplies a file from `test-fixtures/` (the built-in browser cannot open a file picker).
+- **R12 — Annotations and the AI summary are both built.** Test them in the UI as well as at the guard.
+  - **AI summary:** generated when a defense schedule is published, for the complete manuscript, and shown in **Documents** to the audience in `AI_SUMMARY_AUDIENCE`. Without `VITE_GEMINI_API_KEY` on a dev server, in every production build, and always on the server (`act`), it is a labelled placeholder.
+- **Annotations are built (2026-09-30).** Reviewers open the PDF in **Documents → File**, select words or use **Mark area**, and pin a comment there; comments without a mark are general notes. The file is never written to — each annotation is its own record (page, position, quoted words), drawn over the page. Panel notes are private to their author until the Panel Chair records the verdict (PANEL_NOTES_RELEASE). In dev builds, **Attach dummy PDF** in the upload form supplies a file from `test-fixtures/` (the built-in browser cannot open a file picker).
 
-### Checks that R12 no longer skips (annotations) — re-run in the UI
+### Annotation checks — run in the UI
 
 | Where | Check | Reports that marked it "Not built" |
 |---|---|---|
@@ -64,9 +62,9 @@
 | T20 | Admin: no Documents tab, so no annotating | 01 |
 | — | Dean / AD: no annotation tools where they hold no reviewer hat | 05 |
 
-### Checks still affected by R12 (AI summary)
+### AI summary checks — run in the UI
 
-| Where | What's skipped in the UI | Still tested |
+| Where | Check | Also tested |
 |---|---|---|
 | S5.4, S7.4 | AI summary generation and display | Guard `viewAiSummary` per AI_SUMMARY_AUDIENCE |
 
@@ -98,28 +96,27 @@ PART A — Audit (read-only, no edits)
 4. Stages: compare the stage values in code with the §3.0 stage machine (OQ#9 order, NEW-3 proposal revision).
 5. Screens: map existing screens/components to each role view in §4 — present / partial / missing.
 6. §9 items present in the code.
-7. Confirm that annotations and the Gemini AI summary are not built (R12). If any partial code for them exists, list it; don't extend it.
+7. Annotations (pdf.js overlay, `ManuscriptViewer.jsx`) and the Gemini AI summary are built; check that both go through the guard (`canViewAnnotation`, the `ai.view` policy).
 Output: a short audit summary and a proposed change list, ordered by risk (access-control holes first).
 
 PART B — Test harness (after my go-ahead)
 1. Central CAAC guard: canView(user, project) and canDo(user, action, project) per §2.2, with an allowedActions table keyed by role hat × stage × document state. Route every existing action and every project query through it.
 2. Seed data: §6 personas, groups G1–G3, one student with no group, plus G4 as an early-stage group (Instructor 1 = Prof. Bravo, no adviser yet) so the Group Formation and Adviser Assignment queues have data.
    Note: §6 and §7 don't line up on stages — T1 needs G1 in Implementation (weekly logs), T4/T5/T16 need a panel on G1 (Proposal/Final Defense), T7 needs G3 before PC endorsement, but §6 puts G1 at an early stage and G3 at final revision/clearance. So don't rely on one fixed seed.
-3. Dev-only scenario controls: "Reset seed", and "Set project to stage X" that fills in plausible prerequisite data (approved topic, documents, assignments, schedule, verdict) so each T# can be set up in one click. Add a "Load scenario T#" shortcut if it's simple.
-4. Dev-only persona switcher showing name, Global Role, and hats per project.
-5. Dev outbox (mock emails) and an audit-log / workflow-history viewer.
+   Since 2026-11-02 the app starts empty: this seed is a fixture for `npm test` and the §7 scenario setups (`src/dev/scenarios.js`) only.
+3. Dev-only test panel (`src/dev/TestPanel.jsx`), **Stage** tab: set a group to any stage with plausible prerequisite data (approved topic, documents, assignments, schedule, verdict). Not available on a live project.
+4. Test panel, **Spawn** and **People** tabs: make sections, students, groups, faculty and office holders, then sign in as any of them.
+5. Test panel, **Outbox** (mock emails) and **Trail** (audit log and workflow history) tabs.
 6. Config file with the Mockup-default flags (names are suggestions):
    FACULTY_BASE_IDENTITY (NEW-1), ACCOUNT_ACTIVATION = email + admin (OQ#4),
-   ADVISER_APPROVAL = both, any order (NEW-7), ADVISER_ACCEPT_STEP = off (OQ#5),
+   ADVISER_APPROVAL = both, any order (NEW-7),
    PROPOSAL_DEFENSE_SCHEDULER = Program Chair (NEW-2), PROPOSAL_REVISION = sub-status (NEW-3),
-   AI_SUMMARY_TRIGGER = auto on complete manuscript at a defense milestone (NEW-4),
    AI_SUMMARY_AUDIENCE = Adviser + Panel (OQ#2), PANEL_NOTES_RELEASE = to students on verdict, never between panelists (OQ#3),
    VERDICT_VALUES = Minor / Major / Re-defense (OQ#10), REVISION_DAYS = minor 7, major 14,
    WEEKLY_LOG_SIGNER = Adviser (OQ#7), PC_PROGRAM_VISIBILITY = summary counts only outside PC steps (NEW-11),
-   URO_REVIEW_LEVELS = 1 (NEW-10), URO_RETURN_PATH = on (NEW-7).
-   AI_SUMMARY_TRIGGER, AI_SUMMARY_AUDIENCE, and PANEL_NOTES_RELEASE stay in the config for the guard, but mark them "feature not built yet" (R12).
+   URO_RETURN_PATH = on (NEW-7).
    No default exists for NEW-5 (two hats on one project / Dean approving self) or NEW-6 (Instructor 1 access after routing; same panel for both defenses) — leave these as explicit TODOs and ask me.
-7. Guard unit tests: one test per T1–T21 at the guard level, using the existing test runner (ask before adding one). Include the annotation and AI-summary actions (R12) even though their UI doesn't exist.
+7. Guard unit tests: one test per T1–T21 at the guard level, using the existing test runner (ask before adding one). Include the annotation and AI-summary actions.
 Write the report to test-reports/00-setup.md (include the localhost start command).
 ```
 
@@ -143,7 +140,7 @@ Goal: polish and test account management, role assignment, settings, archive, an
 4. Permission override: apply one, confirm the guard result changes, confirm it's audit-logged with before → after.
 5. Settings: change the revision countdown length. Report whether it applies only to new verdicts or also to running countdowns — don't decide, flag it.
 6. Archive (S10.2) and reports (S10.3): list and export work; report data shows no manuscript content.
-7. Must NOT (UI and guard): open or read any manuscript, or annotate one (guard only — R12) (T20); record verdicts; sign forms; approve any workflow gate; assign advisers or panels (that's the Program Chair's job — T16 note).
+7. Must NOT (UI and guard): open or read any manuscript, or annotate one (T20); record verdicts; sign forms; approve any workflow gate; assign advisers or panels (that's the Program Chair's job — T16 note).
 8. Scenarios: T14, T20, T21.
 9. Watch for: OQ#4 (activation), NEW-1 (Faculty identity), OQ#5 (who assigns Instructor 1/2 — don't give this to the admin unless I confirm).
 Write the report to test-reports/01-system-administrator.md.
@@ -167,7 +164,7 @@ Goal: polish and test every student action, and confirm each upload lands in the
 4. Reflects on — after each upload, switch personas and confirm the queue badge + item:
    S3.x/S4.x → Instructor 1 and Adviser · S5.3/S7.4 → Panel (latest version only) and AI summary per flag · S6.1/S6.3/S8.1 → Adviser.
    Check the dev outbox for each email listed in §3.
-5. What the student sees: returned items with whatever remarks the mockup has, and the reviewer's decision. Annotations, private panel notes, and the AI summary aren't built (R12) — test only the guard: students may view reviewer annotations, may view panel notes only per PANEL_NOTES_RELEASE, and may view the AI summary only per AI_SUMMARY_AUDIENCE (OQ#2 — the role text says students see it, Table 1 doesn't).
+5. What the student sees: returned items with whatever remarks the mockup has, and the reviewer's decision. Annotations, private panel notes, and the AI summary — test the UI and the guard: students may view reviewer annotations, may view panel notes only per PANEL_NOTES_RELEASE, and may view the AI summary only per AI_SUMMARY_AUDIENCE (OQ#2 — the role text says students see it, Table 1 doesn't).
 6. Countdown: after a verdict the timer shows; when it expires the Overdue flag and email appear (T18).
 7. Must NOT (UI and guard): see other groups (also try a pasted project/document URL), see any approve/sign/verdict button, edit or delete a submitted file, create groups, submit to a stage that isn't active.
 8. Same group, two members uploading at once: versions don't collide; all members see the same state.
@@ -190,9 +187,9 @@ Goal: polish and test group formation and the Capstone 1 gates, and confirm the 
 2. Actions:
    S1.1 create groups and assign students — PROJECT + workflow record written together (all-or-nothing); a student can't be in two groups.
    S1.2 forward roster → Program Chair "Needs adviser" queue; groups show "Awaiting adviser". Report what happens with unassigned students (not specified — flag).
-   S3.2 request revision · S3.3 approve one topic, reject the rest · S3.4 register the topic → PROJECT title shows everywhere · S3.6 return or approve the concept paper → stage Proposal Development · S4.2 return drafts (annotating in S3.2/S3.6/S4.2 is not built — guard only, R12) · S4.3 approve for proposal defense → Program Chair "Needs panel" · S5.8 route to Capstone 2 → project appears for Instructor 2.
+   S3.2 request revision · S3.3 approve one topic, reject the rest · S3.4 register the topic → PROJECT title shows everywhere · S3.6 return or approve the concept paper → stage Proposal Development · S4.2 return drafts (annotate over the PDF in S3.2/S3.6/S4.2) · S4.3 approve for proposal defense → Program Chair "Needs panel" · S5.8 route to Capstone 2 → project appears for Instructor 2.
 3. Reflects on — students (group workspace, comments, title, stage), Adviser (approved topic), Program Chair (queues), Instructor 2 (after S5.8). Check the outbox.
-4. Multi-hat: on G3, Bravo only has Panel Member actions (sign-offs; private notes are guard-only, R12); on G1/G2/G4, no panel actions. Nothing from one hat leaks into another project.
+4. Multi-hat: on G3, Bravo only has Panel Member actions (sign-offs, private notes); on G1/G2/G4, no panel actions. Nothing from one hat leaks into another project.
 5. Must NOT (UI and guard): assign advisers or panels, schedule the final defense, confirm Capstone 2 milestones, see groups outside the block, approve before the precondition is met.
 6. Scenarios: I1-specific negative tests above, plus the I1 rows of T21 (audit shows "Instructor 1" as the hat used).
 7. Watch for: NEW-6 (Instructor 1 access after S5.8 — no default, ask me), NEW-8 (which I1 endorsement emails the Program Chair), NEW-9, OQ#5 (who assigns Instructor 1), OQ#11 (year level / block not on USER).
@@ -256,13 +253,13 @@ Goal: polish and test reviewing, log signing, FM-2005, revision verification, an
 
 1. Dashboard ("Advising") — assigned groups, drafts to review, logs to sign, revisions to verify, forms to sign.
 2. Actions:
-   S3.2 / S3.6 / S4.2 / S6.4 return for revision or approve — the student uploads vN+1, the old version stays readable, and the student's file is never edited. Annotating is not built (R12): guard only.
-   S6.2 approve + e-sign or return a weekly log (WEEKLY_LOG_SIGNER flag).
+   S3.2 / S3.6 / S4.2 / S6.4 return for revision or approve — the student uploads vN+1, the old version stays readable, and the student's file is never edited. Annotations are drawn over the PDF and saved apart from it.
+   S6.2 mark an uploaded weekly log reviewed, or return it (WEEKLY_LOG_SIGNER flag).
    S6.7 submit FM-AAC-SOC-2005 after the readiness check with Instructor 2 → Program Chair "Recommendations to endorse".
    S8.3 verify revisions against the panel's requirements → Panel "Revisions to verify".
    S9.3a sign the Approval Sheet → Panel "Approval Sheet to sign".
 3. Reflects on — students (annotations, returned items, log status), Instructor 2 (progress), Program Chair (FM-2005), Panel (revisions, Approval Sheet). Check the outbox.
-4. Must NOT (UI and guard): see panelists' private notes (guard only — T4, R12), record a verdict, sign the Approval Sheet before revisions are complete, act on another adviser's group, edit or delete student files.
+4. Must NOT (UI and guard): see panelists' private notes (T4), record a verdict, sign the Approval Sheet before revisions are complete, act on another adviser's group, edit or delete student files.
 5. Double-click "Approve" records once (T17).
 6. Scenarios: T1 (log signing only), T4 (guard only), T8, T17.
 7. Watch for: OQ#7 (who signs logs — DFD says Instructor 2), NEW-9, and how the "readiness check with Instructor 2" should work before FM-2005 (not specified — flag it).
@@ -279,9 +276,9 @@ Follow the Shared Rules in ROLE_TEST_PROMPTS.md. Read WORKFLOWS.md §2, S5, S7, 
 Role: Panel Member (Project-Based). Personas: Prof. Charlie (G1), Prof. Bravo (G3), AD Echo (G2).
 Goal: polish and test what panelists can see and sign, and confirm isolation between panelists and projects.
 
-1. Dashboard ("Panel") — assigned projects, defense schedule, latest manuscript version, revisions to verify, forms to sign. No AI summary panel yet (R12).
+1. Dashboard ("Panel") — assigned projects, defense schedule, latest manuscript version, revisions to verify, forms to sign. The AI summary shows with the latest manuscript in Documents.
 2. Actions:
-   S5.5 / S7.5 private annotations and the AI summary are not built (R12). Guard only: a panelist's notes are viewable by their author alone — not other panelists (including the Panel Chair), not the Adviser, not students before the verdict (PANEL_NOTES_RELEASE); viewAiSummary follows AI_SUMMARY_AUDIENCE.
+   S5.5 / S7.5 private annotations and the AI summary: a panelist's notes are viewable by their author alone — not other panelists (including the Panel Chair), not the Adviser, not students before the verdict (PANEL_NOTES_RELEASE); viewAiSummary follows AI_SUMMARY_AUDIENCE.
    S5.7 / S8.4 verify revisions and sign FM-AAC-SOC-2004 — only after the Adviser verified (S8.3). When all panelists sign → revision Completed → stage Clearance.
    S9.3b sign the Approval Sheet — after the Adviser (S9.3a); when the whole panel signs → Program Chair queue + email.
 3. Latest version only (T15): older versions don't appear, and a pasted URL to an older version is blocked.
@@ -302,13 +299,13 @@ Follow the Shared Rules in ROLE_TEST_PROMPTS.md. Read WORKFLOWS.md §2, S5, S7, 
 Role: Panel Chair (Project-Based) = Panel Member + verdict. Persona: Prof. Alpha (Panel Chair of G2; also Adviser of G1 and Program Chair).
 Goal: polish and test verdict recording and its effects on every other role.
 
-1. Everything from Prompt 7 still works for the Chair (at the guard level, the Chair's private notes stay private from the other panelists too — R12).
+1. Everything from Prompt 7 still works for the Chair (the Chair's private notes stay private from the other panelists too).
 2. Verdict (S5.6 / S7.6) through digital FM-AAC-SOC-2004:
    - Values from VERDICT_VALUES; revision requirements are required text.
    - Minor → countdown REVISION_DAYS.minor; Major → REVISION_DAYS.major; Re-defense → back to scheduling (S7.7 → S7.3).
    - The stage moves per the §3.0 machine; one verdict per defense; a double-submit records once.
    - "Defense held" precondition: report how the mockup decides it (date passed? a "mark as held" action?) — not specified, flag it.
-3. Reflects on — students (verdict, requirements, countdown), Adviser, other panelists, Instructor 2 (status); emails in the outbox. Releasing panel notes on verdict is not built (R12) — check the guard result for viewPrivatePanelNotes changes as PANEL_NOTES_RELEASE says.
+3. Reflects on — students (verdict, requirements, countdown), Adviser, other panelists, Instructor 2 (status); emails in the outbox. Recording the verdict releases the panel's notes — check that viewPrivatePanelNotes changes as PANEL_NOTES_RELEASE says.
 4. Must NOT (UI and guard): adviser actions on G2 (T2); a Panel Member recording the verdict (T5 — verify the inverse); changing a recorded verdict (not specified — report current behavior and flag).
 5. Scenarios: T2, T5, T18 (countdown expiry after a verdict).
 6. Watch for: OQ#10 (verdict values), OQ#3, NEW-3 (proposal revision stage).
@@ -329,7 +326,7 @@ Goal: polish and test Capstone 2 tracking and final-defense scheduling.
 2. Actions:
    S6.5 confirm milestones (revised manuscript, system components) · S6.7 readiness check with the Adviser · S7.3 create and publish the final-defense schedule — enabled only after the Program Chair's endorsement (S7.1) · S8.5 confirm post-defense course requirements.
 3. Reflects on — students and Adviser (milestones, schedule), Panel (schedule), emails.
-4. Must NOT (UI and guard): annotate anything as Instructor 2 — the guard rejects `annotate` for this hat (T6; no annotation UI exists yet, R12); schedule before endorsement (T7); sign weekly logs (WEEKLY_LOG_SIGNER default); sign clearance forms (the DFD 7.0 leftover in §9).
+4. Must NOT (UI and guard): annotate anything as Instructor 2 — the guard rejects `annotate` for this hat (T6; the viewer is read-only); schedule before endorsement (T7); sign weekly logs (WEEKLY_LOG_SIGNER default); sign clearance forms (the DFD 7.0 leftover in §9).
 5. Multi-hat: Charlie's Adviser actions work on G2 and panel sign-offs on G1, and neither shows up on G3.
 6. Scenarios: T6, T7.
 7. Watch for: OQ#5 (who assigns Instructor 2), OQ#7.
@@ -347,10 +344,10 @@ Role: URO (Global). Persona: URO Uniform.
 Goal: polish and test clearance verification, and confirm URO clears before the Dean/AD see the project.
 
 1. Dashboard — "Clearances to verify" (Editor's Certificate, Plagiarism Clearance Certificate, manuscript).
-2. Actions (S9.4, URO_REVIEW_LEVELS flag):
+2. Actions (S9.4):
    - Clear → project appears in the Dean + AD "Projects for final approval" queue for the first time; email.
    - Return to group with remarks (URO_RETURN_PATH flag) → students see the remarks and upload a new certificate version (vN+1); the project returns to the URO queue.
-3. Must NOT (UI and guard): see the project before the Program Chair endorses (T12); annotate the manuscript (URO isn't an annotator — guard only, R12); take any earlier workflow action.
+3. Must NOT (UI and guard): see the project before the Program Chair endorses (T12); annotate the manuscript (URO isn't an annotator); take any earlier workflow action.
 4. Scenarios: T11 (Dean blocked before URO clears), T12.
 5. Watch for: NEW-10 (First/Second Level review), NEW-7 (return path), whether URO signs the Approval Sheet itself (not explicit — flag), URO email triggers (not stated in the manuscript — flag what the mockup does).
 Write the report to test-reports/10-uro.md.
@@ -368,7 +365,7 @@ At every step:
 - record whose turn it is and confirm it matches the §5 "Waiting on" column;
 - open every other role's dashboard and confirm G5 appears (or doesn't) as §5 says;
 - confirm the email and audit entry.
-Skip the AI summary (R12); note in the timeline where it would happen. Annotations are built — exercise them:
+Check the AI summary when each defense schedule is published, and exercise the annotations:
 - S3.6, S4.2, S6.4: before each return, annotate the version (once by selecting words, once with Mark area, once as a general note); confirm the students see the notes on that version, that the notes stay on the superseded version after vN+1, and that vN+1 starts clean.
 - S5.5, S7.5: each panelist adds a private note; confirm no other panelist (Panel Chair included), the Adviser or a student sees it — and that the other panelists' "No pre-defense notes" task only clears for the author.
 - S5.6, S7.6: after the verdict, the students see the panel notes marked "released"; the panelists still do not see each other's.
@@ -390,9 +387,9 @@ Follow the Shared Rules in ROLE_TEST_PROMPTS.md.
 3. Re-check any role report marked as possibly affected by later shared-code changes.
 Output test-reports/SUMMARY.md:
 - per role: actions passed / total, negative tests passed / total;
-- T1–T21 pass/fail/not built (R12 — AI summary only);
-- annotation checks: every check in "Checks that R12 no longer skips", re-run in the UI, with the earlier reports updated;
-- a "Waiting on the AI summary" list: every check still skipped under R12, to re-run once it exists;
+- T1–T21 pass/fail;
+- annotation checks: every check in "Annotation checks", run in the UI, with the earlier reports updated;
+- AI summary checks: generation and display at S5.4 and S7.4, and who may read it;
 - all config flags and their current values;
 - the full list of open items (OQ#, NEW-#) the team still needs to settle, grouped by who decides (team / Adviser).
 Note in the summary that this is a development check on localhost, not the study's formal functional testing (that uses the Adviser-validated checklists with participants).

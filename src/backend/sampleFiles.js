@@ -8,10 +8,12 @@ import { DOC_TYPES } from '../domain/constants.js'
 import { stageIndex } from '../domain/stages.js'
 
 // Lazy: a fixture is fetched only when someone opens that version.
-const FIXTURES = import.meta.glob(
-  ['/test-fixtures/dummy-documents/**/*.pdf', '!**/*FM-AAC-SOC*', '!**/*ApprovalSheet*'],
-  { query: '?url', import: 'default' },
-)
+// Dev builds only: real accounts upload real files, and a production build
+// would otherwise ship ~19 MB of dummy PDFs. Without them a byte-less record
+// opens as "missing" in the viewer.
+const fixtures = () => import.meta.env.DEV
+  ? import('./sampleFixtures.js').then(m => m.FIXTURES)
+  : Promise.resolve({})
 
 const GROUP_DIR = { p_g1: 'G1', p_g2: 'G2', p_g3: 'G3' }
 
@@ -36,6 +38,7 @@ export async function sampleFileFor(doc) {
   const name = fixtureName(doc)
   if (!name) return null
   const dir = GROUP_DIR[doc.projectId] ?? 'G1'
+  const FIXTURES = await fixtures()
   const key = Object.keys(FIXTURES).find(k => k.includes(`/${dir}/`) && k.endsWith(`_${name}.pdf`))
   if (!key) return null
   return { url: await FIXTURES[key](), fileName: key.split('/').pop() }

@@ -16,7 +16,6 @@ import { db, files } from '../backend/index.js'
 import { isFilePathOf, isFormFilePathOf } from '../backend/filePath.js'
 import { uploadSubmissionFile, uploadFormFile } from './submissionFile.js'
 import { sampleFileFor } from '../backend/sampleFiles.js'
-import { GoogleGenAI } from '@google/genai'
 import { normalizePosition, anchorOf } from '../domain/annotations.js'
 import { pdfProblem, formFileProblem } from '../domain/uploads.js'
 import {
@@ -37,6 +36,7 @@ import { resolveContext, allowedDocTypes, uploadBlocker, can, CAPABILITIES, PROJ
 import { SETTINGS_ID, revisionDaysOf, REVISION_DAYS_LIMITS } from '../domain/settings.js'
 import { canDo } from '../domain/guard.js'
 import { formOf, lineMethod, latestCopy, canSign } from '../domain/forms.js'
+import { nextGroupNumber } from '../domain/groupNames.js'
 import { FLAGS } from '../domain/flags.js'
 import { nowIso } from '../backend/clock.js'
 
@@ -101,8 +101,10 @@ export async function createProject(actor, _snap, { title, sectionId, researchAr
 
 /** A group at Group Formation, with its Instructor 1 — inside a perform(). */
 async function newProject(me, hat, section, { title, researchArea, note = 'Group created' } = {}) {
+  // Called "WD-401-3" until its topic is registered (domain/groupNames.js, Figma S-22).
+  const groupNumber = nextGroupNumber((current().projects ?? []).filter(p => p.sectionId === section.id))
   const project = await db.add('projects', {
-    title: title || `Untitled — ${section.block}`,
+    title: title?.trim() || `${section.block}-${groupNumber}`, groupNumber,
     previousTitles: [], category: 'Capstone', researchArea: researchArea || 'Not yet set',
     program: section.program, term: section.term, block: section.block, sectionId: section.id,
     currentStage: 'GROUP_FORMATION', status: 'Active', archiveResult: null,
@@ -605,6 +607,46 @@ export async function returnToGroup(actor, _snap, projectId, { docTypes, remarks
 }
 
 /**
+ * S2.2 return path (NEW-7, flag ADVISER_RETURN_PATH): the Dean or Associate
+ * Dean sends the adviser assignment back to the Program Chair/Coordinator with
+ * remarks. The project returns to Adviser Assignment; approvals already given
+ * are cleared (the PC routes it again, to both offices). The proposed Adviser
+ * stays assigned — the PC keeps or replaces them. Neither the proposed Adviser
+ * nor the students are emailed: nobody is told of an appointment before it is
+ * approved (S2.2), and the remarks are about the choice of Adviser.
+ */
+export async function returnAdviserAssignment(actor, _snap, projectId, { remarks } = {}) {
+  const { b, hat, actor: me, snap } = authorizeOn(actor, projectId, 'returnAdviser')
+  if (!remarks?.trim()) throw new Error('Say why the assignment is returned.')
+  return perform(`adviserReturn:${projectId}`, async () => {
+    const entry = { at: now(), by: me.id, hat, remarks: remarks.trim(), adviserId: assigneeIds(b, P.ADVISER)[0] ?? null }
+    const approvals = b.project.adviserApprovals ?? {}
+    await db.update('projects', projectId, {
+      currentStage: 'ADVISER_ASSIGNMENT', adviserApprovals: {}, adviserOffices: [],
+      adviserReturns: [...(b.project.adviserReturns ?? []), entry],
+    })
+    await logHistory({
+      projectId, fromStage: 'ADVISER_APPROVAL', toStage: 'ADVISER_ASSIGNMENT', actorId: me.id, hat,
+      action: 'RETURN_ADVISER', note: `Adviser assignment returned to the Program Chair/Coordinator by the ${hat}`,
+    })
+    await logAudit({
+      actorId: me.id, hat, action: 'STAGE_RETURN_ADVISER', entityType: 'projects', entityId: projectId, projectId,
+      before: { stage: 'ADVISER_APPROVAL', adviserApprovals: approvals },
+      after: { stage: 'ADVISER_ASSIGNMENT', adviserApprovals: {}, remarks: entry.remarks },
+    })
+    const back = { ...b, project: { ...b.project, currentStage: 'ADVISER_ASSIGNMENT' } }
+    // The other office learns it left their queue, whether or not it had approved.
+    const otherOffices = ADVISER_APPROVERS.filter(r => r !== hat).flatMap(r => holdersOf(snap, r).map(u => u.id))
+    await notify([...usersWith(snap, back, 'adviser.assign'), ...otherOffices].filter(id => id !== me.id && id !== entry.adviserId), {
+      projectId, type: 'Workflow', event: 'Adviser assignment returned',
+      title: `${b.project.title}: the ${hat} returned the adviser assignment`,
+      body: `${me.name} returned the adviser assignment. ${entry.remarks} Keep or change the Adviser, then route the assignment again.`,
+    })
+    return entry
+  })
+}
+
+/**
  * Non-destructive annotation (S3.6, S4.2, S5.5, S6.4, S7.5). The note is its own
  * record, pinned to one version and — when `input.position` is given — to a
  * passage or area of one page (domain/annotations.js). The PDF is never touched,
@@ -757,9 +799,14 @@ async function summarizeForMilestone(actor, hat, b, defenseType) {
   // left for Gemini, and whether a summary came back.
   let transmitted = false
   let generated = false
-  const apiKey = typeof import.meta !== 'undefined' ? import.meta.env?.VITE_GEMINI_API_KEY : null
+  // Dev builds only. A VITE_ value is compiled into the bundle, so a production
+  // build must never carry the key: there the summary keeps its placeholder
+  // until the call moves to the server (`act`).
+  const apiKey = import.meta.env?.DEV ? import.meta.env.VITE_GEMINI_API_KEY : null
   if (text && apiKey && !isTest) {
     try {
+      // Loaded on demand: most sessions never generate a summary.
+      const { GoogleGenAI } = await import('@google/genai')
       const ai = new GoogleGenAI({ apiKey })
       const prompt = `You are a helpful assistant analyzing a thesis manuscript. 
       Read the following text and extract these key sections into a JSON object: 
@@ -1428,6 +1475,15 @@ export async function runGate(actor, _snap, projectId, requested) {
       }
     }
 
+    // What Instructor 1 confirmed when forwarding the group (the forward
+    // dialog's step 1): the roster and details the Program Chair receives.
+    if (gate.action === 'ENDORSE_ROSTER') {
+      patch.rosterForwarded = {
+        at: now(), by: me.id, members: b.members.map(m => m.userId),
+        block: b.project.block, program: b.project.program, term: b.project.term ?? null,
+      }
+    }
+
     if (gate.action === 'REGISTER_TOPIC') {
       const topic = b.documents.find(d => d.docType === DOC_TYPES.TOPIC_PROPOSAL && d.status === DOC_STATUS.APPROVED)
       const chosen = b.reviews.filter(r => r.documentId === topic.id && r.approvedTopic).at(-1)?.approvedTopic
@@ -1608,6 +1664,34 @@ export async function verifyEmail(verifyToken) {
   const user = (current().users ?? []).find(u => u.verifyToken && u.verifyToken === verifyToken)
   if (!user) throw new Error('This verification link is invalid or has already been used.')
   return perform(`verify:${user.id}`, () => markVerified(user, 'verification link'))
+}
+
+/**
+ * S0.2 — "Resend verification email" (Figma S-16), local build. A new link
+ * replaces the old one, so only the latest email works. Says nothing about
+ * whether the address has an account: an unknown or verified address gets the
+ * same answer and no email. The Firebase build resends through Firebase Auth.
+ */
+export async function resendVerification(email) {
+  const norm = normalizeEmail(email)
+  if (!accountType(norm)) throw new Error('Use your @hau.edu.ph or @student.hau.edu.ph address.')
+  const user = (current().users ?? []).find(u => normalizeEmail(u.email) === norm)
+  if (!user || user.emailVerified) return { sent: true }
+  await perform(`resend:${user.id}`, async () => {
+    const verifyToken = token()
+    await db.update('users', user.id, { verifyToken })
+    await logAudit({
+      actorId: user.id, hat: null, action: 'VERIFICATION_RESENT', entityType: 'users', entityId: user.id,
+      before: null, after: { email: norm },
+    })
+    await sendMail({
+      to: [norm], event: 'Account verification',
+      subject: 'Verify your HAU-SOC Thesis & Capstone account',
+      body: `Hello ${user.name}, here is a new link to confirm that ${norm} is yours. Earlier links no longer work.`,
+      link: { kind: 'verify', token: verifyToken, label: 'Verify my email' },
+    })
+  })
+  return { sent: true }
 }
 
 /** Firebase build: Firebase Auth reports the address verified at sign-in. */

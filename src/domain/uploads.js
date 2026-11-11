@@ -52,7 +52,7 @@ export async function inspectPdf(file) {
 // PDF, or all wet signatures on paper) and uploaded back: a PDF, or a scan or
 // photo of the paper (Figma E-01, F-01).
 
-export const FORM_FILE_TYPES = {
+const FORM_FILE_TYPES = {
   'application/pdf': { ext: ['pdf'], magic: HEADER, window: HEADER_WINDOW },
   'image/jpeg': { ext: ['jpg', 'jpeg'], magic: [0xff, 0xd8, 0xff], window: 3 },
   'image/png': { ext: ['png'], magic: [0x89, 0x50, 0x4e, 0x47], window: 4 },
@@ -62,7 +62,7 @@ export const FORM_FILE_ACCEPT = '.pdf,.jpg,.jpeg,.png,application/pdf,image/jpeg
 const extOf = (name = '') => String(name).toLowerCase().split('.').pop()
 
 /** The form file's content type from its name, or null if it is not one we take. */
-export const formFileType = (name = '') =>
+const formFileType = (name = '') =>
   Object.entries(FORM_FILE_TYPES).find(([, t]) => t.ext.includes(extOf(name)))?.[0] ?? null
 
 /** Why this signed form cannot be uploaded, from its name and size alone, or null. */

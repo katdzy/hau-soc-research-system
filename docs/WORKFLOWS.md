@@ -144,10 +144,11 @@ Conflicts in this machine:
 |---|---|---|---|---|---|---|
 | S2.1 | Program Chair/Coordinator | Assign an Adviser to each group | S1.2 | Adviser assignment pending approval | Dean + AD: "Adviser assignments to approve" queue. PC: "Submitted" | Dean + AD |
 | S2.2 | Dean and Associate Dean | Approve adviser assignment | S2.1 | Assignment confirmed; stage → Conceptualization | Adviser: group appears under "Advising". Students: adviser name shown. I1: sees final adviser | Students ("adviser appointed"); Adviser (inferred — "New Assignment" event) |
+| S2.3 | Dean or Associate Dean | Return the adviser assignment to the Program Chair/Coordinator with remarks (*Mockup default*, NEW-7) | S2.1; this office has not approved it yet and is not the named Adviser (NEW-5) | Stage → Adviser Assignment; approvals already given are cleared; the proposed Adviser stays assigned for the PC to keep or replace, then route again (both offices approve afresh) | PC: back in "Needs adviser", marked "Returned by the Dean/AD", remarks above the step. Dean + AD: gone from their queue. Students: stage shows Adviser Assignment, no remarks | PC + the other office ("Adviser assignment returned"); never the proposed Adviser or the students |
 
 Open points:
 - Both must approve, either one, or in sequence? **[NEEDS CONFIRMATION → NEW-7]** — *Mockup default:* both, any order.
-- Reject/return path (Dean returns to PC)? Not described **[NEW-7]**.
+- Reject/return path (Dean returns to PC)? Not described **[NEW-7]**. — *Mockup default (flag `ADVISER_RETURN_PATH`, 2026-11-09):* see S2.3.
 - Adviser accept/decline (`PROJECT_ASSIGNMENT.status` Pending/Accepted/Declined)? **[OQ#5]** — *Mockup default:* no accept step.
 - The Dean is also an Adviser in real life: can the Dean approve an assignment naming themself? **[NEW-5]**
 

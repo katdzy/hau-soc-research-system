@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { Link, useSearchParams } from 'react-router-dom'
+import { Link, useNavigate, useSearchParams } from 'react-router-dom'
 import { useApp } from '../state/AppContext.jsx'
 import { worklist } from '../services/worklist.js'
 import { createProject } from '../services/api.js'
@@ -9,10 +9,12 @@ import { STAGES, sectionNow } from '../domain/stages.js'
 import { PROGRAMS, programCode, COURSES } from '../domain/constants.js'
 import { can, resolveInstitution } from '../domain/caac.js'
 import { Act } from '../components/ViewOnly.jsx'
+import { nextGroupNumber } from '../domain/groupNames.js'
 
 export default function Projects() {
   const { snap, me } = useApp()
   const [params, setParams] = useSearchParams()
+  const navigate = useNavigate()
   const { run, error, busy } = useAction()
   const [stageFilter, setStageFilter] = useState('')
   const [programFilter, setProgramFilter] = useState('')
@@ -40,30 +42,35 @@ export default function Projects() {
       {canCreate && <Act>
         <Section title="Create a project group">
           {!creating ? (
-            <button className="primary" onClick={() => setParams({ new: '1' })}>New project group</button>
+            <div className="actions m-0">
+              <button className="primary" onClick={() => setParams({ new: '1' })}>New project group</button>
+              <span className="small muted">For students left without a group; students can also draft their own.</span>
+            </div>
           ) : (
-            <div>
+            <div className="create-group">
+              <p className="small muted m-0 mb-2">
+                For students left without a group. You become the group’s Instructor 1, then add its students from
+                the section roster on the group page. Groups your students draft themselves arrive for your approval
+                under <Link to="/rosters">Groups &amp; rosters</Link>.
+              </p>
               <div className="row">
                 <Field label="Section">
                   <select value={form.sectionId} onChange={e => setForm(f => ({ ...f, sectionId: e.target.value }))}>
                     {blocks.map(s => <option key={s.id} value={s.id}>{s.block} · {s.course} · {s.term}</option>)}
                   </select>
                 </Field>
-                <Field label="Working title" hint="Replaced by the registered topic after ideation.">
-                  <input value={form.title} onChange={e => setForm(f => ({ ...f, title: e.target.value }))} placeholder="Untitled — Group 7" />
+                <Field label="Working title (optional)" hint="Leave it blank: the group goes by its section and number until its topic is registered.">
+                  <input value={form.title} onChange={e => setForm(f => ({ ...f, title: e.target.value }))}
+                    placeholder={`${blocks.find(b => b.id === form.sectionId)?.block ?? 'WD-401'}-${nextGroupNumber((snap.projects ?? []).filter(p => p.sectionId === form.sectionId))}`} />
                 </Field>
               </div>
               <div className="actions">
                 <button className="primary" disabled={busy || !form.sectionId}
-                  onClick={() => run(async () => { await createProject(me, snap, form); setParams({}) })}>
+                  onClick={() => run(async () => { const p = await createProject(me, snap, form); setParams({}); if (p?.id) navigate(`/projects/${p.id}`) })}>
                   Create group
                 </button>
                 <button className="quiet" onClick={() => setParams({})}>Cancel</button>
               </div>
-              <p className="faint small mt-2">
-                You become Instructor 1 on the new group. You add its students from the block roster —
-                students do not form their own groups.
-              </p>
               <ActionError error={error} />
             </div>
           )}

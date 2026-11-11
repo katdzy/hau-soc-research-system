@@ -15,6 +15,7 @@ import {
   normalizeSection, sectionProblem,
 } from '../domain/constants.js'
 import { FLAGS } from '../domain/flags.js'
+import { nextGroupNumber } from '../domain/groupNames.js'
 import { emptyStore } from '../backend/schema.js'
 
 export const TERM = 'AY 2026–2027, 1st Semester'
@@ -72,6 +73,25 @@ function freshName(users, salt) {
   return `Test Person ${salt}`
 }
 
+/**
+ * Student number: the year a student in this year level entered (a 4th-year
+ * in AY 2026–2027 entered in 2023), then the next number nobody holds — 2023-10001.
+ */
+function studentNumber(users, block) {
+  const year = parseSection(block)?.year ?? 4
+  const entry = 2027 - year
+  const taken = values(users).map(u => /^(\d{4})-(\d{5})$/.exec(u.idNumber ?? '')).filter(m => m && Number(m[1]) === entry)
+  const next = taken.reduce((max, m) => Math.max(max, Number(m[2])), 10000) + 1
+  return `${entry}-${next}`
+}
+
+/** Employee number for faculty and office holders — EMP-00042, the next free one. */
+function employeeNumber(users) {
+  const next = values(users).map(u => /^EMP-(\d{5})$/.exec(u.idNumber ?? '')?.[1]).filter(Boolean)
+    .reduce((max, n) => Math.max(max, Number(n)), 0) + 1
+  return `EMP-${String(next).padStart(5, '0')}`
+}
+
 function account(store, id, { title = '', domain, globalRoles, spawned, ...extra }) {
   const seq = Object.keys(store.users).length + 1
   const person = freshName(store.users, seq)
@@ -81,7 +101,7 @@ function account(store, id, { title = '', domain, globalRoles, spawned, ...extra
   const user = {
     id, name: title ? `${title} ${person}` : person, email, globalRoles, programScope: [],
     status: 'Active', emailVerified: true, verifyToken: null, demo: true,
-    idNumber: '', program: '', yearLevel: '', block: '', createdAt: now(),
+    idNumber: domain === '@hau.edu.ph' ? employeeNumber(store.users) : '', program: '', yearLevel: '', block: '', createdAt: now(),
     spawned: { ...spawned, at: now() }, ...extra,
   }
   store.users[id] = user
@@ -141,7 +161,7 @@ export function spawnOffice(store, role, program = null) {
   const id = `${prefix}${nextSeq(s.users, prefix)}`
   const u = account(s, id, {
     title: OFFICE_TITLE[role], domain: '@hau.edu.ph', globalRoles: [G.FACULTY, role],
-    spawned: { kind: 'office', role, program }, ...(program ? { programScope: [program] } : {}),
+    spawned: { kind: 'office', role, program }, ...(program ? { programScope: [program], program } : {}),
   })
   const where = program ? ` for ${codeOfProgram(program)}` : ''
   return { store: s, note: `Added ${u.name} (${role}${where}).`, user: u }
@@ -182,7 +202,8 @@ export function spawnSection(store, code, course) {
 function addSection(store, block, course) {
   const added = spawnFaculty(store)
   const s = added.store
-  const instructor = { ...added.user, spawned: { kind: 'instructor', at: added.user.spawned.at } }
+  // The section's teacher belongs to its program.
+  const instructor = { ...added.user, program: parseSection(block).program, spawned: { kind: 'instructor', at: added.user.spawned.at } }
   s.users[instructor.id] = instructor
   // WD's Capstone 1 and 2 are both 4th year, so WD-401 may name one of each.
   let id = `sec_${blockKey(block)}`
@@ -254,10 +275,9 @@ export function spawnStudent(store, sectionId) {
   const s = copy(store)
   const prefix = `t_s_${blockKey(sec.block)}_`
   const id = `${prefix}${pad(nextSeq(s.users, prefix))}`
-  const idSeq = values(s.users).filter(isStudent).length + 1
   const u = account(s, id, {
     domain: '@student.hau.edu.ph', globalRoles: [G.STUDENT], spawned: { kind: 'student', sectionId },
-    idNumber: `2023-${String(5000 + idSeq).padStart(4, '0')}`, program: sec.program,
+    idNumber: studentNumber(s.users, sec.block), program: sec.program,
     yearLevel: yearLevelOf(sec.block), block: sec.block,
   })
   return { store: s, note: `Added ${u.name} to ${sec.block}.`, user: u }
@@ -292,11 +312,11 @@ export function spawnGroup(store, sectionId) {
     const r = spawnStudent(s, sectionId)
     s = r.store; free = [...free, r.user]; added++
   }
-  const n = groupsIn(s, sec).length + 1
+  const n = nextGroupNumber(groupsIn(s, sec))
   const projectId = `p_t_${blockKey(sec.block)}_${nextSeq(s.projects, `p_t_${blockKey(sec.block)}_`)}`
   const at = now()
   s.projects[projectId] = {
-    id: projectId, title: `Untitled — Group ${n} (${sec.block})`, previousTitles: [], category: 'Capstone',
+    id: projectId, title: `${sec.block}-${n}`, groupNumber: n, previousTitles: [], category: 'Capstone',
     researchArea: 'Not yet set', program: sec.program, term: sec.term, block: sec.block, sectionId: sec.id,
     currentStage: 'GROUP_FORMATION', status: 'Active', archiveResult: null,
     revisionClass: null, revisionDeadline: null, revisionStatus: null,
@@ -316,7 +336,7 @@ export function spawnGroup(store, sectionId) {
     action: 'GROUP_CREATED', hat: P.INSTRUCTOR_1, note: 'Spawned from the test panel', at,
   }
   const extra = added ? ` (${added} new student${added > 1 ? 's' : ''})` : ''
-  return { store: s, note: `Formed Group ${n} in ${sec.block}${extra}.`, projectId }
+  return { store: s, note: `Formed ${sec.block}-${n}${extra}.`, projectId }
 }
 
 // Every collection that holds a project's own records.

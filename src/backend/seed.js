@@ -1,7 +1,7 @@
 // Test fixture — the CAAC test personas from WORKFLOWS.md §6. The app never
 // loads it (the store starts empty; the dev test panel spawns accounts); the
 // automated tests, the §7 scenario setups (dev/scenarios.js), the dummy-docs
-// generator and the live-seed script do. Every name is a placeholder. Groups sit at different stages so the §5 queues have data:
+// generator and the unseed script do. Every name is a placeholder. Groups sit at different stages so the §5 queues have data:
 //
 //   G1  Conceptualization     WD-401  I1 Bravo · Adviser Alpha            (early stage, 3 students)
 //   G2  Proposal Defense      WD-401  I1 Bravo · Adviser Charlie · Panel Chair Alpha · Panel Member Echo
@@ -121,7 +121,7 @@ const MEMBERS = [
 ]
 
 /** Base store: people, blocks, groups and members — no workflow history yet. */
-export function baseStore() {
+function baseStore() {
   return {
     users: keyBy(USERS),
     sections: keyBy(SECTIONS),
@@ -143,7 +143,7 @@ export const SEED_ROLES = {
   ...NPC_ROLES,
 }
 
-export const SEED_STAGES = {
+const SEED_STAGES = {
   p_g1: 'TOPIC_PROPOSAL',
   p_g2: 'PROPOSAL_DEFENSE',
   p_g3: 'FINAL_REVISION',

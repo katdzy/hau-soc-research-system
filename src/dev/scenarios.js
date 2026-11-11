@@ -61,7 +61,7 @@ export const SCENARIOS = [
     look: 'Dev tools → Audit / history', expect: 'Every action above writes actor, role hat, before → after.' },
 ]
 
-export const scenarioById = (id) => SCENARIOS.find(s => s.id === id)
+const scenarioById = (id) => SCENARIOS.find(s => s.id === id)
 
 /** The store for a scenario: fresh seed + its setup. */
 export function scenarioStore(id) {

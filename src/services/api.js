@@ -124,7 +124,11 @@ async function sendToAct(name, args) {
 }
 
 /** 'functions' | 'direct' — shown in the rail; 'local' outside the Firebase build. */
-export const writePath = db.name === 'firebase' ? writePathOf(import.meta.env) : 'local'
+export const writePath = db.name === 'firebase' ? writePathOf({
+  // Named one by one: a bare import.meta.env would inline every VITE_ value into the build.
+  VITE_WRITE_PATH: import.meta.env.VITE_WRITE_PATH,
+  VITE_USE_EMULATORS: import.meta.env.VITE_USE_EMULATORS,
+}) : 'local'
 
 const remote = writePath === 'functions' ? remoteActions({ send: sendToAct, files }) : null
 const pick = (name) => remote?.[name] ?? local[name]
@@ -142,6 +146,7 @@ export const assignRole = pick('assignRole')
 export const unassignRole = pick('unassignRole')
 export const submitDocument = pick('submitDocument')
 export const returnToGroup = pick('returnToGroup')
+export const returnAdviserAssignment = pick('returnAdviserAssignment')
 export const addAnnotation = pick('addAnnotation')
 export const submitReview = pick('submitReview')
 export const submitWeeklyLog = pick('submitWeeklyLog')
@@ -168,10 +173,10 @@ export const registerAccount = pick('registerAccount')
 export const confirmProviderVerification = pick('confirmProviderVerification')
 
 // Reads and helpers: the same in both builds. The local build's overdue check,
-// password-reset mail and verification link; in the Firebase build a schedule
+// password-reset mail, verification link and its resend; in the Firebase build a schedule
 // and Firebase Auth do those (functions/index.js overdueRevisions,
 // authService.js, confirmProviderVerification).
 export {
   ASSIGNING_ACTION, ASSIGNING_CAPABILITY, assignmentConflict, defenseTypeAt, check, checkSubmission,
-  flagOverdueRevisions, requestPasswordReset, verifyEmail, sectionHandover, sectionInUse,
+  flagOverdueRevisions, requestPasswordReset, verifyEmail, resendVerification, sectionHandover, sectionInUse,
 } from './actions.js'

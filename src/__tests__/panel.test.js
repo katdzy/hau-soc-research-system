@@ -155,7 +155,7 @@ describe('Must NOT (item 5)', () => {
     expect(resolveContext(user('f_bravo'), b('p_g2')).projectRoles).toEqual([P.INSTRUCTOR_1])
   })
 
-  it('NEW-6 (SAME_PANEL_BOTH_DEFENSES) — the proposal panel carries over to the final defense', async () => {
+  it('NEW-6 — the proposal panel carries over to the final defense', async () => {
     await at('p_g2', 'FINAL_DEFENSE')
     const panel = b('p_g2').assignments.filter(a => [P.PANEL_CHAIR, P.PANEL_MEMBER].includes(a.roleType)).map(a => a.userId).sort()
     expect(panel).toEqual(['f_alpha', 'f_echo'])

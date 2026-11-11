@@ -103,7 +103,9 @@ describe('Instructor 1 decides', () => {
     await expect(decideGroupDraft(as(S[0]), null, d.id, { approve: true })).rejects.toThrow()
     const project = await decideGroupDraft(as('f_bravo'), null, d.id, { approve: true })
     const b = bundle(snap(), project.id)
-    expect(b.project).toMatchObject({ title: 'Untitled — WD-401', block: 'WD-401', currentStage: 'GROUP_FORMATION' })
+    expect(b.project).toMatchObject({ block: 'WD-401', currentStage: 'GROUP_FORMATION' })
+    // Named by section and number until its topic is registered (Figma S-22).
+    expect(b.project.title).toBe(`WD-401-${b.project.groupNumber}`)
     expect(b.members.map(m => m.userId).sort()).toEqual([...S].sort())
     expect(b.assignments).toEqual([expect.objectContaining({ userId: 'f_bravo', roleType: 'Instructor 1' })])
     expect(draft(d.id)).toMatchObject({ status: 'Approved', projectId: project.id })

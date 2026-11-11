@@ -9,11 +9,11 @@ import { applyStage } from '../backend/stageBuilder.js'
 import { scenarioStore } from '../dev/scenarios.js'
 import { setSessionUserId } from '../state/session.js'
 import { bundle } from '../services/core.js'
-import { runGate, addAnnotation } from '../services/actions.js'
+import { runGate, addAnnotation, returnAdviserAssignment } from '../services/actions.js'
 import { worklist, officeQueues } from '../services/worklist.js'
 import { canView, canDo, viewBundle } from '../domain/guard.js'
 import { resolveInstitution, can } from '../domain/caac.js'
-import { stageByKey, STAGES } from '../domain/stages.js'
+import { stageByKey, STAGES, adviserReturnOf } from '../domain/stages.js'
 import { DOC_STATUS, FORMS, GLOBAL_ROLES as G, PROJECT_ROLES as P } from '../domain/constants.js'
 import { signed } from './pdfFixture.js'
 
@@ -104,6 +104,66 @@ describe('S2.2 — adviser approval (flag ADVISER_APPROVAL = both, any order)', 
     await expect(runGate(as('f_echo'), null, 'p_g4', { action: 'APPROVE_ADVISER' })).rejects.toThrow()
     await runGate(as('f_delta'), null, 'p_g4', { action: 'APPROVE_ADVISER' })
     expect(b('p_g4').project.currentStage).toBe('TOPIC_PROPOSAL')
+  })
+})
+
+describe('S2.2 return path (NEW-7, flag ADVISER_RETURN_PATH)', () => {
+  const coordinatorOf = (pid) => snap().users.find(u => (u.globalRoles ?? []).includes(G.COORDINATOR) &&
+    (u.programScope ?? []).includes(b(pid).project.program)).id
+
+  it('returns to the Program Chair with remarks; approvals cleared; re-routed for both offices again', async () => {
+    const pc = coordinatorOf('p_cyb1')
+    const adviser = b('p_cyb1').assignments.find(a => a.roleType === P.ADVISER).userId
+    const student = b('p_cyb1').members[0].userId
+    await runGate(as('f_echo'), null, 'p_cyb1', { action: 'APPROVE_ADVISER' })
+    await returnAdviserAssignment(as('f_delta'), null, 'p_cyb1', { remarks: 'Choose an adviser with a security background.' })
+
+    const p = b('p_cyb1').project
+    expect(p.currentStage).toBe('ADVISER_ASSIGNMENT')
+    expect(p.adviserApprovals).toEqual({})
+    expect(p.adviserReturns.at(-1)).toMatchObject({ by: 'f_delta', hat: G.DEAN, remarks: 'Choose an adviser with a security background.', adviserId: adviser })
+    // The proposed Adviser stays assigned for the PC to keep or replace.
+    expect(b('p_cyb1').assignments.some(a => a.roleType === P.ADVISER && a.userId === adviser)).toBe(true)
+    // Emailed to the PC and the other office — never the proposed Adviser or the group.
+    const to = recipients('p_cyb1', 'Adviser assignment returned')
+    expect(to).toEqual(expect.arrayContaining([pc, 'f_echo']))
+    expect(to).not.toContain(adviser)
+    expect(to).not.toContain(student)
+    expect(to).not.toContain('f_delta')
+    // Progressive visibility: back with the PC, gone from both offices.
+    expect(canView(user('f_delta'), b('p_cyb1'))).toBe(false)
+    expect(canView(user('f_echo'), b('p_cyb1'))).toBe(false)
+    expect(adviserReturnOf(viewBundle(user(pc), b('p_cyb1'))).remarks).toMatch(/security background/)
+    expect(viewBundle(user(student), b('p_cyb1')).project.adviserReturns).toEqual([])
+    expect(snap().auditLogs.some(a => a.projectId === 'p_cyb1' && a.action === 'STAGE_RETURN_ADVISER' && a.hat === G.DEAN)).toBe(true)
+
+    // The PC routes it again: both offices decide afresh.
+    await runGate(as(pc), null, 'p_cyb1', { action: 'ROUTE_ADVISER' })
+    expect(b('p_cyb1').project.currentStage).toBe('ADVISER_APPROVAL')
+    expect(approvalSteps('p_cyb1').map(s => s.done)).toEqual([false, false])
+    expect(adviserReturnOf(b('p_cyb1'))).toBeNull()
+  })
+
+  it('needs remarks; an office that already approved cannot return; not before routing', async () => {
+    await expect(returnAdviserAssignment(as('f_echo'), null, 'p_cyb1', { remarks: '  ' })).rejects.toThrow(/Say why/)
+    await runGate(as('f_echo'), null, 'p_cyb1', { action: 'APPROVE_ADVISER' })
+    expect(canDo(user('f_echo'), 'returnAdviser', b('p_cyb1')).reason).toMatch(/already approved/)
+    await expect(returnAdviserAssignment(as('f_echo'), null, 'p_cyb1', { remarks: 'No.' })).rejects.toThrow(/already approved/)
+    expect(b('p_cyb1').project.currentStage).toBe('ADVISER_APPROVAL')
+
+    await at('p_g4', 'ADVISER_ASSIGNMENT', { [P.ADVISER]: 'f_charlie' })
+    await expect(returnAdviserAssignment(as('f_delta'), null, 'p_g4', { remarks: 'No.' })).rejects.toThrow(/not available/)
+  })
+
+  it('NEW-5 — the office named as the Adviser cannot return it; the other office can', async () => {
+    await load(applyStage(buildSeed(), 'p_g4', 'ADVISER_ASSIGNMENT', { roles: { ...SEED_ROLES.p_g4, [P.ADVISER]: 'f_delta' }, preassign: [P.ADVISER] }))
+    await runGate(as('f_alpha'), null, 'p_g4', { action: 'ROUTE_ADVISER' })
+    expect(canDo(user('f_delta'), 'returnAdviser', b('p_g4')).ok).toBe(false)
+    await expect(returnAdviserAssignment(as('f_delta'), null, 'p_g4', { remarks: 'No.' })).rejects.toThrow()
+    await returnAdviserAssignment(as('f_echo'), null, 'p_g4', { remarks: 'The Dean is over the advising load.' })
+    expect(b('p_g4').project.currentStage).toBe('ADVISER_ASSIGNMENT')
+    // The Dean is the proposed Adviser here, so is not told either.
+    expect(recipients('p_g4', 'Adviser assignment returned')).not.toContain('f_delta')
   })
 })
 

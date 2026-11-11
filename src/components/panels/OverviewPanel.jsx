@@ -12,6 +12,7 @@ import {
 import { courseOfStage, openGates, stageByKey } from '../../domain/stages.js'
 import { FLAGS } from '../../domain/flags.js'
 import GatePanel from './GatePanel.jsx'
+import AdviserReturn from './AdviserReturn.jsx'
 import Capstone2Checks from './Capstone2Checks.jsx'
 import UroReview from './UroReview.jsx'
 import { Act } from '../ViewOnly.jsx'
@@ -40,6 +41,7 @@ export default function OverviewPanel({ b, ctx, goTo }) {
     <>
       <Section title="Next step" tone={openGates(stageByKey(b.project.currentStage), b).some(g => can(ctx, g.capability)) ? 'accent' : undefined}>
         <GatePanel b={b} ctx={ctx} goTo={goTo} />
+        <AdviserReturn b={b} ctx={ctx} />
       </Section>
 
       <UroReview b={b} ctx={ctx} goTo={goTo} />

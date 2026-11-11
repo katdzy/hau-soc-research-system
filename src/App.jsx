@@ -50,8 +50,6 @@ function Screens() {
         <Route index element={<Dashboard />} />
         <Route path="projects" element={<Projects />} />
         <Route path="projects/:id" element={<ProjectWorkspace />} />
-        {/* Notifications are email only; an old link lands on the worklist. */}
-        <Route path="notifications" element={<Navigate to="/" replace />} />
         <Route path="records" element={<Records />} />
         <Route path="forms" element={<BlankForms />} />
         <Route path="reports" element={<Reports />} />

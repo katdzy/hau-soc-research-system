@@ -160,7 +160,7 @@ function pendingTasks(b, ctx, me) {
 }
 
 /** One project's worklist row for `me`, or null when the project is not visible to them. */
-export function worklistRow(snap, me, p, b = bundle(snap, p.id)) {
+function worklistRow(snap, me, p, b = bundle(snap, p.id)) {
   const access = projectAccess(me, b)
   if (!access.visible) return null
   const ctx = resolveContext(me, b)
@@ -184,6 +184,26 @@ export function worklist(snap, me) {
 }
 
 export const isActionable = (r) => r.gates.length > 0 || r.tasks.length > 0
+
+/**
+ * What `hats` owe across `rows`, one item per open gate or task: its label,
+ * the tab it is done from, and whether it can be done now (`ready`) or is
+ * waiting on something first (`blocker`).
+ */
+export function owedBy(rows, hats) {
+  return rows.flatMap(r => [
+    ...r.gates.filter(g => hats.includes(g.hat)).map(g => ({
+      r, key: g.gate.action, label: g.gate.label, blocker: g.blocker, tab: g.gate.handledIn, ready: !g.blocker,
+    })),
+    ...r.tasks.filter(t => hats.includes(t.hat)).map((t, i) => ({
+      r, key: `t${i}`, label: t.label, tab: t.tab, ready: true, urgent: t.urgent, kind: t.kind, n: t.n,
+    })),
+  ])
+}
+
+/** The items to do now, most pressing first. */
+export const readyFirst = (items) => items.filter(i => i.ready)
+  .sort((a, b) => Number(b.urgent ?? 0) - Number(a.urgent ?? 0))
 export const actionableCount = (rows) => rows.filter(isActionable).length
 
 /**

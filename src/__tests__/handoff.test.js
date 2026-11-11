@@ -323,7 +323,7 @@ describe('Prompt 11 — G5 from S0 to S10', () => {
 
     // --- S7 Final Defense ------------------------------------------------------
     expect.soft(canDo(user('f_npc_cs0'), 'scheduleDefense', bundle(snap(), pid)).ok).toBe(false) // T7
-    await step('S7.1', 'f_alpha', 'PC endorses for final defense scheduling (panel kept — SAME_PANEL_BOTH_DEFENSES)', (me) => runGate(me, null, pid, { action: 'ENDORSE_FINAL_DEFENSE', file: signed() }))
+    await step('S7.1', 'f_alpha', 'PC endorses for final defense scheduling (panel kept — NEW-6)', (me) => runGate(me, null, pid, { action: 'ENDORSE_FINAL_DEFENSE', file: signed() }))
     expect.soft(trace.at(-1).nextTurn).toEqual(['I2 (Uy)'])
     await step('S7.3', 'f_npc_cs0', 'I2 publishes the final defense schedule (AI summary stub — R12)', (me) =>
       scheduleDefense(me, null, pid, { scheduledAt: ago(30), venue: 'SOC AVR', instructions: '' }))

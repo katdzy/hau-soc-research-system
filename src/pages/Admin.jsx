@@ -32,7 +32,7 @@ const CATEGORIES = [
 const programOf = (u) => u.program || parseSection(u.block)?.program || ''
 
 /** The sections an account teaches (Instructor 1 for a Capstone 1 section), by block. */
-export const sectionsTaughtBy = (u, snap) => (snap.sections ?? [])
+const sectionsTaughtBy = (u, snap) => (snap.sections ?? [])
   .filter(s => s.instructorId === u.id)
   .sort((a, b) => String(a.block).localeCompare(String(b.block)))
 const categoryOf = (u) => accountType(u.email) === 'Student'
@@ -60,7 +60,7 @@ export function newFacultyAccounts(users, now = Date.now()) {
 }
 
 /** Accounts that registered and are not active yet (S0.1–S0.3). */
-export const pendingAccounts = (users) => (users ?? []).filter(u => u.status === ACCOUNT_STATUS.INACTIVE)
+const pendingAccounts = (users) => (users ?? []).filter(u => u.status === ACCOUNT_STATUS.INACTIVE)
 
 // Administration is three pages, each reached from its own link in the rail:
 //   /admin/accounts  Accounts — Global Roles, program scope, suspension (S0.3)

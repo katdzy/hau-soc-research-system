@@ -14,6 +14,7 @@ import { fmtDateTime } from '../components/ui.jsx'
 import { readCheckpoint, writeCheckpoint, toStore } from './checkpoint.js'
 import { rolesForStage, diffStores } from './spawn.js'
 import Spawner from './Spawner.jsx'
+import { projectName } from '../domain/groupNames.js'
 import { Icon, Avatar } from './icons.jsx'
 import './dev.css'
 
@@ -120,12 +121,11 @@ function useDraggable(key, clamp) {
 const initialsOf = (name = '') => name.replace(/^(Prof\.|Dean|Dr\.)\s+/, '').split(/\s+/).filter(Boolean)
   .slice(0, 2).map(w => w[0]).join('').toUpperCase()
 
-/** "Group 2 · WD-401" for an untitled group, else its title (shortened). */
+/** "WD-401-2" for a group without a topic, else its title (shortened). */
 const groupLabel = (p) => {
   if (!p) return '?'
-  const m = /^Untitled — Group (\d+) \((.+)\)$/.exec(p.title ?? '')
-  if (m) return `Group ${m[1]} · ${m[2]}`
-  return p.title.length > 34 ? `${p.title.slice(0, 33)}…` : p.title
+  const name = projectName(p)
+  return name.length > 34 ? `${name.slice(0, 33)}…` : name
 }
 
 export default function TestPanel() {
