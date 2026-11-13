@@ -6,12 +6,15 @@ import { Badge, Section, daysLeft, programShort, fmtDate, fmtDateTime } from '..
 import { can } from '../../domain/caac.js'
 import { canDo, viewBundle } from '../../domain/guard.js'
 import { FLAGS } from '../../domain/flags.js'
-import { STAGES, openGates, sectionNow, courseOfStage, milestoneStatus, stageLabel, adviserReturnOf } from '../../domain/stages.js'
+import { STAGES, sectionNow, courseOfStage, milestoneStatus, stageLabel, adviserReturnOf } from '../../domain/stages.js'
 import { ExportMenu } from '../../components/Export.jsx'
 import { GroupDraftReview } from '../../components/GroupDraft.jsx'
 import ForwardRosterDialog from '../../components/panels/ForwardRoster.jsx'
 import { Act } from '../../components/ViewOnly.jsx'
 import { owedBy } from '../../services/worklist.js'
+import { addMember } from '../../services/api.js'
+import { useAction, ActionError } from '../../components/useAction.jsx'
+import Dialog from '../../components/Dialog.jsx'
 
 export { owedBy }
 import {
@@ -449,120 +452,212 @@ export function RecordsSearch() {
   )
 }
 
-/**
- * §4 Instructor 1, one per Capstone 1 section taught: the section roster, the
- * section's groups by stage, and the submissions waiting on the instructor.
- * Groups are the ones visible to this user right now (CAAC), so a group routed
- * to Capstone 2 drops out here (NEW-6, flag I1_ACCESS_AFTER_ROUTING).
- */
-// The section roster lists this many ungrouped students before "Show more".
-const ROSTER_SHOWN = 10
+/** "2/9" — where a group is among its course's steps (the wireframe's "9/14"). */
+export const stepCount = (p) => {
+  const course = courseOfStage(p.currentStage)
+  const labels = [...new Set(STAGES.filter(s => s.key !== 'ARCHIVED' && courseOfStage(s.key) === course).map(s => stageLabel(s.key)))]
+  return `${labels.indexOf(stageLabel(p.currentStage)) + 1}/${labels.length}`
+}
 
+/** Where a group is on the way to its adviser, for the chip at the foot of its card. */
+const sentState = (r) => {
+  const at = stageOrder(r)
+  if (at <= STAGES.findIndex(s => s.key === 'GROUP_FORMATION')) return ['Not sent']
+  if (at <= STAGES.findIndex(s => s.key === 'ADVISER_APPROVAL')) return ['Sent to Program Chair']
+  return ['Adviser assigned', 'ok']
+}
+
+/**
+ * §4 Instructor 1, one per Capstone 1 section taught (Figma S-22): the
+ * section's groups as cards — members, current step, what waits on the
+ * instructor — beside the students still without a group and the roster
+ * actions. Groups are the ones visible to this user right now (CAAC), so a
+ * group routed to Capstone 2 drops out here (NEW-6, flag I1_ACCESS_AFTER_ROUTING).
+ */
 export function BlockDesk({ section, rows }) {
   const { snap, me } = useApp()
+  const users = snap.users ?? []
+  const nameOf = (id) => users.find(u => u.id === id)?.name ?? '—'
   const groups = rows.filter(r => r.project.sectionId === section.id)
+    .sort((x, y) => (x.project.groupNumber ?? 0) - (y.project.groupNumber ?? 0) || String(x.project.title).localeCompare(String(y.project.title)))
   const grouped = new Set((snap.projectMembers ?? []).map(m => m.userId))
-  const roster = (snap.users ?? [])
-    .filter(u => accountType(u.email) === 'Student' && u.block === section.block && u.status === ACCOUNT_STATUS.ACTIVE)
+  const roster = users.filter(u => accountType(u.email) === 'Student' && u.block === section.block && u.status === ACCOUNT_STATUS.ACTIVE)
   const ungrouped = roster.filter(u => !grouped.has(u.id))
   const queue = reviewQueue(groups, me)
   // Groups this instructor can forward now (Figma S-22 "Send groups to Program Chair").
   const forwardable = groups.filter(r => r.gates.some(g => g.gate.action === 'ENDORSE_ROSTER'))
+  // Groups that can still take students: at Group Formation, with a seat free.
+  const open = groups.filter(r => r.bundle.members.length < FLAGS.GROUP_SIZE && canDo(me, 'manageRoster', r.bundle).ok)
   const [forwarding, setForwarding] = useState(false)
+  const [adding, setAdding] = useState(false)
+  const [picked, setPicked] = useState(() => new Set())
+  const chosen = ungrouped.filter(u => picked.has(u.id))
+  const toggle = (id) => setPicked(s => { const n = new Set(s); n.has(id) ? n.delete(id) : n.add(id); return n })
+
+  const statusFor = (r) => {
+    if (queue.some(x => x.r === r)) return ['Ready for your check', 'warn']
+    const [label, tone] = statusOf(r, ['Instructor 1'])
+    return label === 'On track' ? null : [label, tone]
+  }
 
   return (
-    <section className="section" aria-labelledby={`blk-${section.id}`}>
-      <div className="section-head mb-half">
-        <h2 id={`blk-${section.id}`}>Section {section.block} · {section.course}</h2>
-        <Link className="btn small primary" to="/projects?new=1">Create a project group</Link>
-      </div>
-      <p className="small muted m-0">{programShort(section.program)} · {section.yearLevel} · {section.term}</p>
+    <section className="roster-board" aria-labelledby={`blk-${section.id}`}>
+      <header className="roster-head">
+        <h2 id={`blk-${section.id}`}>{section.block}</h2>
+        <p className="small muted m-0">
+          {section.course} · {section.term} · {roster.length} student{roster.length === 1 ? '' : 's'} enrolled · {programShort(section.program)}
+        </p>
+      </header>
 
-      <div className="block-grid">
-        <div>
-          <h3 className="label group-sub">Review queue</h3>
-          {queue.length === 0 && <p className="small faint m-0">Nothing is waiting for your decision.</p>}
-          <ul className="todo">
-            {queue.map(({ r, d }) => (
-              <li key={d.id}>
-                <Link to={`/projects/${r.project.id}?tab=documents`}>{d.docType} v{d.versionNumber}</Link>
-                <span className="faint"> — {r.project.title}</span>
-              </li>
-            ))}
-          </ul>
+      {ungrouped.length > 0 && (
+        <div className="roster-notice" role="status">
+          <strong>{ungrouped.length} student{ungrouped.length === 1 ? ' is' : 's are'} not in a group yet</strong>
+          <span>Add them to a group before you send the groups on. Once a group is sent to the Program Chair, its members can no longer be changed here.</span>
+        </div>
+      )}
 
+      <div className="roster-cols">
+        <div className="roster-main">
           {FLAGS.STUDENT_GROUP_DRAFTS && <GroupDraftReview section={section} />}
 
-          <h3 className="label group-sub">Groups by stage</h3>
-          {groups.length === 0 && <p className="small faint m-0">No groups in Capstone 1 for this section.</p>}
-          {groups.length > 0 && (
-            <div className="table-scroll"><table className="cards">
-              <thead><tr><th>Group</th><th>Stage</th><th>Now</th><th className="tight">Students</th></tr></thead>
-              <tbody>
-                {[...groups].sort((x, y) => stageOrder(x) - stageOrder(y)).map(r => {
-                  const ready = r.gates.find(g => !g.blocker)
-                  const mine = r.gates[0]
-                  const next = openGates(r.stage, r.bundle)[0]
-                  return (
-                    <tr key={r.project.id}>
-                      <td><Link className="row-link" to={`/projects/${r.project.id}`}>{r.project.title}</Link></td>
-                      <td className="card-status"><Badge>{r.stage?.label}</Badge></td>
-                      <td className="small" data-label="Now">
-                        {ready ? <span className="ok-inline">Your step: {ready.gate.label}</span>
-                          : mine ? <span className="muted">{mine.blocker}</span>
-                            : next ? <span className="muted">Waiting on {next.actorHint}</span> : '—'}
-                      </td>
-                      <td className={`tight mono${r.bundle.members.length < FLAGS.GROUP_SIZE ? ' tone-warn' : ''}`} data-label="Students">
-                        {r.bundle.members.length}/{FLAGS.GROUP_SIZE}
-                      </td>
-                    </tr>
-                  )
-                })}
-              </tbody>
-            </table></div>
-          )}
+          {groups.length === 0 && <p className="small faint m-0 mb-2">No groups in Capstone 1 for this section yet.</p>}
+          <div className="group-cards">
+            {groups.map(r => {
+              const status = statusFor(r)
+              const [sent, sentTone] = sentState(r)
+              const n = r.bundle.members.length
+              const waiting = queue.filter(x => x.r === r)
+              return (
+                <article className="group-card" key={r.project.id} aria-labelledby={`grp-${r.project.id}`}>
+                  <header className="group-card-head">
+                    <h3 id={`grp-${r.project.id}`}>{r.project.title}</h3>
+                    <span className={`small ${n < FLAGS.GROUP_SIZE ? 'tone-warn' : 'faint'}`}>{n} member{n === 1 ? '' : 's'}</span>
+                  </header>
+                  <ul className="plain-list small">
+                    {r.bundle.members.map(m => <li key={m.id}>{nameOf(m.userId)}</li>)}
+                    {n === 0 && <li className="faint">No students yet</li>}
+                  </ul>
+                  <div className="group-card-step">
+                    <span><span className="mono">{stepCount(r.project)}</span> · {r.stage?.label}</span>
+                    {status ? <Badge tone={status[1]}>{status[0]}</Badge> : <span className="faint" aria-hidden="true">—</span>}
+                    <Link className="group-card-open" to={waiting.length ? itemLink(r, 'documents') : itemLink(r)}>
+                      {waiting.length ? `Check ${waiting[0].d.docType} v${waiting[0].d.versionNumber}` : 'Open group'} <span aria-hidden="true">→</span>
+                    </Link>
+                  </div>
+                  <footer className="group-card-foot">
+                    <Badge tone={sentTone}>{sent}</Badge>
+                    {canDo(me, 'manageRoster', r.bundle).ok && <Act><Link className="small" to={itemLink(r)}>Edit members</Link></Act>}
+                  </footer>
+                </article>
+              )
+            })}
+            <Act>
+              <Link className="group-card is-new" to="/projects?new=1">
+                <strong><span aria-hidden="true">+ </span>Create group</strong>
+                <span className="small faint">Then add students from the unassigned list</span>
+              </Link>
+            </Act>
+          </div>
         </div>
 
-        <aside className="group-people" aria-label={`Section ${section.block} roster`}>
-          <h3 className="label group-sub mt-0">Section roster</h3>
-          <p className="small m-0 mb-1">
-            <span className="mono">{roster.length - ungrouped.length}</span> of <span className="mono">{roster.length}</span> students in a group
-          </p>
-          {ungrouped.length > 0 && (
-            <>
-              <div className="small muted">Not in a group yet:</div>
-              <ul className="plain-list small">
-                {ungrouped.slice(0, ROSTER_SHOWN).map(u => <li key={u.id}>{u.name} <span className="faint mono">{u.idNumber}</span></li>)}
-              </ul>
-              {ungrouped.length > ROSTER_SHOWN && (
-                <details className="small mt-1">
-                  <summary>Show {ungrouped.length - ROSTER_SHOWN} more</summary>
-                  <ul className="plain-list">
-                    {ungrouped.slice(ROSTER_SHOWN).map(u => <li key={u.id}>{u.name} <span className="faint mono">{u.idNumber}</span></li>)}
+        <aside className="roster-side" aria-label={`Section ${section.block} roster`}>
+          <div className="roster-box">
+            <h3>Unassigned students ({ungrouped.length})</h3>
+            {ungrouped.length === 0
+              ? <p className="small muted m-0">{roster.length ? `All ${roster.length} enrolled students are in a group.` : 'No student has registered in this section yet.'}</p>
+              : (
+                <>
+                  <ul className="pick-list">
+                    {ungrouped.map(u => (
+                      <li key={u.id}>
+                        <label>
+                          <Act><input type="checkbox" checked={picked.has(u.id)} onChange={() => toggle(u.id)} /></Act>
+                          <span>{u.name} <span className="faint mono small">{u.idNumber}</span></span>
+                        </label>
+                      </li>
+                    ))}
                   </ul>
-                </details>
+                  <Act>
+                    <button type="button" disabled={!chosen.length} onClick={() => setAdding(true)}>
+                      Add selected to group…
+                    </button>
+                  </Act>
+                </>
               )}
-            </>
-          )}
+          </div>
 
-          {/* Figma S-22 · Roster actions */}
-          <div className="roster-actions">
-            <h3 className="label group-sub">Roster actions</h3>
+          <div className="roster-box is-accent">
+            <h3>Roster actions</h3>
             <Act>
               <button type="button" className="primary" disabled={!forwardable.length} onClick={() => setForwarding(true)}>
                 Send groups to Program Chair{forwardable.length ? ` (${forwardable.length})` : ''}
               </button>
             </Act>
-            <p className="small muted m-0 mt-1">
+            <p className="small muted m-0">
               {forwardable.length
-                ? `Review and forward ${forwardable.length === 1 ? 'the group' : `${forwardable.length} groups`} at Group Formation. The Program Chair then assigns an adviser, which the Associate Dean and the Dean approve.`
-                : 'Groups appear here once they are formed. Forwarded groups go on to adviser assignment.'}
+                ? `Sends ${forwardable.map(r => r.project.title).join(', ')} so the Program Chair can assign an adviser. The assignment then goes to the Associate Dean and the Dean for approval.`
+                : groups.length
+                  ? 'Every group here has been sent. New groups appear here once they are formed.'
+                  : 'Groups appear here once they are formed. Sent groups go on to adviser assignment.'}
             </p>
           </div>
         </aside>
       </div>
+
       {forwarding && <ForwardRosterDialog groups={forwardable.map(r => r.bundle)} onClose={() => setForwarding(false)} />}
+      {adding && <AddToGroupDialog students={chosen} groups={open} onClose={() => setAdding(false)} onDone={() => setPicked(new Set())} />}
     </section>
+  )
+}
+
+/** S-22 "Add selected to group…": which group the ticked students join. */
+function AddToGroupDialog({ students, groups, onClose, onDone }) {
+  const { snap, me } = useApp()
+  const { run, error, busy } = useAction()
+  const [target, setTarget] = useState('')
+  const seats = (r) => FLAGS.GROUP_SIZE - r.bundle.members.length
+  const names = students.map(u => u.name).join(', ')
+
+  function add() {
+    run(async () => {
+      for (const u of students) await addMember(me, snap, target, u.id)
+      onDone?.()
+      onClose()
+    })
+  }
+
+  return (
+    <Dialog
+      title={`Add ${students.length} student${students.length === 1 ? '' : 's'} to a group`} sub={names}
+      onClose={busy ? undefined : onClose}
+      footer={<>
+        <button type="button" onClick={onClose} disabled={busy}>Cancel</button>
+        <button type="button" className="primary" disabled={busy || !target} onClick={add}>{busy ? 'Adding…' : 'Add to group'}</button>
+      </>}
+    >
+      {groups.length === 0
+        ? <p className="m-0">No group in this section has a free seat. <Link to="/projects?new=1">Create a group</Link> first.</p>
+        : (
+          <fieldset className="choice">
+            <legend className="label">Groups with a free seat</legend>
+            {groups.map(r => {
+              const short = seats(r) < students.length
+              return (
+                <label key={r.project.id} className={`choice-card${short ? ' is-disabled' : ''}`}>
+                  <input type="radio" name="add-to-group" checked={target === r.project.id} disabled={short || busy} onChange={() => setTarget(r.project.id)} />
+                  <span>
+                    <strong className="small">{r.project.title}</strong>
+                    <span className="faint small">
+                      {r.bundle.members.length} of {FLAGS.GROUP_SIZE} members{short ? ` — room for ${seats(r)} only` : ''}
+                    </span>
+                  </span>
+                </label>
+              )
+            })}
+          </fieldset>
+        )}
+      <ActionError error={error} />
+    </Dialog>
   )
 }
 

@@ -1,0 +1,15 @@
+{
+  "permissions": {
+    "deny": [
+      "Bash(firebase deploy:*)",
+      "Bash(firebase functions:*)",
+      "Bash(firebase firestore:*)",
+      "Bash(firebase hosting:*)",
+      "Bash(gcloud:*)",
+      "Read(./.env)",
+      "Read(./functions/.env)",
+      "Read(./.secrets/**)"
+    ],
+    "disableBypassPermissionsMode": "disable"
+  }
+}

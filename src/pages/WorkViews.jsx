@@ -1,4 +1,4 @@
-import { useEffect } from 'react'
+import { useEffect, useState } from 'react'
 import { Link, useLocation } from 'react-router-dom'
 import { useApp } from '../state/AppContext.jsx'
 import { useWorkspace } from '../components/Workspace.jsx'
@@ -6,12 +6,15 @@ import { officeQueues } from '../services/worklist.js'
 import { Badge, Section, Empty, Restricted, fmtDate, fmtDateTime } from '../components/ui.jsx'
 import { viewBundle } from '../domain/guard.js'
 import { rowsIn, contextByKey } from '../domain/workspaces.js'
-import { sectionNow, courseOfStage } from '../domain/stages.js'
+import { sectionNow, courseOfStage, adviserReturnOf } from '../domain/stages.js'
 import { GLOBAL_ROLES as G, PROJECT_ROLES as P, PANEL_ROLES, COURSES, programCode } from '../domain/constants.js'
 import {
-  ProjectCell, Feed, OwedFeed, DefenseTable, QueueSection, BlockDesk, Capstone2Facts, PanelFacts, ProgramSummary, RecordsSearch, ProjectDirectory,
-  statusOf, stepOf, itemLink, upcomingDefenses, stageOrder, latestDoc,
+  ProjectCell, OwedFeed, DefenseTable, QueueSection, BlockDesk, Capstone2Facts, PanelFacts, ProgramSummary, RecordsSearch, ProjectDirectory,
+  Stat, Stats, queueItems, statusOf, stepOf, itemLink, upcomingDefenses, stageOrder, latestDoc,
 } from './dashboards/parts.jsx'
+import { AssignAdviserDialog, RoutingSlipDialog } from '../components/panels/AdviserRouting.jsx'
+import { ExportMenu } from '../components/Export.jsx'
+import { Act } from '../components/ViewOnly.jsx'
 import { clearedEntries } from './dashboards/Desks.jsx'
 import { LOG_LABEL } from '../components/panels/LogsPanel.jsx'
 
@@ -19,12 +22,15 @@ import { LOG_LABEL } from '../components/panels/LogsPanel.jsx'
 // per user). Every list is built from the worklist — the projects the guard
 // lets this user open right now — filtered to the role the page is about.
 
-function Page({ title, lede, children }) {
+function Page({ title, lede, aside, children }) {
   return (
     <div className="page">
-      <header className="page-head">
-        <h1>{title}</h1>
-        {lede && <p className="lede">{lede}</p>}
+      <header className={`page-head${aside ? ' has-aside' : ''}`}>
+        <div>
+          <h1>{title}</h1>
+          {lede && <p className="lede">{lede}</p>}
+        </div>
+        {aside}
       </header>
       {children}
     </div>
@@ -231,7 +237,7 @@ export function Rosters() {
   const ids = new Set(sections.map(s => s.id))
   const elsewhere = rows.filter(r => !ids.has(r.project.sectionId))
   return (
-    <Page title="Groups & rosters" lede="Approve the groups your students draft (or create one for students left without a group), then forward them for adviser assignment.">
+    <Page title="Groups & rosters" lede="Your Capstone 1 sections. Open a group to see its progress and submissions; send formed groups to the Program Chair for adviser assignment.">
       {sections.map(s => <BlockDesk key={s.id} section={s} rows={rows} />)}
       {elsewhere.length > 0 && (
         <Section title="Other groups where you are Instructor 1">
@@ -317,33 +323,209 @@ function QueuePage({ title, lede, contexts, names, children }) {
   )
 }
 
-export const Routing = () => (
-  <QueuePage title="Assignments & routing" contexts={['coordinator']}
-    lede="Every project waiting on the Program Chair/Coordinator, by step: advisers, panels, Instructor 2, endorsements and schedules. A project opens to you only while one of these steps is yours." />
+// --- offices: hubs (Figma S-13a, S-19, S-21b) --------------------------------------------------------------
+
+/** When the project reached the step it is waiting at, and who moved it there. */
+function arrival(me, r) {
+  const at = r.project.currentStage
+  const moves = viewBundle(me, r.bundle).history.filter(h => h.toStage === at && h.fromStage !== at)
+  return moves.sort((a, b) => new Date(b.at) - new Date(a.at))[0] ?? null
+}
+
+const dayMonth = (iso) => iso ? new Date(iso).toLocaleDateString(undefined, { day: 'numeric', month: 'short' }) : '—'
+const daysSince = (iso) => iso ? Math.floor((Date.now() - new Date(iso)) / 864e5) : 0
+
+/** Filter chips over one table: "All" and one per kind that has rows. */
+function useKinds(items, kinds) {
+  const [kind, setKind] = useState('')
+  const present = kinds.filter(k => items.some(i => i.kind === k.key))
+  const active = present.some(k => k.key === kind) ? kind : ''
+  const pills = present.length > 1 && (
+    <div className="pills" role="group" aria-label="Filter">
+      <button type="button" className="pill" aria-pressed={!active} onClick={() => setKind('')}>All</button>
+      {present.map(k => (
+        <button type="button" key={k.key} className="pill" aria-pressed={active === k.key} onClick={() => setKind(k.key)}>{k.pill}</button>
+      ))}
+    </div>
+  )
+  return { pills, shown: active ? items.filter(i => i.kind === active) : items }
+}
+
+/** The row's dialog stays open by project id, so it follows the live record while it saves. */
+function useOpenRow(rows) {
+  const [id, setId] = useState(null)
+  return [id ? rows.find(r => r.project.id === id) ?? null : null, setId]
+}
+
+// The Program Chair's queues, in the wireframe's words; the first four are its tiles.
+const PC_KINDS = [
+  { key: 'Needs adviser', tile: 'Needs adviser assignment', pill: 'Adviser assignment', chip: 'Needs adviser assignment' },
+  { key: 'Needs panel', tile: 'Needs panel assignment', pill: 'Panel assignment', chip: 'Needs panel assignment' },
+  { key: 'Recommendations to endorse', tile: 'Needs endorsement', pill: 'Endorsement', chip: 'Needs endorsement' },
+  { key: 'Approval Sheets to endorse', tile: 'Needs clearance routing', pill: 'Clearance routing', chip: 'Needs clearance routing' },
+  { key: 'Needs Instructor 2', pill: 'Instructor 2', chip: 'Needs Instructor 2' },
+  { key: 'Proposal defenses to schedule', pill: 'Proposal defense schedule', chip: 'Needs a defense schedule' },
+  { key: 'Final defenses to schedule', pill: 'Final defense schedule', chip: 'Needs a defense schedule' },
+]
+
+/** S-13a — every project waiting on the Program Chair, one row each, with its pending action. */
+export function Routing() {
+  const { me } = useApp()
+  const rows = useRole('coordinator')
+  const [open, setOpen] = useOpenRow(rows ?? [])
+  const role = contextByKey('coordinator').role
+  const queues = officeQueues(me).filter(q => q.role === role)
+  const kinds = queues.map(q => PC_KINDS.find(k => k.key === q.name) ?? { key: q.name, pill: q.name, chip: q.name })
+  const items = queues.flatMap(q => queueItems(q, rows ?? []).map(it => ({ ...it, kind: q.name, since: arrival(me, it.r)?.at ?? it.r.project.createdAt })))
+    .sort((a, b) => new Date(a.since) - new Date(b.since))
+  const { pills, shown } = useKinds(items, kinds)
+  if (!rows) return <Restricted />
+  const count = (key) => items.filter(i => i.kind === key).length
+  const tiles = PC_KINDS.filter(k => k.tile && kinds.some(x => x.key === k.key))
+
+  return (
+    <Page title="Assignments & routing" lede="Every project that needs something from you. Each row shows the action pending on it — open the row to do it.">
+      {tiles.length > 0 && (
+        <Stats>{tiles.map((k, i) => <Stat key={k.key} label={k.tile} n={count(k.key)} tone={i === 0 && count(k.key) ? 'accent' : undefined} />)}</Stats>
+      )}
+      {pills}
+      <Section className="is-table">
+        {shown.length === 0 ? <Empty>Nothing is waiting on you{items.length ? ' in this queue' : ''}.</Empty> : (
+          <div className="table-scroll"><table className="cards">
+            <thead><tr><th>Group</th><th>Stage</th><th>Pending action</th><th>Waiting since</th><th className="tight" /></tr></thead>
+            <tbody>
+              {shown.map(({ r, kind, blocker, tab, steps, since }) => {
+                const adviser = kind === 'Needs adviser'
+                const returned = adviser ? adviserReturnOf(r.bundle) : null
+                const days = daysSince(since)
+                return (
+                  <tr key={`${r.project.id}-${kind}`} className={returned ? 'is-flagged' : undefined}>
+                    <td className="card-title">
+                      <Link className="row-link" to={itemLink(r)}>{r.project.title}</Link>
+                      <div className="faint small" title={r.project.program}>{sectionNow(r.project).section} · {programCode(r.project.program)}</div>
+                    </td>
+                    <td className="small" data-label="Stage">{stepOf(r.project)}</td>
+                    <td className="small" data-label="Pending action">
+                      <Badge tone={returned ? 'stop' : 'warn'}>{kinds.find(k => k.key === kind).chip}</Badge>
+                      {returned && <div className="small mt-half">Returned by the {returned.hat}</div>}
+                      {blocker && !adviser && <div className="muted small mt-half">{blocker}</div>}
+                      {steps?.length > 1 && <div className="faint small mt-half">{steps.filter(x => x.done).length} of {steps.length} steps done</div>}
+                    </td>
+                    <td className="small" data-label="Waiting since">{dayMonth(since)}{days >= 3 && <span className="muted"> · {days} days</span>}</td>
+                    <td className="tight">
+                      {adviser
+                        ? <Act><button type="button" className="small" onClick={() => setOpen(r.project.id)}>Open</button></Act>
+                        : <Link className="btn small" to={itemLink(r, tab)}>Open</Link>}
+                    </td>
+                  </tr>
+                )
+              })}
+            </tbody>
+          </table></div>
+        )}
+      </Section>
+      <p className="small faint m-0">Projects with nothing pending for you don’t appear here; see them on your Dashboard.</p>
+      {open && <AssignAdviserDialog r={open} onClose={() => setOpen(null)} />}
+    </Page>
+  )
+}
+
+const EXEC_KINDS = [
+  { key: 'adviser', tile: 'Adviser routing slips', pill: 'Adviser routing slips' },
+  { key: 'final', tile: 'Final signatures', pill: 'Final signatures' },
+  { key: 'form', tile: 'Forms to sign', pill: 'Forms to sign' },
+]
+const EXEC_QUEUE = { 'Adviser assignments to approve': 'adviser', 'Projects for final approval': 'final' }
+
+/**
+ * S-19 / S-21b — what is routed to the Dean's and the Associate Dean's
+ * offices. An adviser routing slip opens over the page (M-01 – M-04); the
+ * rest open on the project. `only` narrows the page to one kind.
+ */
+function ExecutiveApprovals({ title, lede, only }) {
+  const { me, snap } = useApp()
+  const { held } = useWorkspace()
+  const rows = useRole('dean', 'associate-dean')
+  const [open, setOpen] = useOpenRow(rows ?? [])
+  const offices = held.filter(c => c.key === 'dean' || c.key === 'associate-dean').map(c => c.role)
+  const nameOf = (id) => (snap.users ?? []).find(u => u.id === id)?.name ?? '—'
+  const adviserOf = (r) => nameOf(r.bundle.assignments.find(a => a.roleType === P.ADVISER)?.userId)
+
+  const items = [
+    ...officeQueues(me).filter(q => offices.includes(q.role) && EXEC_QUEUE[q.name]).flatMap(q => queueItems(q, rows ?? []).map(it => {
+      const kind = EXEC_QUEUE[q.name]
+      return {
+        ...it, kind,
+        item: kind === 'adviser' ? 'Adviser routing slip' : 'Final institutional signature',
+        sub: kind === 'adviser' ? <>{adviserOf(it.r)} <span aria-hidden="true">→</span><span className="sr-only">to</span> {it.r.project.title}</> : it.label,
+      }
+    })),
+    ...(rows ?? []).flatMap(r => r.tasks.filter(t => offices.includes(t.hat) && t.kind === 'form')
+      .map(t => ({ r, kind: 'form', item: t.label, sub: 'Signed outside the system, then uploaded', tab: t.tab, blocker: null }))),
+  ].filter(i => !only || i.kind === only)
+    .map(i => ({ ...i, from: arrival(me, i.r) }))
+    .sort((a, b) => Number(Boolean(a.blocker)) - Number(Boolean(b.blocker)) || new Date(a.from?.at ?? 0) - new Date(b.from?.at ?? 0))
+  const { pills, shown } = useKinds(items, EXEC_KINDS)
+  if (!rows) return <Restricted />
+  const waiting = items.filter(i => !i.blocker)
+  const count = (key) => waiting.filter(i => i.kind === key).length
+  const statusText = (i) => (i.blocker ? 'Approved by you' : 'Awaiting you')
+
+  return (
+    <Page title={title} lede={lede}
+      aside={<ExportMenu name="Executive_Approvals" title={`HAU — SOC · ${title}`}
+        header={['Item', 'Group', 'Program', 'Routed by', 'Received', 'Status']}
+        rows={items.map(i => [i.item, i.r.project.title, programCode(i.r.project.program), i.from ? [i.from.hat, nameOf(i.from.actorId)].filter(Boolean).join(' — ') : '', i.from ? fmtDate(i.from.at) : '', statusText(i)])} />}>
+      {!only && (
+        <Stats>
+          <Stat label="Awaiting your approval" n={waiting.length} tone={waiting.length ? 'accent' : undefined} />
+          {EXEC_KINDS.map(k => <Stat key={k.key} label={k.tile} n={count(k.key)} />)}
+        </Stats>
+      )}
+      {!only && pills}
+      <Section className="is-table">
+        {shown.length === 0 ? <Empty>Nothing is routed to your office right now.</Empty> : (
+          <div className="table-scroll"><table className="cards">
+            <thead><tr><th>Item</th><th>Group</th><th>Routed by</th><th>Received</th><th>Status</th><th className="tight" /></tr></thead>
+            <tbody>
+              {shown.map((i, n) => (
+                <tr key={`${i.r.project.id}-${i.kind}-${n}`}>
+                  <td className="card-title"><strong>{i.item}</strong><div className="faint small">{i.sub}</div></td>
+                  <td className="small" data-label="Group">
+                    <Link className="row-link" to={itemLink(i.r, i.tab)}>{i.r.project.title}</Link>
+                    <div className="faint" title={i.r.project.program}>{programCode(i.r.project.program)}</div>
+                  </td>
+                  <td className="small" data-label="Routed by">{i.from ? <>{i.from.hat ?? nameOf(i.from.actorId)}{i.from.hat && <div className="faint">{nameOf(i.from.actorId)}</div>}</> : <span className="faint">—</span>}</td>
+                  <td className="small" data-label="Received">{dayMonth(i.from?.at)}</td>
+                  <td className="small card-status" data-label="Status">
+                    <Badge tone={i.blocker ? 'ok' : 'warn'}>{statusText(i)}</Badge>
+                    {i.blocker && <div className="faint small mt-half">{i.blocker.replace(/^You have approved\.\s*/, '')}</div>}
+                  </td>
+                  <td className="tight">
+                    {i.kind === 'adviser'
+                      ? <button type="button" className="small" onClick={() => setOpen(i.r.project.id)}>Open</button>
+                      : <Link className="btn small" to={itemLink(i.r, i.tab)}>Open</Link>}
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table></div>
+        )}
+      </Section>
+      {open && <RoutingSlipDialog r={open} onClose={() => setOpen(null)} />}
+    </Page>
+  )
+}
+
+export const Approvals = () => (
+  <ExecutiveApprovals title="Executive approvals"
+    lede="Items routed to your office. Every approval or return is date-stamped on the group’s progress trail and emailed to the people concerned." />
 )
 
 export const AdviserApprovals = () => (
-  <QueuePage title="Adviser assignments" contexts={['dean', 'associate-dean']} names={['Adviser assignments to approve']}
-    lede="Adviser assignments the Program Chair/Coordinator routed to the Dean and Associate Dean. When one office is the named Adviser, the other approves alone." />
+  <ExecutiveApprovals only="adviser" title="Adviser assignments"
+    lede="Adviser assignments the Program Chair routed to the Dean and the Associate Dean. When one office is the named adviser, the other approves alone." />
 )
-
-export function Approvals() {
-  const rows = useRole('dean', 'associate-dean')
-  const { held } = useWorkspace()
-  if (!rows) return <Restricted />
-  const hats = held.filter(c => c.key === 'dean' || c.key === 'associate-dean').map(c => c.role)
-  const forms = rows.flatMap(r => r.tasks.filter(t => hats.includes(t.hat) && t.kind === 'form').map(t => ({ r, t })))
-  return (
-    <QueuePage title="Executive approvals" contexts={['dean', 'associate-dean']} names={['Projects for final approval']}
-      lede="Approval Sheets and final institutional signatures waiting on the Dean and Associate Dean.">
-      {forms.length > 0 && (
-        <Section title="Forms to sign">
-          <Feed items={forms.map(({ r, t }, i) => ({ key: i, title: t.label, sub: r.project.title, chip: ['Awaiting you', 'warn'], to: itemLink(r, t.tab) }))} />
-        </Section>
-      )}
-    </QueuePage>
-  )
-}
 
 export function School() {
   const rows = useRole('dean', 'associate-dean')

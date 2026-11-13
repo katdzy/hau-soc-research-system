@@ -932,16 +932,9 @@ button.linkish:hover:not(:disabled) { background: none; color: var(--accent-ink)
   .hero-actions { flex-direction: row; flex-wrap: wrap; }
 }
 .group-sub { margin: var(--s3) 0 var(--s1); }
-.group-people { border-left: 1px solid var(--rule); padding-left: var(--s3); }
 .todo .urgent a { color: var(--stop-ink); }
 
-/* --- Instructor 1: the block desk ---------------------------------------- */
-.block-grid { display: grid; grid-template-columns: minmax(0, 1fr) 280px; gap: var(--s4); }
 .plain-list { list-style: none; margin: 4px 0 0; padding: 0; display: flex; flex-direction: column; gap: 4px; }
-@media (max-width: 1180px) {
-  .block-grid { grid-template-columns: minmax(0, 1fr); gap: var(--s3); }
-  .block-grid .group-people { border-left: 0; padding-left: 0; border-top: 1px solid var(--rule); padding-top: var(--s2); }
-}
 
 /* --- pills: filter chips (Figma: All · Faculty · Students) ---------------- */
 .pills { display: flex; flex-wrap: wrap; gap: var(--s1); margin: 0 0 var(--s2); }
@@ -1614,9 +1607,87 @@ tbody tr.is-flagged :is(.faint, .muted) { color: var(--ink-muted); }
   .dialog-foot { padding: 12px var(--s2); }
 }
 
-/* Roster actions beside a section's roster (Figma S-22). */
-.roster-actions { margin-top: var(--s3); padding-top: var(--s2); border-top: 1px solid var(--rule); }
-.roster-actions button { width: 100%; }
+/* --- Groups & rosters (Figma S-22) ------------------------------------------
+   One block per section: its groups as cards, beside the students still
+   without a group and the roster actions. */
+.roster-board { margin-bottom: var(--s6); }
+.roster-board:last-child { margin-bottom: 0; }
+.roster-head { display: flex; flex-wrap: wrap; align-items: baseline; gap: 4px var(--s2); margin-bottom: var(--s2); }
+.roster-head h2 { font-size: 20px; margin: 0; }
+.roster-notice {
+  display: grid; gap: 2px; margin-bottom: var(--s3); padding: 12px var(--s2);
+  background: var(--accent-wash); border-left: 4px solid var(--accent); border-radius: var(--radius); font-size: 13px;
+}
+.roster-notice strong { font-size: 14px; }
+.roster-cols { display: grid; grid-template-columns: minmax(0, 1fr) 320px; gap: var(--s3); align-items: start; }
+.roster-main { min-width: 0; }
+.group-cards { display: grid; grid-template-columns: repeat(auto-fill, minmax(264px, 1fr)); gap: var(--s2); }
+.group-card {
+  display: flex; flex-direction: column; gap: 12px; min-width: 0; padding: var(--s2);
+  border: 1px solid var(--rule-strong); border-radius: var(--radius-box); background: var(--surface);
+}
+.group-card-head { display: flex; align-items: baseline; justify-content: space-between; gap: var(--s1); }
+.group-card h3 { font-size: 15px; margin: 0; overflow-wrap: anywhere; }
+.group-card .plain-list { margin: 0; }
+.group-card-step {
+  display: grid; grid-template-columns: minmax(0, 1fr) auto; align-items: center; gap: var(--s1);
+  margin-top: auto; padding: 10px 12px; border: 1px solid var(--rule); border-radius: var(--radius); font-size: 12.5px;
+}
+.group-card-open { grid-column: 1 / -1; font-weight: 600; color: var(--ink); text-decoration: none; }
+.group-card-open:hover { text-decoration: underline; }
+.group-card-foot { display: flex; align-items: center; justify-content: space-between; gap: var(--s1); min-height: 24px; }
+a.group-card.is-new {
+  align-items: center; justify-content: center; gap: 4px; min-height: 136px; text-align: center;
+  border-style: dashed; color: var(--ink); text-decoration: none; transition: border-color .15s ease, background-color .15s ease;
+}
+a.group-card.is-new:hover { border-color: var(--ink-faint); background: var(--row-hover); }
+.roster-side { display: grid; gap: var(--s2); min-width: 0; }
+.roster-box {
+  display: grid; gap: 12px; padding: 20px; border: 1px solid var(--rule-strong); border-radius: var(--radius-box); background: var(--surface);
+}
+.roster-box.is-accent { border-color: var(--accent); box-shadow: inset 0 0 0 1px var(--accent); }
+.roster-box h3 { font-size: 15px; margin: 0; }
+.roster-box button { width: 100%; }
+.pick-list { list-style: none; margin: 0; padding: 0; display: grid; gap: 2px; max-height: 320px; overflow-y: auto; }
+.pick-list label { display: flex; align-items: flex-start; gap: 10px; padding: 6px 0; font-size: 13.5px; cursor: pointer; }
+.pick-list input { margin-top: 3px; flex: none; }
+@media (max-width: 1100px) { .roster-cols { grid-template-columns: minmax(0, 1fr); } }
+
+/* --- office hubs and the adviser routing slip (Figma S-13a, S-19, S-21b, M-01 – M-04, M-24) --- */
+.page-head.has-aside { display: flex; flex-wrap: wrap; align-items: flex-start; justify-content: space-between; gap: var(--s2); }
+/* A table that is the whole box: no title row above its header. */
+.section.is-table { padding-top: 0; }
+.section.is-table > .table-scroll thead th { border-top: 0; padding-top: 14px; }
+.section.is-table > .empty { padding-top: var(--s3); }
+.slip-cols { display: grid; grid-template-columns: minmax(0, 1.7fr) minmax(0, 1fr); gap: var(--s3); align-items: start; }
+.slip-stack { display: grid; gap: var(--s2); }
+.slip-box { padding: var(--s2) 20px; border: 1px solid var(--rule-strong); border-radius: var(--radius-box); }
+.slip-box.is-accent { border-color: var(--accent); box-shadow: inset 0 0 0 1px var(--accent); }
+.slip-box h3 { font-size: 14px; margin: 0 0 12px; }
+.slip-cols > div > .slip-box { margin-bottom: var(--s3); }
+.slip-facts { display: grid; grid-template-columns: auto minmax(0, 1fr); gap: 10px var(--s3); margin: 0; font-size: 13.5px; }
+.slip-facts dt { color: var(--ink-muted); }
+.slip-facts dd { margin: 0; text-align: right; overflow-wrap: anywhere; }
+.routing .badge { margin-top: 4px; }
+.routing li.is-stop::before { background: var(--stop); border-color: var(--stop); }
+.adviser-list { max-height: 336px; overflow-y: auto; margin-bottom: 0; padding: 2px; }
+.adviser-list .choice-card { align-items: center; }
+.adviser-list .choice-card > span { flex: 1 1 auto; min-width: 0; }
+.adviser-list .choice-card input { margin-top: 0; }
+.decide { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; }
+.decide .choice-card { border-radius: var(--radius-box); padding: var(--s2); }
+.decide .choice-card strong { font-size: 15px; }
+.choice-card.is-ok:has(input:checked) { border-color: var(--ok); background: var(--ok-wash); box-shadow: inset 0 0 0 1px var(--ok); }
+.choice-card.is-stop:has(input:checked) { border-color: var(--stop); background: var(--stop-wash); box-shadow: inset 0 0 0 1px var(--stop); }
+.choice-card.is-ok:has(input:checked) .muted, .choice-card.is-stop:has(input:checked) .muted { color: var(--ink); }
+/* The filled confirm buttons of a decision: green approves, red returns. */
+button.solid-ok { background: var(--ok-ink); border-color: var(--ok-ink); color: #fff; }
+button.solid-ok:hover:not(:disabled) { background: #0f5c34; border-color: #0f5c34; }
+button.solid-stop { background: var(--stop-ink); border-color: var(--stop-ink); color: #fff; }
+button.solid-stop:hover:not(:disabled) { background: #951f1f; border-color: #951f1f; }
+@media (max-width: 760px) {
+  .slip-cols, .decide { grid-template-columns: minmax(0, 1fr); }
+}
 
 /* Forward to the Program Chair (components/panels/ForwardRoster.jsx). */
 .fwd-groups { display: grid; gap: var(--s2); }

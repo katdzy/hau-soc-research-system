@@ -39,8 +39,8 @@ export const CONTEXTS = [
   {
     key: 'associate-dean', role: G.ASSOCIATE_DEAN, heading: 'Associate Dean', global: true,
     nav: [
-      { to: '/adviser-approvals', label: 'Assignment Review' },
       { to: '/approvals', label: 'Executive Approvals' },
+      { to: '/adviser-approvals', label: 'Assignment Review' },
       { to: '/school', label: 'Student Capstone/Thesis' },
       { to: '/versions', label: 'Version History' },
       { to: '/completions', label: 'Completion Records' },
