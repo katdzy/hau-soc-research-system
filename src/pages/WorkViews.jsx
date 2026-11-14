@@ -4,15 +4,15 @@ import { useApp } from '../state/AppContext.jsx'
 import { useWorkspace } from '../components/Workspace.jsx'
 import { officeQueues } from '../services/worklist.js'
 import { Badge, Section, Empty, Restricted, fmtDate, fmtDateTime } from '../components/ui.jsx'
-import { viewBundle } from '../domain/guard.js'
+import { viewBundle, canDo } from '../domain/guard.js'
 import { rowsIn, contextByKey } from '../domain/workspaces.js'
 import { sectionNow, courseOfStage, adviserReturnOf } from '../domain/stages.js'
-import { GLOBAL_ROLES as G, PROJECT_ROLES as P, PANEL_ROLES, COURSES, programCode } from '../domain/constants.js'
+import { GLOBAL_ROLES as G, PROJECT_ROLES as P, PANEL_ROLES, COURSES, programCode, roleLabel } from '../domain/constants.js'
 import {
   ProjectCell, OwedFeed, DefenseTable, QueueSection, BlockDesk, Capstone2Facts, PanelFacts, ProgramSummary, RecordsSearch, ProjectDirectory,
   Stat, Stats, queueItems, statusOf, stepOf, itemLink, upcomingDefenses, stageOrder, latestDoc,
 } from './dashboards/parts.jsx'
-import { AssignAdviserDialog, RoutingSlipDialog } from '../components/panels/AdviserRouting.jsx'
+import { AssignAdviserDialog, RoutingSlipDialog, BulkApproveDialog } from '../components/panels/AdviserRouting.jsx'
 import { ExportMenu } from '../components/Export.jsx'
 import { Act } from '../components/ViewOnly.jsx'
 import { clearedEntries } from './dashboards/Desks.jsx'
@@ -336,8 +336,8 @@ const dayMonth = (iso) => iso ? new Date(iso).toLocaleDateString(undefined, { da
 const daysSince = (iso) => iso ? Math.floor((Date.now() - new Date(iso)) / 864e5) : 0
 
 /** Filter chips over one table: "All" and one per kind that has rows. */
-function useKinds(items, kinds) {
-  const [kind, setKind] = useState('')
+function useKinds(items, kinds, initial = '') {
+  const [kind, setKind] = useState(initial)
   const present = kinds.filter(k => items.some(i => i.kind === k.key))
   const active = present.some(k => k.key === kind) ? kind : ''
   const pills = present.length > 1 && (
@@ -407,7 +407,7 @@ export function Routing() {
                     <td className="small" data-label="Stage">{stepOf(r.project)}</td>
                     <td className="small" data-label="Pending action">
                       <Badge tone={returned ? 'stop' : 'warn'}>{kinds.find(k => k.key === kind).chip}</Badge>
-                      {returned && <div className="small mt-half">Returned by the {returned.hat}</div>}
+                      {returned && <div className="small mt-half">Returned by the {roleLabel(returned.hat)}</div>}
                       {blocker && !adviser && <div className="muted small mt-half">{blocker}</div>}
                       {steps?.length > 1 && <div className="faint small mt-half">{steps.filter(x => x.done).length} of {steps.length} steps done</div>}
                     </td>
@@ -440,13 +440,17 @@ const EXEC_QUEUE = { 'Adviser assignments to approve': 'adviser', 'Projects for 
 /**
  * S-19 / S-21b — what is routed to the Dean's and the Associate Dean's
  * offices. An adviser routing slip opens over the page (M-01 – M-04); the
- * rest open on the project. `only` narrows the page to one kind.
+ * rest open on the project. `?kind=adviser` opens it on one kind (the old
+ * /adviser-approvals address lands here that way).
  */
-function ExecutiveApprovals({ title, lede, only }) {
+function ExecutiveApprovals({ title, lede }) {
   const { me, snap } = useApp()
+  const initialKind = new URLSearchParams(useLocation().search).get('kind') ?? ''
   const { held } = useWorkspace()
   const rows = useRole('dean', 'associate-dean')
   const [open, setOpen] = useOpenRow(rows ?? [])
+  const [picked, setPicked] = useState(() => new Set())
+  const [bulk, setBulk] = useState(false)
   const offices = held.filter(c => c.key === 'dean' || c.key === 'associate-dean').map(c => c.role)
   const nameOf = (id) => (snap.users ?? []).find(u => u.id === id)?.name ?? '—'
   const adviserOf = (r) => nameOf(r.bundle.assignments.find(a => a.roleType === P.ADVISER)?.userId)
@@ -462,27 +466,46 @@ function ExecutiveApprovals({ title, lede, only }) {
     })),
     ...(rows ?? []).flatMap(r => r.tasks.filter(t => offices.includes(t.hat) && t.kind === 'form')
       .map(t => ({ r, kind: 'form', item: t.label, sub: 'Signed outside the system, then uploaded', tab: t.tab, blocker: null }))),
-  ].filter(i => !only || i.kind === only)
+  ]
     .map(i => ({ ...i, from: arrival(me, i.r) }))
     .sort((a, b) => Number(Boolean(a.blocker)) - Number(Boolean(b.blocker)) || new Date(a.from?.at ?? 0) - new Date(b.from?.at ?? 0))
-  const { pills, shown } = useKinds(items, EXEC_KINDS)
+  const { pills, shown } = useKinds(items, EXEC_KINDS, initialKind)
   if (!rows) return <Restricted />
   const waiting = items.filter(i => !i.blocker)
   const count = (key) => waiting.filter(i => i.kind === key).length
   const statusText = (i) => (i.blocker ? 'Approved by you' : 'Awaiting you')
+  // Slips this office can approve right now; with two or more, they can be
+  // approved together ("Approve selected") instead of one slip at a time.
+  const approvable = shown.filter(i => i.kind === 'adviser' && !i.blocker && canDo(me, 'APPROVE_ADVISER', i.r.bundle).ok)
+  const canBulk = approvable.length > 1
+  const chosen = approvable.filter(i => picked.has(i.r.project.id))
+  const toggle = (id) => setPicked(s => { const n = new Set(s); n.has(id) ? n.delete(id) : n.add(id); return n })
+  const allPicked = canBulk && chosen.length === approvable.length
 
   return (
     <Page title={title} lede={lede}
       aside={<ExportMenu name="Executive_Approvals" title={`HAU — SOC · ${title}`}
         header={['Item', 'Group', 'Program', 'Routed by', 'Received', 'Status']}
-        rows={items.map(i => [i.item, i.r.project.title, programCode(i.r.project.program), i.from ? [i.from.hat, nameOf(i.from.actorId)].filter(Boolean).join(' — ') : '', i.from ? fmtDate(i.from.at) : '', statusText(i)])} />}>
-      {!only && (
-        <Stats>
-          <Stat label="Awaiting your approval" n={waiting.length} tone={waiting.length ? 'accent' : undefined} />
-          {EXEC_KINDS.map(k => <Stat key={k.key} label={k.tile} n={count(k.key)} />)}
-        </Stats>
+        rows={items.map(i => [i.item, i.r.project.title, programCode(i.r.project.program), i.from ? [roleLabel(i.from.hat), nameOf(i.from.actorId)].filter(Boolean).join(' — ') : '', i.from ? fmtDate(i.from.at) : '', statusText(i)])} />}>
+      <Stats>
+        <Stat label="Awaiting your approval" n={waiting.length} tone={waiting.length ? 'accent' : undefined} />
+        {EXEC_KINDS.map(k => <Stat key={k.key} label={k.tile} n={count(k.key)} />)}
+      </Stats>
+      {pills}
+      {canBulk && (
+        <Act>
+          <div className="bulk-bar" role="group" aria-label="Approve several slips">
+            <label className="small">
+              <input type="checkbox" checked={allPicked}
+                onChange={() => setPicked(allPicked ? new Set() : new Set(approvable.map(i => i.r.project.id)))} />
+              {' '}Select all {approvable.length} slips awaiting you
+            </label>
+            <button type="button" className="primary small" disabled={!chosen.length} onClick={() => setBulk(true)}>
+              Approve selected{chosen.length ? ` (${chosen.length})` : ''}
+            </button>
+          </div>
+        </Act>
       )}
-      {!only && pills}
       <Section className="is-table">
         {shown.length === 0 ? <Empty>Nothing is routed to your office right now.</Empty> : (
           <div className="table-scroll"><table className="cards">
@@ -490,12 +513,20 @@ function ExecutiveApprovals({ title, lede, only }) {
             <tbody>
               {shown.map((i, n) => (
                 <tr key={`${i.r.project.id}-${i.kind}-${n}`}>
-                  <td className="card-title"><strong>{i.item}</strong><div className="faint small">{i.sub}</div></td>
+                  <td className="card-title">
+                    {canBulk && approvable.includes(i)
+                      ? <Act><label className="row-pick">
+                          <input type="checkbox" checked={picked.has(i.r.project.id)} onChange={() => toggle(i.r.project.id)}
+                            aria-label={`Select ${i.r.project.title}`} />
+                          <span><strong>{i.item}</strong><div className="faint small">{i.sub}</div></span>
+                        </label></Act>
+                      : <><strong>{i.item}</strong><div className="faint small">{i.sub}</div></>}
+                  </td>
                   <td className="small" data-label="Group">
                     <Link className="row-link" to={itemLink(i.r, i.tab)}>{i.r.project.title}</Link>
                     <div className="faint" title={i.r.project.program}>{programCode(i.r.project.program)}</div>
                   </td>
-                  <td className="small" data-label="Routed by">{i.from ? <>{i.from.hat ?? nameOf(i.from.actorId)}{i.from.hat && <div className="faint">{nameOf(i.from.actorId)}</div>}</> : <span className="faint">—</span>}</td>
+                  <td className="small" data-label="Routed by">{i.from ? <>{i.from.hat ? roleLabel(i.from.hat) : nameOf(i.from.actorId)}{i.from.hat && <div className="faint">{nameOf(i.from.actorId)}</div>}</> : <span className="faint">—</span>}</td>
                   <td className="small" data-label="Received">{dayMonth(i.from?.at)}</td>
                   <td className="small card-status" data-label="Status">
                     <Badge tone={i.blocker ? 'ok' : 'warn'}>{statusText(i)}</Badge>
@@ -513,6 +544,7 @@ function ExecutiveApprovals({ title, lede, only }) {
         )}
       </Section>
       {open && <RoutingSlipDialog r={open} onClose={() => setOpen(null)} />}
+      {bulk && <BulkApproveDialog rows={chosen.map(i => i.r)} onClose={() => setBulk(false)} onDone={() => setPicked(new Set())} />}
     </Page>
   )
 }
@@ -520,11 +552,6 @@ function ExecutiveApprovals({ title, lede, only }) {
 export const Approvals = () => (
   <ExecutiveApprovals title="Executive approvals"
     lede="Items routed to your office. Every approval or return is date-stamped on the group’s progress trail and emailed to the people concerned." />
-)
-
-export const AdviserApprovals = () => (
-  <ExecutiveApprovals only="adviser" title="Adviser assignments"
-    lede="Adviser assignments the Program Chair routed to the Dean and the Associate Dean. When one office is the named adviser, the other approves alone." />
 )
 
 export function School() {

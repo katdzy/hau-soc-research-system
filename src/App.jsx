@@ -16,7 +16,7 @@ import Sections from './pages/Sections.jsx'
 import { WorkspaceProvider } from './components/Workspace.jsx'
 import {
   Advisees, WeeklyLogs, Versions, Completed, Panels, Rosters, Defended, Scheduling,
-  Routing, AdviserApprovals, Approvals, School, Completions, Clearance, Cleared,
+  Routing, Approvals, School, Completions, Clearance, Cleared,
 } from './pages/WorkViews.jsx'
 
 // R9: the test panel exists only in dev builds; this import is dropped from production.
@@ -69,7 +69,8 @@ function Screens() {
         <Route path="scheduling" element={<Scheduling />} />
         <Route path="routing" element={<Routing />} />
         <Route path="sections" element={<Sections />} />
-        <Route path="adviser-approvals" element={<AdviserApprovals />} />
+        {/* The old Dean/AD "Adviser assignments" page: Executive approvals, adviser slips only. */}
+        <Route path="adviser-approvals" element={<Navigate to="/approvals?kind=adviser" replace />} />
         <Route path="approvals" element={<Approvals />} />
         <Route path="school" element={<School />} />
         <Route path="completions" element={<Completions />} />

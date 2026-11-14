@@ -8,7 +8,7 @@ export default function BlankForms() {
   return (
     <div className="page">
       <header className="page-head">
-        <h1>Blank form library</h1>
+        <h1>Blank forms</h1>
         <p className="lede">
           Traced from Appendix C (FM-AAC-SOC-2003, 2004, 2005) and the Approval Sheet. The system stores these
           blank templates only for downloading or printing. Forms are filled in and signed outside the system — all

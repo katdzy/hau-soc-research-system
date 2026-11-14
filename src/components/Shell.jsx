@@ -14,6 +14,7 @@ import { currentEnv, isMobile } from '../browserSupport.js'
 import { ViewOnlyBanner } from './ViewOnly.jsx'
 import crest from '../assets/soc-crest.webp'
 import { writePath } from '../services/api.js'
+import { useDevDetails } from '../devDetails.js'
 
 const link = ({ isActive }) => (isActive ? 'active' : undefined)
 
@@ -29,6 +30,7 @@ const SHARED_NAV = [{ to: '/records', label: 'Archive' }, { to: '/forms', label:
 
 export default function Shell() {
   const { me, snap, signOut, backendName } = useApp()
+  const devDetails = useDevDetails()
   const navigate = useNavigate()
   const location = useLocation()
 
@@ -36,17 +38,18 @@ export default function Shell() {
   useOutboxNotifications(me, snap.outbox)
 
   // The "Acting as" context decides the rail and the dashboard (Figma F02).
-  const { held: contexts, current, inContext, choose, ready } = useWorkspace()
+  const { held: contexts, current, inContext, choose, ready, fresh, acknowledge } = useWorkspace()
   const todo = actionableCount(inContext)
   const inst = resolveInstitution(me, snap)
   const projects = snap.projects ?? []
   const projectOf = (id) => projects.find(p => p.id === id)
 
-  // The second CAAC dimension: Project-Based Roles, one entry per project.
-  const held = (snap.projectAssignments ?? []).filter(a => a.userId === me.id && projectOf(a.projectId))
+  // The second CAAC dimension: Project-Based Roles, counted on the groups each
+  // one opens now (contextsOf) — never a proposed Adviser's pending row (S2.2).
+  const roleContexts = contexts.filter(c => !c.global && !c.member && c.projectIds.length)
+  const held = roleContexts.flatMap(c => c.projectIds.map(projectId => ({ projectId, roleType: c.role })))
   const memberOf = (snap.projectMembers ?? []).filter(m => m.userId === me.id && projectOf(m.projectId))
-  const roleCounts = {}
-  for (const a of held) roleCounts[a.roleType] = (roleCounts[a.roleType] ?? 0) + 1
+  const roleCounts = Object.fromEntries(roleContexts.map(c => [c.role, c.projectIds.length]))
 
   // The project open right now decides which context the top bar names.
   const openId = matchPath('/projects/:id', location.pathname)?.params.id
@@ -99,7 +102,7 @@ export default function Shell() {
           </dd>
         </div>
       </dl>
-      <span className="faint small">Backend <span className="mono">{backendName}</span>{writePath !== 'local' && <> · writes <span className="mono">{writePath}</span></>}</span>
+      {devDetails && <span className="faint small">Backend <span className="mono">{backendName}</span>{writePath !== 'local' && <> · writes <span className="mono">{writePath}</span></>}</span>}
     </div>
   )
 
@@ -112,9 +115,9 @@ export default function Shell() {
         </NavLink>
         {myProject && (
           <>
-            {projectLink(null, 'My Project')}
-            {projectLink('documents', 'Version History')}
-            {projectLink('logs', 'Weekly Logs')}
+            {projectLink(null, 'My project')}
+            {projectLink('documents', 'Version history')}
+            {projectLink('logs', 'Weekly logs')}
             {projectLink('defense', 'Defense')}
             {projectLink('forms', 'Forms')}
           </>
@@ -157,10 +160,9 @@ export default function Shell() {
 
         <main className="main" id="main" tabIndex={-1}>
           <ViewOnlyBanner />
-          {location.pathname !== '/' && (
-            <NextStep current={current} contexts={contexts} ready={ready} openId={openId} tab={tab}
-              onSwitch={(key) => { choose(key); navigate('/') }} />
-          )}
+          <NextStep current={current} contexts={contexts} ready={ready} openId={openId} tab={tab}
+            fresh={fresh} onDismiss={acknowledge} onDashboard={location.pathname === '/'}
+            onSwitch={(key) => { choose(key); navigate('/') }} />
           <Outlet />
           {/* Phones and tablets, first screen after login (Figma PWA-01). */}
           {compact && location.pathname === '/' && <InstallBanner />}
@@ -226,15 +228,17 @@ function ActingAs({ acting, contexts, current, openId, ready = {}, onChoose, pat
 }
 
 /**
- * "Your next step" above every page but the dashboard: the most pressing thing
- * this role can do now, one click away — or, when it has nothing, the role
- * that does. Hidden on the very page where that step is done.
+ * "Your next step" above every page: the most pressing thing this role can do
+ * now, one click away (not on the dashboard, which lists it already) — or,
+ * when it has nothing, the role that does — or a role gained since this
+ * device last saw the account, so a new hat is never hidden behind "Acting
+ * as". Hidden on the very page where the step is done.
  */
-function NextStep({ current, contexts, ready = {}, openId, tab, onSwitch }) {
+function NextStep({ current, contexts, ready = {}, openId, tab, fresh = [], onDashboard, onSwitch, onDismiss }) {
   if (!current) return null
   const mine = ready[current.key] ?? []
   const first = mine[0]
-  if (first) {
+  if (first && !onDashboard) {
     const here = openId === first.r.project.id && (tab ?? 'overview') === (first.tab ?? 'overview')
     if (here) return null
     const to = `/projects/${first.r.project.id}${first.tab && first.tab !== 'overview' ? `?tab=${first.tab}` : ''}`
@@ -249,16 +253,33 @@ function NextStep({ current, contexts, ready = {}, openId, tab, onSwitch }) {
       </aside>
     )
   }
-  const other = contexts.find(c => c.key !== current.key && ready[c.key]?.length)
-  if (!other) return null
-  const n = ready[other.key].length
+  const other = !first && contexts.find(c => c.key !== current.key && ready[c.key]?.length)
+  if (other) {
+    const n = ready[other.key].length
+    return (
+      <aside className="next-step is-elsewhere" aria-label="Work in another role">
+        <span className="next-step-v">
+          Nothing is waiting on you as {current.heading}. <strong>{n} {n === 1 ? 'item waits' : 'items wait'}</strong> for you as {other.heading}.
+        </span>
+        <span className="next-step-end">
+          <button type="button" className="small" onClick={() => onSwitch(other.key)}>Switch to {other.heading}</button>
+        </span>
+      </aside>
+    )
+  }
+  const gained = fresh[0]
+  if (!gained) return null
+  const n = gained.global ? 0 : gained.open
   return (
-    <aside className="next-step is-elsewhere" aria-label="Work in another role">
+    <aside className="next-step is-elsewhere" aria-label="New role">
+      <span className="next-step-k">New role</span>
       <span className="next-step-v">
-        Nothing is waiting on you as {current.heading}. <strong>{n} {n === 1 ? 'item waits' : 'items wait'}</strong> for you as {other.heading}.
+        You are now <strong>{gained.heading}</strong>{n ? ` on ${n} group${n === 1 ? '' : 's'}` : ''}.
+        {' '}{n ? `Switch to see ${n === 1 ? 'it' : 'them'} on your dashboard.` : 'Switch to open its dashboard.'}
       </span>
       <span className="next-step-end">
-        <button type="button" className="small" onClick={() => onSwitch(other.key)}>Switch to {other.heading}</button>
+        <button type="button" className="small quiet" onClick={() => onDismiss(gained.key)}>Dismiss</button>
+        <button type="button" className="small primary" onClick={() => onSwitch(gained.key)}>Switch to {gained.heading}</button>
       </span>
     </aside>
   )

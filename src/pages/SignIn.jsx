@@ -361,7 +361,7 @@ export default function SignIn({ empty = false }) {
 
                 <Field label="Institutional email address">
                   <input type="email" value={reg.email} onChange={setField('email')}
-                    placeholder="juan.delacruz@student.hau.edu.ph" autoComplete="username" required />
+                    placeholder="jdelacruz@student.hau.edu.ph" autoComplete="username" required />
                 </Field>
 
                 <div className="row">
@@ -446,7 +446,7 @@ export default function SignIn({ empty = false }) {
               <form onSubmit={handleSignIn} noValidate>
                 <Field label="Institutional email address">
                   <input type="email" value={loginEmail} onChange={e => setLoginEmail(e.target.value)}
-                    placeholder="juan.delacruz@student.hau.edu.ph" autoComplete="username" required />
+                    placeholder="jdelacruz@student.hau.edu.ph" autoComplete="username" required />
                 </Field>
 
                 <Field label="Password">
@@ -494,7 +494,7 @@ export default function SignIn({ empty = false }) {
                   <form onSubmit={handleReset} noValidate>
                     <Field label="Institutional email address">
                       <input type="email" value={resetEmail} onChange={e => setResetEmail(e.target.value)}
-                        placeholder="juan.delacruz@student.hau.edu.ph" autoComplete="username" autoFocus required />
+                        placeholder="jdelacruz@student.hau.edu.ph" autoComplete="username" autoFocus required />
                     </Field>
                     {error && <p className="small error-text mb-2" role="alert">{error}</p>}
                     <button className="primary create-account-btn" type="submit" disabled={loading}>

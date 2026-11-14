@@ -16,6 +16,7 @@ import { rolesForStage, diffStores } from './spawn.js'
 import Spawner from './Spawner.jsx'
 import { projectName } from '../domain/groupNames.js'
 import { Icon, Avatar } from './icons.jsx'
+import { useDevDetails, setDevDetails } from '../devDetails.js'
 import './dev.css'
 
 /**
@@ -813,8 +814,17 @@ const TRAIL_SHOWN = 200
 /* --- Rules: flags and the role hat × stage table ---------------------------------- */
 
 function Rules() {
+  const devDetails = useDevDetails()
   return (
     <div>
+      <section className="tp-block">
+        <header><h3><Icon name="rules" />Developer details</h3><p>The CAAC Inspector beside each project, the capability that grants each step,
+          and the backend line in the sidebar. Hidden from users; never shown in a production build.</p></header>
+        <button type="button" className={`tp-btn has-icon${devDetails ? ' is-primary' : ''}`} aria-pressed={devDetails}
+          onClick={() => setDevDetails(!devDetails)}>
+          {devDetails ? 'Showing CAAC details — hide' : 'Show CAAC details'}
+        </button>
+      </section>
       <section className="tp-block">
         <header><h3><Icon name="admin" />Config flags</h3><p>Mockup defaults live in src/domain/flags.js.</p></header>
         <dl className="tp-flags">

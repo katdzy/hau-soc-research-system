@@ -5,7 +5,7 @@ import ProgressTrail from '../../components/ProgressTrail.jsx'
 import { can, resolveContext, allowedDocTypes } from '../../domain/caac.js'
 import { viewBundle } from '../../domain/guard.js'
 import { macroStageOf, openGates, sectionNow, uroReturnOf, uroReturnOutstanding } from '../../domain/stages.js'
-import { PROJECT_ROLES as P, ACCOUNT_STATUS, DOC_STATUS, REVIEWABLE_TYPES } from '../../domain/constants.js'
+import { PROJECT_ROLES as P, ACCOUNT_STATUS, DOC_STATUS, REVIEWABLE_TYPES, roleLabel } from '../../domain/constants.js'
 import { Stat, Stats, Feed, Activity } from './parts.jsx'
 
 // The order the group meets its faculty in.
@@ -51,7 +51,10 @@ export default function StudentDesk({ r }) {
             {b.project.archiveResult && <Badge>Result: {b.project.archiveResult}</Badge>}
             {b.project.revisionStatus === 'Overdue' && <Badge tone="stop">Overdue</Badge>}
             <Countdown deadline={b.project.revisionDeadline} />
-            {gate && <Badge tone="info">Next gate: {gate.label}</Badge>}
+            {/* The group's own task first; otherwise who takes the next step. */}
+            {r.tasks[0]
+              ? <Badge tone="warn">Next step: {r.tasks[0].label}</Badge>
+              : gate && <Badge tone="info">Next step: {gate.label} · {roleLabel(gate.actorHint)}</Badge>}
           </div>
           <dl className="hero-people">
             {people.filter(([role, names]) => names.length || role === P.ADVISER || role === P.INSTRUCTOR_1).map(([role, names]) => (
@@ -100,7 +103,7 @@ export default function StudentDesk({ r }) {
             ) : (
               <p className="small muted m-0">
                 {gate
-                  ? <>Nothing right now. Next: {gate.label.charAt(0).toLowerCase() + gate.label.slice(1)} — waiting on {gate.actorHint}.</>
+                  ? <>Nothing right now. Next: {gate.label.charAt(0).toLowerCase() + gate.label.slice(1)} — waiting on {roleLabel(gate.actorHint)}.</>
                   : <>Your project is <strong>completed</strong>{b.project.archivedAt && <> and archived on {fmtDate(b.project.archivedAt)}</>}.</>}
               </p>
             )}

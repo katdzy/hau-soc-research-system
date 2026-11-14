@@ -10,7 +10,7 @@ import { Act } from '../ViewOnly.jsx'
 /**
  * S2.2 return path (NEW-7, flag ADVISER_RETURN_PATH). At Adviser Approval the
  * Dean or Associate Dean may send the assignment back with remarks; back at
- * Adviser Assignment the Program Chair/Coordinator reads them above the step.
+ * Adviser Assignment the Program Chair reads them above the step.
  * Shown under "Next step"; renders nothing for anyone else.
  */
 export default function AdviserReturn({ b, ctx }) {
@@ -43,13 +43,13 @@ function ReturnForm({ b }) {
   if (!open) {
     return (
       <div className="actions mt-2">
-        <button className="quiet" onClick={() => setOpen(true)}>Return to the Program Chair/Coordinator…</button>
+        <button className="quiet" onClick={() => setOpen(true)}>Return to the Program Chair…</button>
       </div>
     )
   }
   return (
     <div className="subform">
-      <Field label="Why it is returned (required)" hint="Emailed to the Program Chair/Coordinator and the other office. Not to the proposed Adviser or the students.">
+      <Field label="Why it is returned (required)" hint="Emailed to the Program Chair and the other office. Not to the proposed Adviser or the students.">
         <textarea value={remarks} onChange={e => setRemarks(e.target.value)} required autoFocus />
       </Field>
       <p className="small muted">

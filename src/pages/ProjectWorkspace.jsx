@@ -8,6 +8,7 @@ import { stageByKey, sectionNow } from '../domain/stages.js'
 import { Badge, Countdown, programShort } from '../components/ui.jsx'
 import StageTimeline from '../components/StageTimeline.jsx'
 import CaacInspector from '../components/CaacInspector.jsx'
+import { useDevDetails } from '../devDetails.js'
 import OverviewPanel from '../components/panels/OverviewPanel.jsx'
 import DocumentsPanel from '../components/panels/DocumentsPanel.jsx'
 import LogsPanel from '../components/panels/LogsPanel.jsx'
@@ -27,6 +28,7 @@ const TABS = [
 export default function ProjectWorkspace() {
   const { id } = useParams()
   const { snap, me } = useApp()
+  const devDetails = useDevDetails()
   const [params, setParams] = useSearchParams()
   // `?tab=` lets a worklist item (or the rail) open the tab where its work is done.
   const tab = TABS.some(t => t.key === params.get('tab')) ? params.get('tab') : 'overview'
@@ -104,7 +106,7 @@ export default function ProjectWorkspace() {
         ))}
       </div>
 
-      <div className="split">
+      <div className={devDetails ? 'split' : 'split is-solo'}>
         <div role="tabpanel">
           {shown === 'overview' && <OverviewPanel b={b} ctx={ctx} goTo={setTab} />}
           {shown === 'documents' && <DocumentsPanel b={b} ctx={ctx} />}
@@ -114,9 +116,12 @@ export default function ProjectWorkspace() {
           {shown === 'history' && <HistoryPanel b={b} />}
         </div>
 
-        <aside className="side">
-          <CaacInspector ctx={ctx} project={b.project} />
-        </aside>
+        {/* Developer detail (devDetails.js): off unless switched on in the test panel. */}
+        {devDetails && (
+          <aside className="side">
+            <CaacInspector ctx={ctx} project={b.project} />
+          </aside>
+        )}
       </div>
     </div>
   )

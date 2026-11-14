@@ -1,6 +1,7 @@
 import { useApp } from '../../state/AppContext.jsx'
 import { Section, Empty, fmtDateTime } from '../ui.jsx'
 import { stageLabel } from '../../domain/stages.js'
+import { roleLabel } from '../../domain/constants.js'
 
 // WORKFLOW_HISTORY: one append-only row per state change — stage transitions
 // (from → to) and every other action at the stage it happened (R6b). The system-wide AUDIT_LOG is the System
@@ -27,7 +28,7 @@ export default function HistoryPanel({ b }) {
           </div>
           <div className="small muted mt-half">
             {h.actorId === 'system' ? 'System' : nameOf(h.actorId)}
-            {h.hat && <> · {h.hat}</>}
+            {h.hat && <> · {roleLabel(h.hat)}</>}
             {h.fromStage !== h.toStage && h.note && <> — {h.note}</>}
           </div>
         </div>

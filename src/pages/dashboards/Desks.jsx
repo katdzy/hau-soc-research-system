@@ -108,7 +108,7 @@ export function AdviserDesk({ rows, notice }) {
                 return {
                   key: r.project.id, title: `${r.project.title}`, to: itemLink(r, g.gate.handledIn),
                   sub: g.blocker ?? 'Ready to recommend · FM-AAC-SOC-2005',
-                  chip: g.blocker ? ['Not yet', 'neutral'] : ['Needs action', 'warn'],
+                  chip: g.blocker ? ['Not yet', 'neutral'] : ['Awaiting you', 'warn'],
                 }
               })} />
             </Section>
@@ -206,7 +206,7 @@ export function Instructor1Desk({ rows, notice }) {
       </Stats>
       <Columns
         main={<>
-          <Section title="Your sections" aside={<Link className="small" to="/rosters">Groups &amp; Rosters</Link>}>
+          <Section title="Your sections" aside={<Link className="small" to="/rosters">Groups &amp; rosters</Link>}>
             {sections.length === 0 ? <p className="small faint m-0">You hold Instructor 1 on groups outside a section you teach.</p> : (
               <div className="table-scroll"><table className="cards">
                 <thead><tr><th>Section</th><th className="tight">Groups</th><th className="tight">Students grouped</th><th>Most groups are at</th></tr></thead>
@@ -236,7 +236,7 @@ export function Instructor1Desk({ rows, notice }) {
           <Section title="Ready for your check">
             <Feed empty="Nothing is waiting for your check." items={[
               ...queue.map(({ r, d }) => ({ key: d.id, title: `${sectionNow(r.project).section} · ${d.docType} v${d.versionNumber}`, sub: r.project.title, chip: ['Ready for your check', 'warn'], to: itemLink(r, 'documents') })),
-              ...pending.map(({ r, d }) => ({ key: d.id, title: `${sectionNow(r.project).section} · ${d.docType} v${d.versionNumber}`, sub: 'Opens after the adviser reviews it', chip: ['Pending adviser review', 'neutral'], to: itemLink(r, 'documents') })),
+              ...pending.map(({ r, d }) => ({ key: d.id, title: `${sectionNow(r.project).section} · ${d.docType} v${d.versionNumber}`, sub: 'Opens after the adviser reviews it', chip: ['Awaiting adviser review', 'neutral'], to: itemLink(r, 'documents') })),
             ]} />
           </Section>
         </>}
@@ -365,7 +365,7 @@ export function DeanDesk({ rows, role, notice }) {
             <Feed empty="Nothing is waiting for your approval." items={items.map((i, k) => ({
               key: `${i.r.project.id}-${k}`, title: i.q.name.replace(/ to approve$| for final approval$/, ''), to: itemLink(i.r, i.tab),
               sub: <>{i.r.project.title} · {sectionNow(i.r.project).section}{i.steps?.length > 1 && <> · {i.steps.filter(x => x.done).length} of {i.steps.length} approvals</>}</>,
-              chip: i.blocker ? ['Waiting', 'neutral'] : ['Awaiting you', 'warn'],
+              chip: i.blocker ? ['Not yet', 'neutral'] : ['Awaiting you', 'warn'],
             }))} />
           </Section>
         </>}
@@ -481,7 +481,7 @@ export function AdminDesk({ notice }) {
       <Columns
         main={<>
           {byEmail ? (
-            <Section title={`New faculty accounts · last ${FLAGS.NEW_ACCOUNT_DAYS} days`} aside={<Link className="small" to="/admin/accounts">User Accounts</Link>}>
+            <Section title={`New faculty accounts · last ${FLAGS.NEW_ACCOUNT_DAYS} days`} aside={<Link className="small" to="/admin/accounts">User accounts</Link>}>
               <Feed empty={`No faculty account registered in the last ${FLAGS.NEW_ACCOUNT_DAYS} days.`} items={fresh.slice(0, 6).map(({ user: u, needsRole }) => ({
                 key: u.id, title: u.name, sub: `${u.email} · registered ${fmtDate(u.createdAt)}`,
                 chip: needsRole ? ['No office role', 'warn'] : [(u.globalRoles ?? []).filter(r => r !== G.FACULTY).join(', '), 'neutral'],
@@ -489,13 +489,13 @@ export function AdminDesk({ notice }) {
               }))} />
             </Section>
           ) : (
-            <Section title="New accounts waiting for activation" aside={<Link className="small" to="/admin/accounts">User Accounts</Link>}>
+            <Section title="New accounts waiting for activation" aside={<Link className="small" to="/admin/accounts">User accounts</Link>}>
               <Feed empty="Every verified registration is active." items={toActivate.slice(0, 6).map(u => ({
                 key: u.id, title: u.name, sub: `${u.email} · registered ${fmtDate(u.createdAt)}`, chip: ['Needs activation', 'warn'], to: '/admin/accounts',
               }))} />
             </Section>
           )}
-          <Section title="Recent role changes" aside={<Link className="small" to="/audit">Audit Log</Link>}>
+          <Section title="Recent role changes" aside={<Link className="small" to="/audit">Audit log</Link>}>
             <Feed empty="No role changes recorded yet." items={changes.map(a => ({
               key: a.id, title: ROLE_ACTIONS[a.action], sub: `${nameOf(a.actorId)} · ${fmtDateTime(a.at)}`,
             }))} />

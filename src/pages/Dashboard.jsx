@@ -83,7 +83,7 @@ function NoContext() {
               workspace, stage, adviser and deadlines appear here once they do, and you’ll get an
               email at {me.email}.</>
             : <>Your account is active. Advising, panel and instructor roles are given per project by the
-              Program Chair/Coordinator or an Instructor 1; each one appears here, and under “Acting as”,
+              Program Chair or an Instructor 1; each one appears here, and under “Acting as”,
               once it is assigned. You’ll get an email at {me.email}.</>}
         </p>
       </Section>}

@@ -4,18 +4,25 @@ import { runGate } from '../../services/api.js'
 import { useAction, ActionError } from '../useAction.jsx'
 import { stageByKey, resolveNext, openGates, staysAtStage } from '../../domain/stages.js'
 import { useState } from 'react'
-import { GLOBAL_ROLES as G, PROJECT_ROLES as P, FORMS } from '../../domain/constants.js'
+import { GLOBAL_ROLES as G, PROJECT_ROLES as P, FORMS, roleLabel } from '../../domain/constants.js'
 import { formOf, lineMethod } from '../../domain/forms.js'
 import { Act } from '../ViewOnly.jsx'
+import { useDevDetails } from '../../devDetails.js'
+import { useWorkspace } from '../Workspace.jsx'
 import { Field } from '../ui.jsx'
 import { SignedCopyField, signedCopyReady } from '../FormFiles.jsx'
 import ForwardRosterDialog from './ForwardRoster.jsx'
 
 const TAB_LABEL = { defense: 'Defense', documents: 'Documents', logs: 'Weekly logs', forms: 'Forms & signatures', overview: 'Overview' }
 
+// The project tabs a task can point to, as the tab bar names them.
+const TAB_NAMES = { documents: 'Documents', logs: 'Weekly logs', defense: 'Defense', forms: 'Forms & signatures' }
+
 /** The stage gate at the project's current position. */
 export default function GatePanel({ b, ctx, goTo }) {
   const { snap, me } = useApp()
+  const devDetails = useDevDetails()
+  const { rows } = useWorkspace()
   const { run, error, busy } = useAction()
   const stage = stageByKey(b.project.currentStage)
   const gates = openGates(stage, b)
@@ -25,8 +32,30 @@ export default function GatePanel({ b, ctx, goTo }) {
 
   const mine = gates.filter(g => can(ctx, g.capability))
 
+  // What this viewer owes on the project (e.g. the group's five topics) comes
+  // before the gate someone else holds, so "Next step" is never a step they
+  // cannot take yet while their own work is outstanding.
+  const owed = rows.find(r => r.project.id === b.project.id)?.tasks ?? []
+  if (!mine.length && owed.length) {
+    const who = [...new Set(gates.map(g => roleLabel(g.actorHint)))].join(' or ')
+    const task = owed[0]
+    return (
+      <div className="gate">
+        <h3>{task.label}</h3>
+        <p className="small muted m-0 mt-half">
+          Yours to do now{owed.length > 1 ? ` (${owed.length - 1} more after it)` : ''}. Then {who}: {gates[0].label.charAt(0).toLowerCase() + gates[0].label.slice(1)}.
+        </p>
+        {task.tab && task.tab !== 'overview' && (
+          <div className="actions mt-2">
+            <button type="button" className="primary" onClick={() => goTo(task.tab)}>Go to {TAB_NAMES[task.tab] ?? task.tab}</button>
+          </div>
+        )}
+      </div>
+    )
+  }
+
   if (!mine.length) {
-    const who = [...new Set(gates.map(g => g.actorHint))].join(' or ')
+    const who = [...new Set(gates.map(g => roleLabel(g.actorHint)))].join(' or ')
     const blocker = gates.map(g => g.requires(b, me)).find(Boolean)
     // Holding the right role is not enough under CAAC — say which part of the
     // context rules this user out.
@@ -60,8 +89,8 @@ export default function GatePanel({ b, ctx, goTo }) {
             <div className="small faint mt-half">
               {staysAtStage(gate)
                 ? 'Stays at this stage'
-                : <>Advances to <span className="mono">{stageByKey(next)?.label ?? next}</span></>}
-              {' '}· granted by <span className="mono">{gate.capability}</span>
+                : <>Advances to {stageByKey(next)?.label ?? next}</>}
+              {devDetails && <>{' '}· granted by <span className="mono">{gate.capability}</span></>}
             </div>
             {gate.steps
               ? <StepList steps={gate.steps(b)} b={b} ctx={ctx} goTo={goTo} />
@@ -121,7 +150,7 @@ function GateAction({ gate, b, busy, onRun }) {
       {recommend && (
         <fieldset className="choice">
           <legend className="label">Outcome</legend>
-          {[['Recommended', 'Goes to the Program Chair/Coordinator to be noted and endorsed.'],
+          {[['Recommended', 'Goes to the Program Chair to be noted and endorsed.'],
             ['Not Recommended', 'The group stays in Implementation. Write the reasons on the form; every member signs it too.']].map(([value, hint]) => (
             <label key={value} className="choice-card">
               <input type="radio" name="f2005-outcome" checked={outcome === value} onChange={() => setOutcome(value)} />

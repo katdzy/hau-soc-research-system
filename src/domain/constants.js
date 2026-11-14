@@ -20,6 +20,13 @@ export const GLOBAL_ROLES = {
   FACULTY: 'Faculty',
 }
 
+/**
+ * A role as the screens name it. "Program Chair/Coordinator" is the formal
+ * Global Role (data, emails, the Admin role grants); everywhere else on screen
+ * it is "Program Chair", as the rail and the wireframes say.
+ */
+export const roleLabel = (role) => (role === GLOBAL_ROLES.COORDINATOR ? 'Program Chair' : role)
+
 // Project-Based Roles — held per project (Instructor 1 and 2 included, per
 // Decision #15). The same person can hold different ones on different projects.
 export const PROJECT_ROLES = {

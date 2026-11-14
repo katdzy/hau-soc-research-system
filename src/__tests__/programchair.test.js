@@ -13,6 +13,7 @@ import { bundle } from '../services/core.js'
 import { assignRole, unassignRole, runGate, scheduleDefense, recordVerdict, submitReview } from '../services/actions.js'
 import { worklist, officeQueues } from '../services/worklist.js'
 import { canView, canDo, viewBundle } from '../domain/guard.js'
+import { contextsOf, rowsIn } from '../domain/workspaces.js'
 import { DOC_STATUS, FORMS, GLOBAL_ROLES as G, PROJECT_ROLES as P, AI_PLACEHOLDER_NOTICE } from '../domain/constants.js'
 import { signed } from './pdfFixture.js'
 
@@ -84,6 +85,27 @@ describe('S2.1 — assign and route the Adviser', () => {
     expect(viewBundle(user(student), b('p_nw2')).assignments.map(a => a.roleType)).toContain(P.ADVISER)
     expect(snap().auditLogs.find(a => a.action === 'ROLE_ASSIGNED' && a.projectId === 'p_nw2'))
       .toMatchObject({ actorId: 'f_npc_nw1', hat: G.COORDINATOR, after: { userId: 'f_npc_nw3', roleType: P.ADVISER } })
+  })
+
+  it('"Acting as" and the rail give a proposed Adviser no Adviser role until the Dean and AD approve', async () => {
+    const adviserOn = (uid) => {
+      const me = user(uid)
+      const rows = worklist(snap(), me)
+      const ctx = contextsOf(me, snap(), rows).find(c => c.key === 'adviser')
+      return { groups: ctx?.projectIds ?? [], rows: ctx ? rowsIn(ctx, rows).map(r => r.project.id) : [] }
+    }
+    await assignRole(as('f_npc_nw1'), null, 'p_nw2', 'f_npc_nw3', P.ADVISER)
+    expect(adviserOn('f_npc_nw3').groups).not.toContain('p_nw2')
+
+    await runGate(as('f_npc_nw1'), null, 'p_nw2', { action: 'ROUTE_ADVISER' })
+    expect(adviserOn('f_npc_nw3').groups).not.toContain('p_nw2')
+    expect(adviserOn('f_npc_nw3').rows).not.toContain('p_nw2')
+
+    await runGate(as('f_delta'), null, 'p_nw2', { action: 'APPROVE_ADVISER' })
+    expect(adviserOn('f_npc_nw3').groups).not.toContain('p_nw2') // one office is not enough
+    await runGate(as('f_echo'), null, 'p_nw2', { action: 'APPROVE_ADVISER' })
+    expect(adviserOn('f_npc_nw3').groups).toContain('p_nw2')
+    expect(adviserOn('f_npc_nw3').rows).toContain('p_nw2')
   })
 
   it('routing needs an Adviser; the PC outside their programs cannot', async () => {

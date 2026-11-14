@@ -2,17 +2,18 @@ import { useState } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
 import { useApp } from '../../state/AppContext.jsx'
 import { reportScope } from '../Reports.jsx'
-import { Badge, Section, daysLeft, programShort, fmtDate, fmtDateTime } from '../../components/ui.jsx'
-import { can } from '../../domain/caac.js'
+import { Badge, Section, Field, daysLeft, programShort, fmtDate, fmtDateTime } from '../../components/ui.jsx'
+import { can, resolveInstitution } from '../../domain/caac.js'
+import { nextGroupNumber } from '../../domain/groupNames.js'
 import { canDo, viewBundle } from '../../domain/guard.js'
 import { FLAGS } from '../../domain/flags.js'
-import { STAGES, sectionNow, courseOfStage, milestoneStatus, stageLabel, adviserReturnOf } from '../../domain/stages.js'
+import { STAGES, sectionNow, courseOfStage, milestoneStatus, stageLabel, adviserReturnOf, stepText } from '../../domain/stages.js'
 import { ExportMenu } from '../../components/Export.jsx'
 import { GroupDraftReview } from '../../components/GroupDraft.jsx'
 import ForwardRosterDialog from '../../components/panels/ForwardRoster.jsx'
 import { Act } from '../../components/ViewOnly.jsx'
 import { owedBy } from '../../services/worklist.js'
-import { addMember } from '../../services/api.js'
+import { addMember, createProject } from '../../services/api.js'
 import { useAction, ActionError } from '../../components/useAction.jsx'
 import Dialog from '../../components/Dialog.jsx'
 
@@ -48,9 +49,9 @@ export function statusOf(r, hats) {
   if (p.currentStage === 'ARCHIVED') return ['Completed', 'ok']
   if (isOverdue(p)) return ['Overdue', 'stop']
   const mine = owedBy([r], hats)
-  if (mine.some(i => i.urgent)) return ['Needs action', 'stop']
-  if (mine.some(i => i.ready)) return ['Needs action', 'warn']
-  if (mine.length) return ['Waiting', 'neutral']
+  if (mine.some(i => i.urgent)) return ['Urgent', 'stop']
+  if (mine.some(i => i.ready)) return ['Awaiting you', 'warn']
+  if (mine.length) return ['Not yet', 'neutral']
   const defense = r.bundle.defenses.find(d => !d.verdict)
   if (defense) return ['Scheduled', 'info']
   return ['On track', 'ok']
@@ -135,7 +136,7 @@ export function OwedFeed({ rows, hats, empty = 'Nothing is waiting on you right 
         key: `${i.r.project.id}-${i.key}`,
         title: i.label, to: itemLink(i.r, i.tab),
         sub: <>{i.r.project.title} · {sectionNow(i.r.project).section}{i.blocker && <span className="blocker-inline"> — {i.blocker}</span>}</>,
-        chip: i.urgent ? ['Urgent', 'stop'] : i.ready ? ['Needs action', 'warn'] : ['Not yet', 'neutral'],
+        chip: i.urgent ? ['Urgent', 'stop'] : i.ready ? ['Awaiting you', 'warn'] : ['Not yet', 'neutral'],
       }))} />
       {items.length > limit && <p className="small faint m-0 mt-1">and {items.length - limit} more</p>}
     </>
@@ -296,7 +297,7 @@ export function Capstone2Facts({ r, me }) {
       <dd>
         {FLAGS.I2_READINESS_CHECK === 'own-step' && <>{b.project.readinessConfirmedAt ? 'Confirmed' : 'Not confirmed'} · </>}
         {recommended ? `${FORMS.F2005.code} submitted` : `${FORMS.F2005.code} not yet`}
-        {at >= idx('FINAL_DEFENSE_SCHEDULING') ? ' · endorsed by the Program Chair/Coordinator' : recommended ? ' · awaiting endorsement' : ''}
+        {at >= idx('FINAL_DEFENSE_SCHEDULING') ? ' · endorsed by the Program Chair' : recommended ? ' · awaiting endorsement' : ''}
       </dd>
       <dt>Final defense</dt>
       <dd>
@@ -452,12 +453,8 @@ export function RecordsSearch() {
   )
 }
 
-/** "2/9" — where a group is among its course's steps (the wireframe's "9/14"). */
-export const stepCount = (p) => {
-  const course = courseOfStage(p.currentStage)
-  const labels = [...new Set(STAGES.filter(s => s.key !== 'ARCHIVED' && courseOfStage(s.key) === course).map(s => stageLabel(s.key)))]
-  return `${labels.indexOf(stageLabel(p.currentStage)) + 1}/${labels.length}`
-}
+/** "Step 2 of 9" — where a group is among its course's steps, counted as everywhere else (stepText). */
+export const stepCount = (p) => stepText(p.currentStage)
 
 /** Where a group is on the way to its adviser, for the chip at the foot of its card. */
 const sentState = (r) => {
@@ -484,12 +481,20 @@ export function BlockDesk({ section, rows }) {
   const roster = users.filter(u => accountType(u.email) === 'Student' && u.block === section.block && u.status === ACCOUNT_STATUS.ACTIVE)
   const ungrouped = roster.filter(u => !grouped.has(u.id))
   const queue = reviewQueue(groups, me)
-  // Groups this instructor can forward now (Figma S-22 "Send groups to Program Chair").
-  const forwardable = groups.filter(r => r.gates.some(g => g.gate.action === 'ENDORSE_ROSTER'))
+  // Groups this instructor can forward now (Figma S-22 "Send groups to Program Chair"):
+  // the roster gate is open and its precondition met — an empty group is not
+  // counted. A group short of GROUP_SIZE still is (NEW-31: not blocked).
+  const forwardable = groups.filter(r => r.gates.some(g => g.gate.action === 'ENDORSE_ROSTER' && !g.blocker))
+  // Unsent groups the gate still refuses (no students yet), named under the button.
+  const empty = groups.filter(r => r.gates.some(g => g.gate.action === 'ENDORSE_ROSTER' && g.blocker))
   // Groups that can still take students: at Group Formation, with a seat free.
   const open = groups.filter(r => r.bundle.members.length < FLAGS.GROUP_SIZE && canDo(me, 'manageRoster', r.bundle).ok)
+  // A new group is made here, on the board, for this section (S1.1) — no detour to Projects.
+  const inst = resolveInstitution(me, snap)
+  const canCreate = can(inst, 'group.create') && inst.sections.some(s => s.id === section.id)
   const [forwarding, setForwarding] = useState(false)
   const [adding, setAdding] = useState(false)
+  const [creating, setCreating] = useState(false)
   const [picked, setPicked] = useState(() => new Set())
   const chosen = ungrouped.filter(u => picked.has(u.id))
   const toggle = (id) => setPicked(s => { const n = new Set(s); n.has(id) ? n.delete(id) : n.add(id); return n })
@@ -538,7 +543,7 @@ export function BlockDesk({ section, rows }) {
                     {n === 0 && <li className="faint">No students yet</li>}
                   </ul>
                   <div className="group-card-step">
-                    <span><span className="mono">{stepCount(r.project)}</span> · {r.stage?.label}</span>
+                    <span>{stepCount(r.project)} · {r.stage?.label}</span>
                     {status ? <Badge tone={status[1]}>{status[0]}</Badge> : <span className="faint" aria-hidden="true">—</span>}
                     <Link className="group-card-open" to={waiting.length ? itemLink(r, 'documents') : itemLink(r)}>
                       {waiting.length ? `Check ${waiting[0].d.docType} v${waiting[0].d.versionNumber}` : 'Open group'} <span aria-hidden="true">→</span>
@@ -551,12 +556,14 @@ export function BlockDesk({ section, rows }) {
                 </article>
               )
             })}
-            <Act>
-              <Link className="group-card is-new" to="/projects?new=1">
-                <strong><span aria-hidden="true">+ </span>Create group</strong>
-                <span className="small faint">Then add students from the unassigned list</span>
-              </Link>
-            </Act>
+            {canCreate && (
+              <Act>
+                <button type="button" className="group-card is-new" onClick={() => setCreating(true)}>
+                  <strong><span aria-hidden="true">+ </span>Create group</strong>
+                  <span className="small faint">Then add students from the unassigned list</span>
+                </button>
+              </Act>
+            )}
           </div>
         </div>
 
@@ -595,8 +602,10 @@ export function BlockDesk({ section, rows }) {
             </Act>
             <p className="small muted m-0">
               {forwardable.length
-                ? `Sends ${forwardable.map(r => r.project.title).join(', ')} so the Program Chair can assign an adviser. The assignment then goes to the Associate Dean and the Dean for approval.`
-                : groups.length
+                ? `Sends ${forwardable.map(r => r.project.title).join(', ')} so the Program Chair can assign an adviser. The assignment then goes to the Associate Dean and the Dean for approval.${empty.length ? ` ${empty.map(r => r.project.title).join(', ')} ${empty.length === 1 ? 'has' : 'have'} no students yet.` : ''}`
+                : empty.length
+                  ? `Add students to ${empty.map(r => r.project.title).join(', ')} before ${empty.length === 1 ? 'it is' : 'they are'} sent.`
+                  : groups.length
                   ? 'Every group here has been sent. New groups appear here once they are formed.'
                   : 'Groups appear here once they are formed. Sent groups go on to adviser assignment.'}
             </p>
@@ -605,22 +614,68 @@ export function BlockDesk({ section, rows }) {
       </div>
 
       {forwarding && <ForwardRosterDialog groups={forwardable.map(r => r.bundle)} onClose={() => setForwarding(false)} />}
-      {adding && <AddToGroupDialog students={chosen} groups={open} onClose={() => setAdding(false)} onDone={() => setPicked(new Set())} />}
+      {adding && <AddToGroupDialog students={chosen} groups={open} section={canCreate ? section : null}
+        onClose={() => setAdding(false)} onDone={() => setPicked(new Set())} />}
+      {creating && <CreateGroupDialog section={section} onClose={() => setCreating(false)} />}
     </section>
   )
 }
 
-/** S-22 "Add selected to group…": which group the ticked students join. */
-function AddToGroupDialog({ students, groups, onClose, onDone }) {
+/** The name a section's next group goes by until its topic is registered ("NW-402-3"). */
+const nextGroupName = (snap, section) =>
+  `${section.block}-${nextGroupNumber((snap.projects ?? []).filter(p => p.sectionId === section.id))}`
+
+/** S-22 "+ Create group": a new, empty group in this section, made without leaving the board. */
+function CreateGroupDialog({ section, onClose }) {
+  const { snap, me } = useApp()
+  const { run, error, busy } = useAction()
+  const [title, setTitle] = useState('')
+
+  function create() {
+    run(async () => {
+      await createProject(me, snap, { sectionId: section.id, title })
+      onClose()
+    })
+  }
+
+  return (
+    <Dialog
+      title={`Create a group in ${section.block}`} sub={`${section.course} · ${section.term}`}
+      onClose={busy ? undefined : onClose}
+      footer={<>
+        <button type="button" onClick={onClose} disabled={busy}>Cancel</button>
+        <button type="button" className="primary" disabled={busy} onClick={create}>{busy ? 'Creating…' : 'Create group'}</button>
+      </>}
+    >
+      <p className="small muted m-0 mb-2">You become the group’s Instructor 1. Add its students from the unassigned list once it is created.</p>
+      <Field label="Working title (optional)" hint="Leave it blank: the group goes by its section and number until its topic is registered.">
+        <input value={title} onChange={e => setTitle(e.target.value)} placeholder={nextGroupName(snap, section)} disabled={busy} />
+      </Field>
+      <ActionError error={error} />
+    </Dialog>
+  )
+}
+
+const NEW_GROUP = 'new'
+
+/**
+ * S-22 "Add selected to group…": which group the ticked students join — an
+ * open one, or (with `section`, when this instructor may create groups there)
+ * a new group made for them in the same step.
+ */
+function AddToGroupDialog({ students, groups, section, onClose, onDone }) {
   const { snap, me } = useApp()
   const { run, error, busy } = useAction()
   const [target, setTarget] = useState('')
   const seats = (r) => FLAGS.GROUP_SIZE - r.bundle.members.length
   const names = students.map(u => u.name).join(', ')
+  const canNew = Boolean(section) && students.length <= FLAGS.GROUP_SIZE
 
   function add() {
     run(async () => {
-      for (const u of students) await addMember(me, snap, target, u.id)
+      const id = target === NEW_GROUP ? (await createProject(me, snap, { sectionId: section.id }))?.id : target
+      if (!id) throw new Error('The new group could not be created.')
+      for (const u of students) await addMember(me, snap, id, u.id)
       onDone?.()
       onClose()
     })
@@ -635,11 +690,20 @@ function AddToGroupDialog({ students, groups, onClose, onDone }) {
         <button type="button" className="primary" disabled={busy || !target} onClick={add}>{busy ? 'Adding…' : 'Add to group'}</button>
       </>}
     >
-      {groups.length === 0
-        ? <p className="m-0">No group in this section has a free seat. <Link to="/projects?new=1">Create a group</Link> first.</p>
+      {groups.length === 0 && !canNew
+        ? <p className="m-0">No group in this section has a free seat{students.length > FLAGS.GROUP_SIZE ? `, and a group holds ${FLAGS.GROUP_SIZE} students` : ''}. Pick fewer students, or free a seat first.</p>
         : (
           <fieldset className="choice">
-            <legend className="label">Groups with a free seat</legend>
+            <legend className="label">{groups.length ? 'Groups with a free seat' : 'No group has a free seat'}</legend>
+            {canNew && (
+              <label className="choice-card">
+                <input type="radio" name="add-to-group" checked={target === NEW_GROUP} disabled={busy} onChange={() => setTarget(NEW_GROUP)} />
+                <span>
+                  <strong className="small">New group · {nextGroupName(snap, section)}</strong>
+                  <span className="faint small">Created now in {section.block}, with these {students.length === 1 ? 'student' : `${students.length} students`}</span>
+                </span>
+              </label>
+            )}
             {groups.map(r => {
               const short = seats(r) < students.length
               return (

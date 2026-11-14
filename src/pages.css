@@ -2,35 +2,20 @@
    The role-context shell and pages from the Figma wireframes (S-00 … S-14).
    The wireframes are greyscale on purpose — they set structure, not look — so
    these rules carry the structure in the existing records-desk system:
-   paper ground, ink type, HAU crimson for the one accent, 8px rhythm.
+   paper ground, ink type, the HAU orange (--accent) for the one accent, 8px rhythm.
    --------------------------------------------------------------------------- */
 
 /* --- shared page parts ----------------------------------------------------- */
 .sr-only { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
-.ok-text { color: var(--ok); }
+.ok-text { color: var(--ok-ink); }
 button.link {
   border: 0; background: none; padding: 0; color: var(--accent-ink); font: inherit; text-decoration: underline;
   text-underline-offset: 2px; cursor: pointer;
 }
-button.link:hover:not(:disabled) { background: none; color: var(--accent); }
-.btn.primary { background: var(--accent); border-color: var(--accent); color: #fff; }
-.btn.primary:hover { background: var(--accent-ink); }
-.btn.small { font-size: 12px; padding: 4px 10px; }
+button.link:hover:not(:disabled) { background: none; color: var(--ink); }
 .btn.block, button.block { display: block; width: 100%; text-align: center; }
 .btn.is-disabled { color: var(--ink-faint); cursor: not-allowed; background: var(--surface-sunk); }
 .btn.is-disabled:hover { background: var(--surface-sunk); }
-
-.chip {
-  display: inline-flex; align-items: center; gap: 4px; white-space: nowrap;
-  font: 500 12px/1.6 var(--sans); padding: 1px 10px; border-radius: 999px;
-  border: 1px solid var(--rule-strong); background: var(--surface-sunk); color: var(--ink-muted);
-}
-button.chip { cursor: pointer; }
-button.chip:hover:not(:disabled) { background: var(--rule); }
-.chip.ok { background: var(--ok-wash); border-color: transparent; color: var(--ok); }
-.chip.warn { background: var(--warn-wash); border-color: transparent; color: var(--warn); }
-.chip.stop { background: var(--stop-wash); border-color: transparent; color: var(--stop); }
-.chips { display: flex; gap: var(--s1); flex-wrap: wrap; margin-top: var(--s1); }
 
 .side { display: flex; flex-direction: column; gap: var(--s2); }
 
@@ -43,8 +28,8 @@ button.chip:hover:not(:disabled) { background: var(--rule); }
 
 /* --- student dashboard (S-02) ----------------------------------------------- */
 .people { display: flex; gap: var(--s5); flex-wrap: wrap; margin: var(--s3) 0; }
-.people dt { font-size: 12px; color: var(--ink-faint); }
-.people dd { margin: 2px 0 0; font-size: 13.5px; }
+.people dt { font-size: var(--text-sm); color: var(--ink-faint); }
+.people dd { margin: 2px 0 0; font-size: var(--text-base); }
 .stat-row { gap: var(--s2); }
 .stat.panel { padding: var(--s2) var(--s3); min-width: 180px; flex: 1 1 180px; }
 .stat .n { margin-top: var(--s1); }
@@ -60,14 +45,14 @@ button.chip:hover:not(:disabled) { background: var(--rule); }
 }
 .choice-card > span { display: flex; flex-direction: column; gap: 2px; align-items: flex-start; }
 .choice-card:has(input:checked) { border-color: var(--accent); background: var(--accent-wash); }
-.choice-card input { margin-top: 3px; }
+.choice-card input { margin-top: 4px; }
 .choice-card.is-disabled { opacity: .55; cursor: not-allowed; }
 
 /* --- versions, feedback, review --------------------------------------------- */
 table.versions td { vertical-align: middle; }
 tr.is-new td { background: var(--ok-wash); }
 .compare { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: var(--s2); }
-.plain-list { margin: var(--s1) 0 0; padding-left: 18px; display: grid; gap: 4px; }
+.plain-list { margin: var(--s1) 0 0; padding-left: 20px; display: grid; gap: 4px; }
 .annotation { padding: var(--s2); }
 .annotation + .annotation { margin-top: 12px; }
 .response { margin-top: 12px; padding: var(--s1) 12px; background: var(--paper); border-radius: var(--radius); }
@@ -82,7 +67,7 @@ tr.is-new td { background: var(--ok-wash); }
 .checks li.is-pass::before { background: var(--ok); }
 .checks li.is-warn::before { background: var(--warn); }
 .checks li.is-fail::before { background: var(--stop); }
-.routing { list-style: none; margin: 0 0 var(--s2) 8px; padding: 0 0 0 20px; display: grid; gap: var(--s2); position: relative; }
+.routing { list-style: none; margin: 0 0 var(--s2) var(--s1); padding: 0 0 0 20px; display: grid; gap: var(--s2); position: relative; }
 .routing::before { content: ""; position: absolute; left: 0; top: 4px; bottom: 4px; width: 2px; background: var(--rule); }
 .routing li { display: grid; gap: 2px; justify-items: start; position: relative; }
 .routing li::before { content: ""; position: absolute; left: -29px; top: 3px; width: 12px; height: 12px; border-radius: 50%; border: 2px solid var(--rule-strong); background: var(--surface); }

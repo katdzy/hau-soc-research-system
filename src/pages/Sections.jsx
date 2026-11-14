@@ -10,7 +10,7 @@ import { resolveInstitution, can } from '../domain/caac.js'
 import { sectionNow } from '../domain/stages.js'
 import { Act, useViewOnly } from '../components/ViewOnly.jsx'
 
-// Sections (revision 2026-11-07, OQ#5): the Program Chair/Coordinator sets up
+// Sections (revision 2026-11-07, OQ#5): the Program Chair sets up
 // the sections of the programs they coordinate and names who teaches each.
 // Teaching a Capstone 1 section is what makes someone Instructor 1.
 
@@ -37,7 +37,7 @@ export default function Sections() {
       <Restricted>
         {coordinator
           ? 'You coordinate no program yet. Ask the System Administrator to add your programs; their sections then appear here.'
-          : 'Sections are set up by the Program Chair/Coordinator of each program.'}
+          : 'Sections are set up by the Program Chair of each program.'}
       </Restricted>
     )
   }

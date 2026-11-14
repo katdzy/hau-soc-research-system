@@ -5,7 +5,7 @@ import { STAGES, stageByKey, stageIndex, openGates, defenseNotHeld, verdictCorre
 import { scheduleDefense, recordVerdict, correctVerdict, defenseTypeAt } from '../../services/api.js'
 import { useAction, ActionError } from '../useAction.jsx'
 import { Section, Empty, Badge, Field, Countdown, verdictTone, fmtDateTime } from '../ui.jsx'
-import { VERDICTS, FORMS } from '../../domain/constants.js'
+import { VERDICTS, FORMS, roleLabel } from '../../domain/constants.js'
 import { FLAGS } from '../../domain/flags.js'
 import { revisionDaysOf } from '../../domain/settings.js'
 import { Act } from '../ViewOnly.jsx'
@@ -121,7 +121,7 @@ export default function DefensePanel({ b, ctx }) {
             Opens at {upcoming.label}, after:
           </p>
           <ul className="todo">
-            {before.map(g => <li key={g.action}>{g.label} <span className="faint">— {g.actorHint}</span></li>)}
+            {before.map(g => <li key={g.action}>{g.label} <span className="faint">— {roleLabel(g.actorHint)}</span></li>)}
           </ul>
           <div className="actions mt-2">
             <button className="primary" disabled aria-describedby="schedule-not-yet">Publish schedule</button>

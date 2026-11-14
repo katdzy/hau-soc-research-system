@@ -145,7 +145,7 @@ export function GroupDraftCard() {
               <div className="section-head">
                 <h2>Your group</h2>
                 <Badge tone={mine.status === 'Returned' ? 'stop' : mine.status === 'Submitted' ? 'warn' : ready ? 'ok' : 'neutral'}>
-                  {mine.status === 'Submitted' ? 'Waiting for approval'
+                  {mine.status === 'Submitted' ? 'Awaiting approval'
                     : mine.status === 'Returned' ? 'Returned'
                       : `${joined.length} of ${size} joined`}
                 </Badge>

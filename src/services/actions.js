@@ -592,7 +592,7 @@ export async function returnToGroup(actor, _snap, projectId, { docTypes, remarks
       type: 'Clearance', event: 'Returned by the URO',
       title: `${b.project.title}: the URO returned ${docTypes.join(' and ')}`,
       body: resets
-        ? `${entry.remarks} Upload a new version. The project is back at Final Requirements: the Adviser, the panel and the Program Chair/Coordinator sign a new Approval Sheet before it returns to the URO.`
+        ? `${entry.remarks} Upload a new version. The project is back at Final Requirements: the Adviser, the panel and the Program Chair sign a new Approval Sheet before it returns to the URO.`
         : `${entry.remarks} Upload a new version; the project goes back to the URO once it is in.`,
     }
     if (!resets) {
@@ -627,7 +627,7 @@ export async function returnAdviserAssignment(actor, _snap, projectId, { remarks
     })
     await logHistory({
       projectId, fromStage: 'ADVISER_APPROVAL', toStage: 'ADVISER_ASSIGNMENT', actorId: me.id, hat,
-      action: 'RETURN_ADVISER', note: `Adviser assignment returned to the Program Chair/Coordinator by the ${hat}`,
+      action: 'RETURN_ADVISER', note: `Adviser assignment returned to the Program Chair by the ${hat}`,
     })
     await logAudit({
       actorId: me.id, hat, action: 'STAGE_RETURN_ADVISER', entityType: 'projects', entityId: projectId, projectId,
@@ -1793,7 +1793,7 @@ const teachingNotice = (sec, roleNote) => ({
 })
 const roleNoteOf = (sec) => sec.course === COURSES.C1
   ? 'You are Instructor 1 for its groups: you approve the groups its students draft, or create them yourself.'
-  : 'Instructor 2 is still assigned on each project by the Program Chair/Coordinator.'
+  : 'Instructor 2 is still assigned on each project by the Program Chair.'
 
 export async function createSection(actor, _snap, { block, course, term, instructorId = null } = {}) {
   const { actor: me, snap, hat } = authorizeInstitution(actor, 'section.manage')

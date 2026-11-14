@@ -8,6 +8,7 @@ import { assignRole, unassignRole, runGate, returnAdviserAssignment, assignmentC
 import { useAction, ActionError } from '../useAction.jsx'
 import { Badge, Field, fmtDate, programShort } from '../ui.jsx'
 import Dialog from '../Dialog.jsx'
+import { Act } from '../ViewOnly.jsx'
 
 // Adviser Assignment, as the wireframe lays it out (Capstone 1 · Step 2):
 // the Program Chair picks an adviser and routes the slip (M-24); the
@@ -90,9 +91,11 @@ export function AssignAdviserDialog({ r, onClose }) {
       onClose={busy ? undefined : onClose}
       footer={<>
         <button type="button" onClick={onClose} disabled={busy}>Cancel</button>
-        <button type="button" className="primary" disabled={busy || !picked} onClick={assign}>
-          {busy ? 'Routing…' : 'Assign & route for approval'}
-        </button>
+        <Act>
+          <button type="button" className="primary" disabled={busy || !picked} onClick={assign}>
+            {busy ? 'Routing…' : 'Assign & route for approval'}
+          </button>
+        </Act>
       </>}
     >
       <div className="slip-cols">
@@ -136,8 +139,8 @@ export function AssignAdviserDialog({ r, onClose }) {
             </p>
           </div>
           <Route title="Route after you assign" steps={[
-            { who: 'Program Chair · you', sub: 'Assign an adviser', state: 'current', chip: ['Awaiting', 'warn'] },
-            ...approvers.map(o => ({ who: o, sub: 'Approves the assignment', chip: ['Pending'] })),
+            { who: 'Program Chair · you', sub: 'Assign an adviser', state: 'current', chip: ['Awaiting you', 'warn'] },
+            ...approvers.map(o => ({ who: o, sub: 'Approves the assignment', chip: ['Not yet'] })),
             ...sitsOut.map(o => ({ who: o, sub: 'Named as the adviser, so this office does not approve', chip: ['Sits out'] })),
           ]} />
           {approvers.length > 1 && (
@@ -210,7 +213,8 @@ export function RoutingSlipDialog({ r, onClose }) {
     : step === 0
       ? <>
           <button type="button" onClick={onClose}>Cancel</button>
-          <button type="button" className="primary" onClick={() => setStep(1)}>Next: Decide →</button>
+          {/* Reading the slip is fine on a phone; deciding is not (PHONE_VIEW_ONLY). */}
+          <Act><button type="button" className="primary" onClick={() => setStep(1)}>Next: Decide →</button></Act>
         </>
       : <>
           <button type="button" onClick={() => setStep(0)} disabled={busy}>Back</button>
@@ -265,7 +269,7 @@ export function RoutingSlipDialog({ r, onClose }) {
                   <strong>{completes ? 'Approve' : 'Approve & forward'}</strong>
                   <span className="small muted">
                     {completes
-                      ? `Confirms ${adviser} as the adviser of ${b.project.title} and emails the group, the adviser and the Program Chair.`
+                      ? `Confirms ${adviser} as the adviser of ${b.project.title} and emails the group, the adviser and Instructor 1.`
                       : `Records your approval. The slip still needs the ${waitingOn.join(' and ')}.`}
                   </span>
                 </span>
@@ -291,6 +295,79 @@ export function RoutingSlipDialog({ r, onClose }) {
 
         <Route title={step === 1 && canApprove ? 'Route after you confirm' : 'Route'} steps={route} />
       </div>
+    </Dialog>
+  )
+}
+
+// --- Several slips at once (Executive approvals: "Approve selected") ------------------------
+
+/**
+ * Approves several adviser routing slips in one go, for an office with a full
+ * queue. Each goes through the same APPROVE_ADVISER gate the slip uses, so
+ * the guard decides each one as before (NEW-5 included). `rows` are worklist
+ * rows this office can approve now.
+ */
+export function BulkApproveDialog({ rows, onClose, onDone }) {
+  const { snap, me } = useApp()
+  const { run, error, busy } = useAction()
+  const [done, setDone] = useState([])
+  const users = snap.users ?? []
+  const nameOf = (id) => users.find(u => u.id === id)?.name ?? '—'
+  const hat = ADVISER_APPROVERS.find(o => (me.globalRoles ?? []).includes(o))
+  const n = rows.length
+
+  const outcome = (b) => {
+    const approvals = b.project.adviserApprovals ?? {}
+    const waitingOn = requiredAdviserApprovers(b).filter(o => o !== hat && !approvals[o])
+    return FLAGS.ADVISER_APPROVAL === 'either' || waitingOn.length === 0
+      ? ['Appoints the adviser', 'ok']
+      : [`Still needs the ${waitingOn.join(' and ')}`, undefined]
+  }
+
+  function approveAll() {
+    run(async () => {
+      for (const r of rows) {
+        if (done.includes(r.project.id)) continue
+        await runGate(me, snap, r.project.id, { action: 'APPROVE_ADVISER' })
+        setDone(d => [...d, r.project.id])
+      }
+      onDone?.()
+      onClose()
+    })
+  }
+
+  return (
+    <Dialog
+      title={`Approve ${n} adviser assignment${n === 1 ? '' : 's'}`}
+      sub={`As ${hat}. Each one is recorded and emailed as if you approved its slip.`}
+      onClose={busy ? undefined : onClose}
+      footer={<>
+        <button type="button" onClick={onClose} disabled={busy}>Cancel</button>
+        <Act>
+          <button type="button" className="solid-ok" disabled={busy} onClick={approveAll}>
+            {busy ? `Approving ${done.length + 1} of ${n}…` : `Approve ${n}`}
+          </button>
+        </Act>
+      </>}
+    >
+      <ul className="bulk-list">
+        {rows.map(r => {
+          const b = r.bundle
+          const adviser = b.assignments.find(a => a.roleType === P.ADVISER)?.userId
+          const [what, tone] = outcome(b)
+          return (
+            <li key={r.project.id}>
+              <span>
+                <strong className="small">{nameOf(adviser)}</strong>
+                <span className="faint small"> → {r.project.title} · {programCode(b.project.program)} · {adviserLoad(snap, adviser)} group{adviserLoad(snap, adviser) === 1 ? '' : 's'} advised</span>
+              </span>
+              {done.includes(r.project.id) ? <Badge tone="ok">Approved</Badge> : <Badge tone={tone}>{what}</Badge>}
+            </li>
+          )
+        })}
+      </ul>
+      <p className="small muted m-0 mt-2">To return one instead, open its slip. A return needs remarks for the Program Chair.</p>
+      <ActionError error={error} />
     </Dialog>
   )
 }

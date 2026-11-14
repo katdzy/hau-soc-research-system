@@ -275,10 +275,10 @@ export const STAGES = [
     key: 'GROUP_FORMATION',
     label: 'Group Formation',
     phase: PHASES.IDEATION,
-    blurb: 'Students draft their group and Instructor 1 approves it — or Instructor 1 forms it from the block — then Instructor 1 forwards the roster to the Program Chair/Coordinator.',
+    blurb: 'Students draft their group and Instructor 1 approves it — or Instructor 1 forms it from the block — then Instructor 1 forwards the roster to the Program Chair.',
     gates: [{
       action: 'ENDORSE_ROSTER',
-      label: 'Forward roster to the Program Chair/Coordinator',
+      label: 'Forward roster to the Program Chair',
       capability: 'roster.endorse',
       actorHint: P.INSTRUCTOR_1,
       next: 'ADVISER_ASSIGNMENT',
@@ -289,7 +289,7 @@ export const STAGES = [
     key: 'ADVISER_ASSIGNMENT',
     label: 'Adviser Assignment',
     phase: PHASES.IDEATION,
-    blurb: 'The Program Chair/Coordinator assigns an Adviser before ideation begins and routes the assignment for approval.',
+    blurb: 'The Program Chair assigns an Adviser before ideation begins and routes the assignment for approval.',
     gates: [{
       action: 'ROUTE_ADVISER',
       queue: 'Needs adviser',
@@ -386,7 +386,7 @@ export const STAGES = [
     key: 'PANEL_ASSIGNMENT',
     label: 'Panel Assignment',
     phase: PHASES.PROPOSAL,
-    blurb: 'The Program Chair/Coordinator designates the Panel Chair and Panel Members. An Adviser cannot sit on their own group’s panel.',
+    blurb: 'The Program Chair designates the Panel Chair and Panel Members. An Adviser cannot sit on their own group’s panel.',
     gates: [{
       action: 'CONFIRM_PANEL',
       queue: 'Needs panel',
@@ -405,7 +405,7 @@ export const STAGES = [
     key: 'PROPOSAL_DEFENSE_SCHEDULING',
     label: 'Proposal Defense Scheduling',
     phase: PHASES.PROPOSAL,
-    blurb: 'The Program Chair/Coordinator sets the date, time and venue. Publishing the schedule notifies the group and panel and generates the AI summary of the complete manuscript.',
+    blurb: 'The Program Chair sets the date, time and venue. Publishing the schedule notifies the group and panel and generates the AI summary of the complete manuscript.',
     gates: [{
       action: 'SCHEDULE_PROPOSAL_DEFENSE',
       queue: 'Proposal defenses to schedule',
@@ -452,7 +452,7 @@ export const STAGES = [
       applies: (b) => !inRedefense(b, 'Proposal'),
       requires: (b) => revisionFormDone(b, 'Proposal')
         ?? (has(b.assignments, a => a.roleType === P.INSTRUCTOR_2)
-          ? null : 'The Program Chair/Coordinator must assign an Instructor 2 first.'),
+          ? null : 'The Program Chair must assign an Instructor 2 first.'),
     }, redefenseGate('Proposal')],
   },
 
@@ -497,7 +497,7 @@ export const STAGES = [
     key: 'FINAL_DEFENSE_ENDORSEMENT',
     label: 'Final Defense Endorsement',
     phase: PHASES.IMPLEMENTATION,
-    blurb: 'After the Adviser’s recommendation, the Program Chair/Coordinator signs “Noted by” on FM-AAC-SOC-2005 outside the system, uploads the noted copy and endorses the project for final defense scheduling.',
+    blurb: 'After the Adviser’s recommendation, the Program Chair signs “Noted by” on FM-AAC-SOC-2005 outside the system, uploads the noted copy and endorses the project for final defense scheduling.',
     gates: [{
       action: 'ENDORSE_FINAL_DEFENSE',
       queue: 'Recommendations to endorse',
@@ -571,7 +571,7 @@ export const STAGES = [
     key: 'CLEARANCE',
     label: 'Final Requirements',
     phase: PHASES.CLEARANCE,
-    blurb: 'The group uploads the Editor’s Certificate and Plagiarism Clearance Certificate. The Approval Sheet is signed outside the system by the Adviser, then the Panel, then the Program Chair/Coordinator — each uploads the copy they signed — and the Program Chair/Coordinator routes it to the URO.',
+    blurb: 'The group uploads the Editor’s Certificate and Plagiarism Clearance Certificate. The Approval Sheet is signed outside the system by the Adviser, then the Panel, then the Program Chair — each uploads the copy they signed — and the Program Chair routes it to the URO.',
     gates: [{
       action: 'ENDORSE_TO_URO',
       queue: 'Approval Sheets to endorse',
@@ -715,6 +715,23 @@ export const staysAtStage = (gate) => gate.next === null
 /** Which course a stage belongs to: Ideation and Proposal are Capstone 1; the rest is Capstone 2. */
 export const courseOfStage = (key) =>
   [PHASES.IDEATION, PHASES.PROPOSAL].includes(stageByKey(key)?.phase) ? COURSES.C1 : COURSES.C2
+
+/**
+ * The one way the UI counts steps: step n of the course's steps (9 in
+ * Capstone 1, 8 in Capstone 2). Archived is where the life cycle ends, not a
+ * step, so it counts as n = 0 ("Completed").
+ */
+export function courseStep(key) {
+  const course = courseOfStage(key)
+  const steps = STAGES.filter(s => s.key !== 'ARCHIVED' && courseOfStage(s.key) === course)
+  return { course, n: steps.findIndex(s => s.key === key) + 1, of: steps.length, steps }
+}
+
+/** "Step 2 of 9", or "Completed" once archived. */
+export const stepText = (key) => {
+  const { n, of } = courseStep(key)
+  return n ? `Step ${n} of ${of}` : 'Completed'
+}
 
 /**
  * The section and term a project is in right now. A project records its

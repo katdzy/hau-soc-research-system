@@ -24,7 +24,7 @@ export default function Reports() {
   const { snap, me } = useApp()
   const inst = resolveInstitution(me, snap)
   if (!can(inst, 'report.generate')) {
-    return <Restricted>Reports are for the Dean, Associate Dean, Program Chair/Coordinator and System Administrator.</Restricted>
+    return <Restricted>Reports are for the Dean, Associate Dean, Program Chair and System Administrator.</Restricted>
   }
 
   const { scope, projects } = reportScope(me, snap)

@@ -1,4 +1,4 @@
-import { STAGES, stageIndex } from '../domain/stages.js'
+import { STAGES, stageIndex, courseOfStage, stepText } from '../domain/stages.js'
 
 const fmt = (iso) => new Date(iso).toLocaleDateString(undefined, { day: '2-digit', month: 'short', year: 'numeric' })
 
@@ -40,7 +40,7 @@ export default function StageTimeline({ current, history = [] }) {
           const lastI = ph.steps.at(-1).i
           const phaseState = at > lastI ? 'done' : at >= first ? 'current' : 'todo'
           return (
-            <li key={ph.name} className={`tl-phase ${phaseState}`} style={{ flexGrow: ph.steps.length }}>
+            <li key={ph.name} className={`tl-phase is-${phaseState}`} style={{ flexGrow: ph.steps.length }}>
               <div className="tl-phase-name">{ph.name}</div>
               <ol className="tl-track">
                 {ph.steps.map(({ s, i }) => {
@@ -48,7 +48,7 @@ export default function StageTimeline({ current, history = [] }) {
                   const date = dateOf(s.key)
                   const text = `${s.label}${date ? ` · ${fmt(date)}` : ''}${state === 'current' ? ' (current)' : state === 'done' ? ' (done)' : ''}`
                   return (
-                    <li key={s.key} className={`tl-step ${state}`} aria-current={state === 'current' ? 'step' : undefined}>
+                    <li key={s.key} className={`tl-step is-${state}`} aria-current={state === 'current' ? 'step' : undefined}>
                       <span className="tl-dot" title={text} />
                     </li>
                   )
@@ -66,7 +66,7 @@ export default function StageTimeline({ current, history = [] }) {
             {since ? ` since ${fmt(since)}` : ''}
             {next ? <> · next: {next.label}</> : ' · life cycle complete'}
           </span>
-          <span className="faint tl-count">Stage {at + 1} of {STAGES.length}</span>
+          <span className="faint tl-count">{courseOfStage(now.key)} · {stepText(now.key)}</span>
         </p>
       )}
     </nav>

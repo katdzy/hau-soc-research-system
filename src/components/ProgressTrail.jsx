@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { STAGES, stageIndex, courseOfStage } from '../domain/stages.js'
+import { STAGES, stageIndex, courseOfStage, courseStep, stepText } from '../domain/stages.js'
 import { COURSES, DOC_STATUS } from '../domain/constants.js'
 import { allowedDocTypes } from '../domain/caac.js'
 import { fmtDate } from './ui.jsx'
@@ -14,8 +14,13 @@ export default function ProgressTrail({ b, history }) {
   const course = courseOfStage(b.project.currentStage)
   const [shown, setShown] = useState(course)
   const c2Open = course !== COURSES.C1
-  const steps = STAGES.map((s, i) => ({ s, i })).filter(({ s }) => courseOfStage(s.key) === shown)
+  // The course's steps, counted the way every screen counts them (courseStep): Archived is the end, not a step.
+  const steps = STAGES.map((s, i) => ({ s, i })).filter(({ s }) => s.key !== 'ARCHIVED' && courseOfStage(s.key) === shown)
   const done = steps.filter(({ i }) => i < at).length
+  const step = courseStep(b.project.currentStage)
+  const count = shown === course && step.n
+    ? `${stepText(b.project.currentStage)} · ${done} completed`
+    : `${done} of ${steps.length} completed`
   // A returned submission at the current stage marks the step red.
   const returned = allowedDocTypes(b.project.currentStage).some(t => b.documents
     .filter(d => d.docType === t).sort((x, y) => y.versionNumber - x.versionNumber)[0]?.status === DOC_STATUS.FOR_REVISION)
@@ -26,7 +31,7 @@ export default function ProgressTrail({ b, history }) {
     <section className="section" aria-labelledby="trail-h">
       <div className="label">Progress trail</div>
       <h2 id="trail-h" className="m-0 mt-1 mb-half">{shown}{shown === course && STAGES[at] ? ` — ${STAGES[at].label}` : ''}</h2>
-      <p className="small faint m-0">{done} of {steps.length} completed</p>
+      <p className="small faint m-0">{count}</p>
       <div className="seg m-0 mt-2" role="group" aria-label="Course">
         {[COURSES.C1, COURSES.C2].map(c => (
           <button key={c} type="button" aria-pressed={shown === c}
@@ -56,7 +61,7 @@ export default function ProgressTrail({ b, history }) {
                 </div>
               </div>
               <span className={`badge ${state === 'done' ? 'ok' : state === 'returned' ? 'stop' : state === 'now' ? 'warn' : ''}`}>
-                {state === 'done' ? 'Done' : state === 'returned' ? 'Returned' : state === 'now' ? 'In progress' : 'Pending'}
+                {state === 'done' ? 'Done' : state === 'returned' ? 'Returned' : state === 'now' ? 'In progress' : 'Not yet'}
               </span>
             </li>
           )

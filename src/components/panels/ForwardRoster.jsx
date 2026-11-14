@@ -12,7 +12,7 @@ const STEPS = ['Review group details', 'Confirm and forward']
 const gateOf = (b) => stageByKey(b.project.currentStage)?.gates.find(g => g.action === 'ENDORSE_ROSTER')
 
 /**
- * Forwarding groups to the Program Chair/Coordinator (Group Formation →
+ * Forwarding groups to the Program Chair (Group Formation →
  * Adviser Assignment; Figma S-22 "Send groups to Program Chair"), in two
  * steps like the other approvals (M-20/M-21): first check what the Program
  * Chair will receive — members, student numbers, section, program, term —
@@ -72,8 +72,8 @@ export default function ForwardRosterDialog({ groups, onClose, onDone }) {
       wide
       title={groups.length === 1 ? `Forward to the Program Chair — ${groups[0].project.title}` : 'Send groups to the Program Chair'}
       sub={step === 0
-        ? 'Check what the Program Chair/Coordinator will receive. The roster locks once it is forwarded.'
-        : 'Confirm the route. The Program Chair/Coordinator then assigns an adviser.'}
+        ? 'Check what the Program Chair will receive. The roster locks once it is forwarded.'
+        : 'Confirm the route. The Program Chair then assigns an adviser.'}
       steps={STEPS} step={step} footer={footer} onClose={busy ? undefined : onClose}
     >
       {step === 0 && (
@@ -98,8 +98,8 @@ export default function ForwardRosterDialog({ groups, onClose, onDone }) {
                   ? ['fail', `${otherBlock.map(u => u.name).join(', ')} ${otherBlock.length === 1 ? 'is' : 'are'} not in ${b.project.block}`]
                   : ['pass', `Everyone is in section ${b.project.block}`],
                 chair.length
-                  ? ['pass', `Program Chair/Coordinator: ${chair.map(u => u.name).join(', ')}`]
-                  : ['warn', `No Program Chair/Coordinator covers ${programShort(b.project.program)} yet — the System Administrator assigns one`],
+                  ? ['pass', `Program Chair: ${chair.map(u => u.name).join(', ')}`]
+                  : ['warn', `No Program Chair covers ${programShort(b.project.program)} yet — the System Administrator assigns one`],
               ]
               const on = picked.has(b.project.id)
               return (
@@ -158,7 +158,7 @@ export default function ForwardRosterDialog({ groups, onClose, onDone }) {
             </p>
             {!chairs.length && (
               <p className="note mt-2">
-                No Program Chair/Coordinator covers {programs.map(programShort).join(', ')} yet. The {plural} will wait in
+                No Program Chair covers {programs.map(programShort).join(', ')} yet. The {plural} will wait in
                 Adviser Assignment until the System Administrator assigns one.
               </p>
             )}
@@ -170,7 +170,7 @@ export default function ForwardRosterDialog({ groups, onClose, onDone }) {
             <ol className="routing">
               <li className="is-done"><strong className="small">Instructor 1 · you</strong><span className="small muted">Forwards the roster</span></li>
               <li className="is-current">
-                <strong className="small">Program Chair/Coordinator{chairNames ? ` · ${chairNames}` : ''}</strong>
+                <strong className="small">Program Chair{chairNames ? ` · ${chairNames}` : ''}</strong>
                 <span className="small muted">Assigns an adviser and routes it for approval</span>
               </li>
               <li><strong className="small">Dean and Associate Dean</strong><span className="small muted">Approve the adviser assignment</span></li>

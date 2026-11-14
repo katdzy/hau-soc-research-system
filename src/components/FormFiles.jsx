@@ -19,8 +19,8 @@ const blankFile = (prefix) => Object.entries(BLANK_URLS).find(([k]) => k.split('
 export const BLANK_FORMS = [
   { code: FORMS.F2003.code, name: 'Capstone/Thesis Monitoring Form', use: 'Weekly log — the group fills it in with the Adviser after each consultation and uploads it.' },
   { code: FORMS.F2004.code, name: FORMS.F2004.name, use: 'The Panel Chair uploads it with the verdict; the final copy carries the panel members’ signatures.' },
-  { code: FORMS.F2005.code, name: FORMS.F2005.name, use: 'The Adviser recommends (or not) the group for the final defense; the Program Chair/Coordinator signs “Noted by”.' },
-  { code: FORMS.APPROVAL.code, name: FORMS.APPROVAL.name, use: 'Signed in order: Adviser, panel, Program Chair/Coordinator, then the Dean and Associate Dean.' },
+  { code: FORMS.F2005.code, name: FORMS.F2005.name, use: 'The Adviser recommends (or not) the group for the final defense; the Program Chair signs “Noted by”.' },
+  { code: FORMS.APPROVAL.code, name: FORMS.APPROVAL.name, use: 'Signed in order: Adviser, panel, Program Chair, then the Dean and Associate Dean.' },
 ].map(f => {
   const [path, url] = blankFile(f.code === FORMS.APPROVAL.code ? 'ApprovalSheet' : f.code)
   return { ...f, url: url ?? null, fileName: path?.split('/').pop() ?? null }

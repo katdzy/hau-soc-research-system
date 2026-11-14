@@ -16,10 +16,10 @@ export const CONTEXTS = [
   {
     key: 'admin', role: G.ADMIN, heading: 'System Administrator', global: true,
     nav: [
-      { to: '/admin/accounts', label: 'User Accounts', badge: 'toActivate' },
-      { to: '/admin/caac', label: 'Role Configuration' },
-      { to: '/admin/settings', label: 'Global Settings' },
-      { to: '/audit', label: 'Audit Log' },
+      { to: '/admin/accounts', label: 'User accounts', badge: 'toActivate' },
+      { to: '/admin/caac', label: 'Role configuration' },
+      { to: '/admin/settings', label: 'Global settings' },
+      { to: '/audit', label: 'Audit log' },
       { to: '/reports', label: 'Reports' },
       { to: '/records', label: 'Archive' },
     ],
@@ -27,11 +27,10 @@ export const CONTEXTS = [
   {
     key: 'dean', role: G.DEAN, heading: 'Dean', global: true,
     nav: [
-      { to: '/approvals', label: 'Executive Approvals' },
-      { to: '/adviser-approvals', label: 'Adviser Assignments' },
-      { to: '/school', label: 'Student Capstone/Thesis' },
-      { to: '/versions', label: 'Version History' },
-      { to: '/completions', label: 'Completion Records' },
+      { to: '/approvals', label: 'Executive approvals' },
+      { to: '/school', label: 'Student capstone & thesis' },
+      { to: '/versions', label: 'Version history' },
+      { to: '/completions', label: 'Completion records' },
       { to: '/reports', label: 'Reports' },
       { to: '/records', label: 'Archive' },
     ],
@@ -39,11 +38,10 @@ export const CONTEXTS = [
   {
     key: 'associate-dean', role: G.ASSOCIATE_DEAN, heading: 'Associate Dean', global: true,
     nav: [
-      { to: '/approvals', label: 'Executive Approvals' },
-      { to: '/adviser-approvals', label: 'Assignment Review' },
-      { to: '/school', label: 'Student Capstone/Thesis' },
-      { to: '/versions', label: 'Version History' },
-      { to: '/completions', label: 'Completion Records' },
+      { to: '/approvals', label: 'Executive approvals' },
+      { to: '/school', label: 'Student capstone & thesis' },
+      { to: '/versions', label: 'Version history' },
+      { to: '/completions', label: 'Completion records' },
       { to: '/reports', label: 'Reports' },
       { to: '/records', label: 'Archive' },
     ],
@@ -51,53 +49,53 @@ export const CONTEXTS = [
   {
     key: 'coordinator', role: G.COORDINATOR, heading: 'Program Chair', global: true,
     nav: [
-      { to: '/routing', label: 'Assignments & Routing' },
+      { to: '/routing', label: 'Assignments & routing' },
       { to: '/sections', label: 'Sections' },
-      { to: '/versions', label: 'Version History' },
+      { to: '/versions', label: 'Version history' },
       { to: '/reports', label: 'Reports' },
     ],
   },
   {
     key: 'uro', role: G.URO, heading: 'URO', global: true,
     nav: [
-      { to: '/clearance', label: 'Clearance Queue' },
-      { to: '/cleared', label: 'Cleared Projects' },
-      { to: '/versions', label: 'Version History' },
+      { to: '/clearance', label: 'Clearance queue' },
+      { to: '/cleared', label: 'Cleared projects' },
+      { to: '/versions', label: 'Version history' },
     ],
   },
   {
     key: 'instructor-1', role: P.INSTRUCTOR_1, heading: 'Instructor 1',
     nav: [
-      { to: '/rosters', label: 'Groups & Rosters' },
-      { to: '/versions', label: 'Version History' },
-      { to: '/defended', label: 'Defended Groups' },
-      { to: '/completed', label: 'Completed Groups' },
+      { to: '/rosters', label: 'Groups & rosters' },
+      { to: '/versions', label: 'Version history' },
+      { to: '/defended', label: 'Defended groups' },
+      { to: '/completed', label: 'Completed groups' },
     ],
   },
   {
     key: 'instructor-2', role: P.INSTRUCTOR_2, heading: 'Instructor 2',
     nav: [
-      { to: '/scheduling', label: 'Rosters & Scheduling' },
-      { to: '/versions', label: 'Version History' },
-      { to: '/completed', label: 'Completed Groups' },
+      { to: '/scheduling', label: 'Rosters & scheduling' },
+      { to: '/versions', label: 'Version history' },
+      { to: '/completed', label: 'Completed groups' },
     ],
   },
   {
     key: 'adviser', role: P.ADVISER, heading: 'Adviser',
     nav: [
-      { to: '/advisees', label: 'My Advisees' },
-      { to: '/versions', label: 'Version History' },
-      { to: '/weekly-logs', label: 'Weekly Logs' },
-      { to: '/completed', label: 'Completed Groups' },
+      { to: '/advisees', label: 'My advisees' },
+      { to: '/versions', label: 'Version history' },
+      { to: '/weekly-logs', label: 'Weekly logs' },
+      { to: '/completed', label: 'Completed groups' },
     ],
   },
   {
     key: 'panel-chair', role: P.PANEL_CHAIR, heading: 'Panel Chair',
-    nav: [{ to: '/panels', label: 'Assigned Panels' }],
+    nav: [{ to: '/panels', label: 'Assigned panels' }],
   },
   {
     key: 'panel-member', role: P.PANEL_MEMBER, heading: 'Panel Member',
-    nav: [{ to: '/panels', label: 'Assigned Panels' }],
+    nav: [{ to: '/panels', label: 'Assigned panels' }],
   },
   // A group member's rail is their project's tabs (Shell builds those links).
   { key: 'student', role: 'Group member', heading: 'Student', member: true, nav: [] },
@@ -107,11 +105,19 @@ export const contextByKey = (key) => CONTEXTS.find(c => c.key === key) ?? null
 
 const live = (snap, id) => (snap.projects ?? []).find(p => p.id === id)
 
+/** Whether a worklist row's project is open to this account through `role` itself (CAAC project.view). */
+export const opensTo = (row, role) => row.ctx.active.some(g => g.role === role && g.cap === 'project.view')
+
 /**
  * The contexts this account holds, each with the projects it covers and the
  * short scope line the switcher shows ("Adviser — all advisees").
+ *
+ * With `rows` (the guard-filtered worklist), a Project-Based Role counts only
+ * on the groups it opens right now — so a proposed Adviser, whose access waits
+ * for the Dean and AD (S2.2), holds no "Adviser" context until the appointment
+ * is approved, and an Instructor 2 none before the group reaches Capstone 2.
  */
-export function contextsOf(user, snap) {
+export function contextsOf(user, snap, rows = null) {
   if (!user) return []
   const roles = user.globalRoles ?? []
   const assignments = (snap.projectAssignments ?? [])
@@ -129,6 +135,7 @@ export function contextsOf(user, snap) {
       if (!roles.includes(c.role)) continue
     } else {
       projectIds = [...new Set(assignments.filter(a => a.roleType === c.role).map(a => a.projectId))]
+      if (rows) projectIds = projectIds.filter(id => rows.some(r => r.project.id === id && opensTo(r, c.role)))
       // Teaching a Capstone 1 section makes one Instructor 1 before any group exists.
       if (!projectIds.length && !(c.role === P.INSTRUCTOR_1 && teaches.length)) continue
     }
@@ -165,12 +172,12 @@ export function pickContext(held, saved, firstHat = null) {
     ?? held[0]
 }
 
-/** Worklist rows that belong to one context: the projects where that role is in play. */
+/** Worklist rows that belong to one context: the projects that role opens to this account. */
 export function rowsIn(context, rows) {
   if (!context) return rows
   if (context.member) return rows.filter(r => r.ctx.isMember)
   if (context.global) return rows.filter(r => r.ctx.active.some(g => g.role === context.role))
-  return rows.filter(r => r.ctx.projectRoles.includes(context.role))
+  return rows.filter(r => opensTo(r, context.role))
 }
 
 /** The hats a context's dashboard counts work for. */
